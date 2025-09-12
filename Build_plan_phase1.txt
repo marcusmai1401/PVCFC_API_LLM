@@ -1,0 +1,163 @@
+PHASE 1 — INGEST & INDEXING (CHUẨN HOÁ TÀI LIỆU + XÂY DỰNG CHỈ MỤC)
+
+I. MỤC TIÊU
+- Chuẩn hoá toàn bộ tài liệu kỹ thuật (P&ID 04000, datasheet KT06101, SOP/OM liên quan) về định dạng Markdown giàu metadata.
+- Hỗ trợ cả PDF vector và PDF scan, trích xuất được page + bbox (tọa độ) tối đa có thể để phục vụ /locate và click‑to‑cite ở pha sau.
+- Thực hiện hierarchical chunking (small‑to‑big) có parent_id để phục vụ expand‑parent retrieval.
+- Xây dựng hybrid index (FAISS cho vector + BM25 cho từ khoá) và manifest corpus có thể tái hiện/kiểm soát phiên bản.
+- Thiết lập doc classifier (rule‑first → LLM fallback) gắn nhãn doc_category cho mỗi chunk.
+- Ingest/Index idempotent, có cơ chế phát hiện thay đổi (checksum) và re‑index một phần.
+
+II. PHẠM VI
+- Có: Phân loại tài liệu; parse (vector/scan); chuẩn hoá Markdown; trích xuất bảng; chuẩn hoá đơn vị và tag; chunking; hybrid indexing; manifest; CLI ingest; test.
+- Không: Chưa triển khai truy xuất trực tuyến hay API /ask, /locate, /report (thuộc Phase 2).
+
+III. DỮ LIỆU THÍ ĐIỂM & CHỈ TIÊU
+- Tài liệu: (1) P&ID 04000 (vector), (2) Datasheet KT06101 (có bảng/thông số), (3) SOP/OM (có thể là scan).
+- Chỉ tiêu chất lượng gợi ý (để DoD kiểm tra):
+  • Vector pages có bbox coverage ≥ 80% block text. 
+  • OCR recall (ước tính bằng mẫu 10 trang scan): ≥ 90% từ hợp lệ sau hậu xử lý (lower/diacritics/merge‑hyphen).
+  • Bảng trích xuất được ≥ 80% bảng chính (ít nhất 1 bảng/10 trang với datasheet).
+  • Mỗi chunk có đủ metadata cốt lõi (doc_id, doc_category, page, section_path hoặc parent_id).
+
+IV. DÒNG CHẢY XỬ LÝ (PIPELINE)
+Acquire → Detect (vector/scan) → Parse (vector extractor | OCR) → Normalize (text/table/units/tags) → Markdown + Metadata → Hierarchical chunking → Classify → Build Hybrid Index → Manifest (corpus.jsonl).
+
+V. KIẾN TRÚC THƯ MỤC DỮ LIỆU
+data/
+  raw/                 # input gốc (chỉ đọc)
+  staging/             # trung gian (ảnh OCR, JSON thô)
+  processed/{doc_id}/  # Markdown + metadata sau chuẩn hoá
+artifacts/
+  index/faiss/         # chỉ mục vector
+  index/bm25/          # chỉ mục BM25
+manifests/
+  corpus.jsonl         # manifest các tài liệu & phiên bản
+  checksums.jsonl      # dấu vân tay file → phát hiện thay đổi
+
+VI. ĐỊNH DANH & SCHEMA METADATA
+- doc_id: chuẩn hoá, duy nhất, ổn định (ví dụ “PVCFC-PID-04000-v1”; hoặc hash tên + checksum).
+- chunk_id: “{doc_id}::c{order}”.
+- parent_id: id khối cha (tiêu đề/section) cho expand‑parent.
+- Các trường metadata (bắt buộc nếu có):
+  doc_id, doc_category (pid|datasheet|sop|om|…), source_format (vector|scan|mixed),
+  source_path, version, checksum, page (int), bbox [x0,y0,x1,y1] (nếu có),
+  text (chuỗi), section_path (“1/1.2/1.2.1” hoặc “H1>H2>H3”),
+  order (int), lang, tables (JSON list), tags (list), units_normalized (bool),
+  created_at, updated_at.
+- Gợi ý lưu song song: 1) Markdown (nội dung đã chuẩn hoá), 2) JSON metadata per chunk.
+
+VII. HẠNG MỤC CHI TIẾT (Mục tiêu – Nội dung – Giải pháp – Công cụ – Kết quả đầu ra/DoD)
+
+1) Phát hiện loại PDF (vector vs scan)
+- Nội dung: Tự động nhận diện file vector/scan/mixed để chọn pipeline phù hợp.
+- Giải pháp: Dựa PyMuPDF: nếu trang có text spans → vector; nếu rất ít/không text → scan. Đánh cờ “mixed” nếu tài liệu có cả hai.
+- Công cụ: PyMuPDF (fitz).
+- DoD: 100% tài liệu thí điểm được gán source_format chính xác (eye‑check 5 trang/ tài liệu).
+
+2) Vector extractor (text + bbox)
+- Nội dung: Trích block text, toạ độ, thứ tự đọc, xử lý xoay/ngắt dòng/ghép từ gạch nối.
+- Giải pháp: Dùng PyMuPDF để lấy blocks/spans + bbox; hợp nhất các spans gần nhau; chuẩn hoá unicode; xử lý rotate 90/180/270.
+- Công cụ: PyMuPDF, regex.
+- DoD: Với P&ID 04000 & datasheet KT06101, ≥ 80% text có bbox; sample 10 trang xuất JSON minh hoạ (page, bbox, text).
+
+3) OCR pipeline cho scan PDF
+- Nội dung: Nhận dạng chữ và layout cơ bản cho trang scan.
+- Giải pháp: unstructured + unstructured‑inference (layout, table candidates) và pytesseract (fallback). Hậu xử lý: lower, strip diacritics (tùy), ghép từ, fix common OCR errors.
+- Công cụ: unstructured, unstructured‑inference, PyMuPDF, pytesseract (yêu cầu Tesseract ở OS‑level).
+- DoD: Trên 10 trang SOP/OM mẫu, OCR recall ≥ 90% (ước tính thủ công bằng đếm token đúng/ sai).
+
+4) Trích xuất bảng
+- Nội dung: Trích bảng thông số từ datasheet (và phần bảng trong SOP/OM nếu có).
+- Giải pháp: pdfplumber (ưu tiên), hoặc camelot; chuẩn hoá sang Markdown table + JSON (header, rows). Tạo field “tables” trong metadata.
+- Công cụ: pdfplumber, camelot‑py, pandas.
+- DoD: ≥ 80% bảng chính của datasheet được trích đúng cấu trúc (kiểm 10 bảng mẫu).
+
+5) Tag & Units normalizer
+- Nội dung: Chuẩn hoá tag thiết bị (KT06101, line#, instrument tag) và đơn vị (bar↔MPa, °C↔K).
+- Giải pháp: Bộ quy tắc regex + map; lưu cặp (original_value, normalized_value) trong metadata; thêm field tags[].
+- Công cụ: regex, pandas (chuẩn hoá bảng tham chiếu).
+- DoD: 100% tham chiếu tag mẫu nhận diện đúng; đơn vị nhiệt độ/áp suất chuẩn hoá nhất quán trong 10 mẫu kiểm. 
+
+6) Chuẩn hoá Markdown & heading map
+- Nội dung: Xuất Markdown “giàu cấu trúc” (tiêu đề, đoạn, bảng, hình/ghi chú).
+- Giải pháp: Map layout → H1/H2/H3; nhúng bảng dưới dạng Markdown; giữ liên kết page/bbox trong metadata JSON đi kèm.
+- Công cụ: Python markdown utils.
+- DoD: Mỗi doc_id có thư mục processed/ chứa .md + .json tương ứng; section_path sinh đúng thứ bậc tiêu đề.
+
+7) Hierarchical chunking (small‑to‑big)
+- Nội dung: Cắt nhỏ theo câu/đoạn (small) và sinh parent (big) theo section để expand‑parent retrieval.
+- Giải pháp: Rule: target ~300–500 tokens nhỏ; parent ~1200–1600 tokens; sliding window (sentence window retrieval) quanh hit.
+- Công cụ: tokenizer (tiktoken/transformers), sentence splitter.
+- DoD: Chunks có đủ parent_id; kiểm tra tỉ lệ overlap hợp lý; tổng số chunk/ tài liệu nằm trong ngưỡng dự kiến.
+
+8) Doc classifier (doc_category)
+- Nội dung: Gắn nhãn doc_category = {pid|datasheet|sop|om|…}.
+- Giải pháp: Rule‑first theo cụm từ/cấu trúc (PID có ký hiệu thiết bị/line; datasheet có bảng specs; SOP/OM có step/notice), fallback LLM nếu confidence thấp.
+- Công cụ: rule engine (regex), (tùy chọn) LLM nhẹ.
+- DoD: 100% chunk có doc_category; error ≤ 5% trên mẫu kiểm 200 chunk.
+
+9) Hybrid indexing (FAISS + BM25)
+- Nội dung: Tạo chỉ mục kết hợp cho retrieval sau này.
+- Giải pháp: 
+  • Embedding: OpenAI text‑embedding‑3‑large hoặc BGE‑large (local). 
+  • FAISS index trên vector; lưu mapping chunk_id → offset.
+  • BM25 index bằng rank_bm25 (hoặc Elastic/SPL if available). 
+  • Lưu thông tin index_version & tham số build.
+- Công cụ: faiss‑cpu, sentence‑transformers (nếu BGE), rank‑bm25, numpy.
+- DoD: Hai chỉ mục xây dựng thành công; sanity‑check truy vấn thô trả về chunk hợp lý (5–10 truy vấn mẫu).
+
+10) Ingest CLI & Idempotency
+- Nội dung: Dòng lệnh ingest toàn bộ thư mục data/raw; bỏ qua file không đổi; re‑index phần thay đổi.
+- Giải pháp: `tools/ingest.py` (parse → normalize → chunk → classify → write processed/JSON); `tools/build_index.py` (gộp processed → build FAISS/BM25); `checksums.jsonl` để phát hiện thay đổi.
+- Công cụ: Python CLI (typer/click), hashlib, jsonlines.
+- DoD: `python tools/ingest.py --source data/raw` và `python tools/build_index.py` chạy ổn trên máy mới; manifest/corpus.jsonl được cập nhật.
+
+11) Kiểm thử & QA
+- Nội dung: Unit test parser, normalizer, chunker; sample‑based QA (bbox, OCR, bảng, units).
+- Giải pháp: pytest + fixtures “pilot_docs”; báo cáo QA (CSV/Markdown) ghi lại chỉ tiêu đạt/chưa đạt.
+- Công cụ: pytest, pandas.
+- DoD: `make test` pass; QA report cho 3 tài liệu thí điểm lưu ở artifacts/qa/phase1_report.md.
+
+VIII. LỆNH/MAKEFILE GỢI Ý
+- make ingest-pilot        # chạy ingest cho tài liệu mẫu (data/raw/pilot)
+- make build-index         # build lại FAISS + BM25
+- make clean-processed     # xoá processed/ & index để build sạch
+- python tools/ingest.py --source data/raw --doc-id PVCFC-PID-04000-v1
+- python tools/build_index.py --faiss artifacts/index/faiss --bm25 artifacts/index/bm25
+
+IX. REQUIREMENTS BỔ SUNG (PHASE 1)
+- pymupdf==1.24.9
+- unstructured==0.15.13
+- unstructured-inference==0.7.36
+- pytesseract==0.3.13   # cần cài Tesseract ở OS
+- pdfplumber==0.11.4
+- camelot-py==0.11.0
+- faiss-cpu==1.8.0.post1
+- rank-bm25==0.2.2
+- numpy==1.26.4
+- pandas==2.2.2
+- rapidfuzz==3.9.6
+- (nếu dùng BGE) sentence-transformers==3.0.1
+
+X. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
+- 3 tài liệu thí điểm đã ingest → có Markdown + JSON metadata đầy đủ (doc_id, page, section_path, bbox nếu có, tables nếu có, tags/units_normalized nếu có).
+- Chỉ mục FAISS + BM25 build thành công; sanity‑check 5–10 truy vấn trả kết quả hợp lý.
+- Bảng QA phase1_report.md cho thấy: bbox coverage ≥ 80% (vector), OCR recall ≥ 90% (mẫu), bảng ≥ 80% (mẫu).
+- manifest (corpus.jsonl) & checksums.jsonl cập nhật; ingest idempotent (chạy lần 2 bỏ qua file chưa đổi).
+
+XI. RỦI RO & BIỆN PHÁP
+- OCR phụ thuộc hệ điều hành (Tesseract): cung cấp hướng dẫn cài và fallback; log cảnh báo nếu thiếu.
+- Bảng/phương trình phức tạp: chấp nhận Markdown kém hoàn hảo, lưu thêm JSON gốc để dùng lại sau.
+- Trang xoay/không chuẩn: áp dụng rotate detection + thử nhiều chiến lược sort bbox (x‑then‑y vs reading‑order). 
+- Tài liệu dung lượng lớn: ingest theo batch; giới hạn RAM (streaming parse).
+- Bảo mật: chỉ ingest đường dẫn whitelisted; không gửi file ra ngoài; kiểm soát .env và log.
+
+XII. BÀN GIAO (ARTEFACTS KỲ VỌNG)
+- tools/ingest.py, tools/build_index.py
+- data/processed/{doc_id}/… (md + json)
+- artifacts/index/faiss, artifacts/index/bm25
+- manifests/corpus.jsonl, manifests/checksums.jsonl
+- artifacts/qa/phase1_report.md
+
+(— Hết Phase 1 —)

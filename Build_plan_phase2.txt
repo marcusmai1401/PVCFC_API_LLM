@@ -1,0 +1,173 @@
+PHASE 2 — RETRIEVAL & API (HYBRID SEARCH + RERANK + GENERATION + CITATIONS)
+
+I. MỤC TIÊU
+- Cung cấp dịch vụ truy vấn RAG trực tuyến dựa trên hạ tầng Phase 1: hybrid retrieval (FAISS + BM25) → RRF → expand‑parent → cross‑encoder rerank → generator có citation.
+- Triển khai 3 endpoint cốt lõi: /ask, /locate, /report; đảm bảo tính ổn định, có giới hạn tốc độ, caching, logging/metrics/tracing.
+- Áp dụng kỹ thuật HyDE (hypothetical doc expansion) + Query Transformation để tăng Recall; bắt buộc “forced citations” theo định dạng đã định.
+- Thêm bước Chain‑of‑Verification (CoVe) nhẹ để giảm ảo giác trong câu trả lời.
+
+II. PHẠM VI
+- Có: Module Retriever + Reranker + Generator + CoVe; các API; quản lý model (LLM Factory); cấu hình; caching/rate‑limit; test & e2e.
+- Không: Tối ưu nâng cao/ablation, Docker compose, security hardening nâng cao (Phase 4).
+
+III. THIẾT KẾ KIẾN TRÚC (Ở MỨC MODULE)
+app/
+  api/routers/
+    ask.py            # /ask
+    locate.py         # /locate
+    report.py         # /report
+  core/
+    config.py         # tham số k, k_parent, rate_limit...
+    logging.py, metrics.py, tracing.py
+    llm_factory.py    # quản lý provider/model, retry, timeouts
+    cache.py          # LRU/Redis (tùy)
+    rate_limit.py     # token bucket
+  rag/
+    query_transform.py  # normalize, HyDE, expansion, filters
+    retriever.py        # FAISS+BM25, RRF, expand_parent
+    reranker.py         # cross-encoder
+    generator.py        # answer + citations
+    cove.py             # chain-of-verification (light)
+    schemas.py          # pydantic schema cho I/O
+  services/
+    locator.py          # dành cho /locate (map chunk → page/bbox)
+    reporter.py         # dành cho /report (dựng tài liệu từ answer/citations)
+  deps/
+    indices.py        # open FAISS/BM25, manifest, mmap embeddings
+    loaders.py        # đọc processed/ JSONL/MD từ Phase 1
+
+IV. THÔNG SỐ MẶC ĐỊNH (CÓ THỂ ĐIỀU CHỈNH QUA CONFIG)
+- k_bm25 = 50, k_faiss = 50  → hợp nhất RRF lấy top_rrf = 60
+- expand_parent: parent_tokens ≈ 1200–1600, strategy = sentence window
+- reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2, top_rerank = 20
+- final_context_k = 8 (số đoạn đưa vào generator)
+- max_answer_tokens = 512 (có thể 768 cho báo cáo dài)
+- timeout mỗi bước: transform 500ms, retrieve 1.5s, rerank 1.0s, generate 10–20s
+- rate_limit: 60 req/minute/tenant; burst 20; per-IP fallback
+- cache: LRU 512 entries với TTL 10 phút cho kết quả retrieve/rerank (không cache answer khi có PII)
+
+V. DÒNG CHẢY TRUY VẤN
+1) Query Transformation
+   - Normalize: lower/casefold, strip, loại stopwords nhẹ (không phá kỹ thuật).
+   - Detect intent: qa | locate | report | explain (rule).
+   - HyDE (tùy chọn): sinh văn bản phỏng đoán 2–3 biến thể ngắn → nhúng → dùng trong FAISS song song với query thật.
+   - Filters: optional doc_id/doc_category từ client.
+
+2) Hybrid Retrieval + RRF + Expand‑Parent
+   - Truy FAISS (vector) và BM25 (keyword) song song.
+   - Hợp nhất bằng Reciprocal Rank Fusion (RRF).
+   - Mở rộng theo parent/section và sentence‑window xung quanh đoạn trúng.
+
+3) Reranking (Cross‑Encoder)
+   - Chấm điểm (query, passage) và lấy top N (mặc định 20).
+
+4) Generation + Forced Citations
+   - Gom ngữ cảnh top_k, xây prompt template buộc **có trích dẫn** dạng: [Doc: {doc_id}; Page: {page}; (BBox: x0,y0,x1,y1?)].
+   - Nếu không có nguồn phù hợp → trả lời “không có đủ bằng chứng”.
+   - JSON output gồm: answer (markdown), citations[], context_used[].
+
+5) Chain‑of‑Verification (CoVe) nhẹ
+   - Trích mệnh đề quan trọng trong answer → phát sinh các “check‑queries” ngắn → retrieve nhanh k=10 → nếu score thấp → thêm cảnh báo hoặc điều chỉnh phrasing (“Theo tài liệu X trang Y, ...”).
+
+VI. ENDPOINTS (SCHEMA & VÍ DỤ)
+
+1) POST /ask
+- Request (JSON):
+  {
+    "query": "Áp suất vận hành tối đa của KT06101?",
+    "filters": { "doc_category": ["datasheet","om"], "doc_id": ["PVCFC-KT06101-datasheet-v1"] },
+    "hyde": true,
+    "max_context": 8,
+    "language": "vi"
+  }
+- Response (JSON):
+  {
+    "answer": "... (markdown, có tiêu đề/phần) ...",
+    "citations": [
+      {"doc_id":"PVCFC-KT06101-datasheet-v1","page":12,"bbox":[100,220,380,270]},
+      {"doc_id":"PVCFC-OM-KT06101-v1","page":5}
+    ],
+    "context_used": ["chunk_id1","chunk_id2", "..."],
+    "meta": { "latency_ms": 2300, "model": "gpt-*-*", "k": 8 }
+  }
+- Lỗi chuẩn hoá:
+  400 (payload sai), 422 (filters không hợp lệ), 503 (model timeout).
+
+2) POST /locate
+- Chức năng: định vị “thực thể/ký hiệu/đoạn” trên tài liệu (đặc biệt P&ID).
+- Request (JSON):
+  {
+    "query": "KT06101", 
+    "filters": { "doc_category": ["pid"], "doc_id": ["PVCFC-PID-04000-v1"] }
+  }
+- Xử lý: ưu tiên chunk có bbox; nếu tài liệu scan/không có bbox → trả page + text window.
+- Response (JSON):
+  {
+    "hits": [
+      {"doc_id":"PVCFC-PID-04000-v1","page":3,"bbox":[812,450,905,490],"score":0.92,"snippet":"...KT06101..."},
+      {"doc_id":"PVCFC-PID-04000-v1","page":7,"bbox":null,"score":0.71,"snippet":"...KT06101..."}
+    ]
+  }
+
+3) POST /report
+- Chức năng: kết hợp nhiều câu hỏi phụ (sub‑queries) để tạo báo cáo ngắn có citations.
+- Request (JSON):
+  {
+    "topic": "Thông số vận hành chính KT06101",
+    "sub_queries": ["áp suất...", "nhiệt độ...", "cảnh báo an toàn..."],
+    "format": "markdown"  // hoặc docx/pdf (Phase 4 xuất PDF/DOCX)
+  }
+- Response (JSON):
+  {
+    "title": "Báo cáo tóm tắt KT06101",
+    "sections": [
+      {"heading":"Áp suất vận hành","content":"...", "citations":[...]},
+      {"heading":"Nhiệt độ","content":"...", "citations":[...]}
+    ],
+    "meta": {"total_latency_ms": 5400}
+  }
+
+VII. LLM FACTORY & PROMPTS
+- LLM Factory: chọn provider theo ENV (openai/gemini/azure/local), fallback/timeout/retry; cấu hình temperature=0.2 (QA), top_p=0.9.
+- Prompts:
+  • query_transform: normalize + HyDE prompt ngắn, yêu cầu 2–3 giả định khác nhau.
+  • generator: buộc format trả lời + citations bắt buộc (nếu thiếu nguồn thì trả lời “không rõ/không đủ”).
+  • cove: trích mệnh đề và hỏi ngắn “hãy cung cấp trang/chunk chứng minh cho mệnh đề X”.
+
+VIII. CACHING, RATE‑LIMIT, ERROR HANDLING, QUAN SÁT
+- Cache: LRU theo khoá (normalized_query, filters, index_version); TTL 10 phút; cache riêng layer retrieve & rerank.
+- Rate‑limit: token bucket 60 rpm; header `X-RateLimit-Remaining`.
+- Error handling: pydantic validation, httpx timeout, circuit breaker (3 lỗi/60s → degrade: tắt HyDE, giảm k, trả partial).
+- Metrics: Prometheus/OTel: rag_recall@k (ước lượng), rerank_gain, answer_tokens, latency phân rã theo bước.
+- Tracing: trace_id ở header; ghi lại pipeline timing cho debug.
+
+IX. TEST & E2E
+- Unit test: retriever (FAISS/BM25 mock nhỏ), reranker (scoring tăng cho gold), generator (format citations).
+- Golden set (Phase 3 sẽ mở rộng): sanity‑check 20 QA → kiểm precision@5 ≥ 60%, cite rate = 100% (không trả nếu thiếu).
+- E2E: test 3 endpoint với filters khác nhau; test fallback locate khi bbox = null.
+- Load test nhẹ: 30 RPS trong 1 phút (khoá model để không tốn chi phí).
+
+X. THƯ VIỆN/PHỤ THUỘC (BỔ SUNG CHO PHASE 2)
+- rank-bm25 (nếu chưa có), faiss-cpu (Phase 1), sentence-transformers (cho rerank nếu cần), transformers (nếu dùng rerank local), openai or google‑ai‑python (tuỳ provider), httpx, tenacity (retry), opentelemetry‑api/sdk, prometheus‑client.
+
+XI. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
+- /ask: trả lời có citations hợp lệ cho ≥ 90% truy vấn sanity; nếu không có bằng chứng → nói rõ “không đủ nguồn”.
+- /locate: với P&ID 04000, tìm được ≥ 1 hit có bbox cho truy vấn “KT06101”; với scan → trả page + snippet.
+- /report: tạo 2–3 section từ sub‑queries, có citations; latency p95 < 8s (không tính hàng đợi model công cộng).
+- Metrics & logs hiển thị: tổng latency, time breakdown theo bước; cache hit rate ≥ 30% khi lặp truy vấn.
+- Rate‑limit & error handling hoạt động; test & e2e pass.
+
+XII. RỦI RO & ỨNG PHÓ
+- Timeout model: giảm k, tắt HyDE, rút ngắn max_answer_tokens; trả partial với cảnh báo.
+- Citations thiếu/bị lệch: ép “source‑grounding only”; nếu confidence rerank < ngưỡng → từ chối trả lời chắc chắn.
+- Bbox không sẵn do scan: fallback trả page + text window, log cảnh báo để Phase 1 cải thiện OCR/align.
+- Chi phí: bật cache, HyDE chỉ khi query khó (ngưỡng heuristic: query > 4 từ, hoặc có “không rõ”/“trong tài liệu nào”).
+
+XIII. BÀN GIAO (ARTEFACTS KỲ VỌNG)
+- rag/query_transform.py, rag/retriever.py, rag/reranker.py, rag/generator.py, rag/cove.py, rag/schemas.py
+- api/routers/ask.py, locate.py, report.py
+- core/llm_factory.py, core/cache.py, core/rate_limit.py, core/metrics.py, core/tracing.py
+- tests/ (unit + e2e)
+- README (API spec + ví dụ cURL)
+
+(— Hết Phase 2 —)

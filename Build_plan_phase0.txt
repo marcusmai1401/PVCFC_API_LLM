@@ -1,0 +1,136 @@
+PHASE 0 — NỀN TẢNG & KHỞI TẠO DỰ ÁN (FOUNDATION)
+
+I. MỤC TIÊU
+- Thiết lập nền tảng kỹ thuật vững chắc cho các pha sau: khởi tạo repo, skeleton FastAPI, quản lý cấu hình/tệp .env, logging, kiểm tra sức khoẻ (/healthz), smoke test kết nối LLM (nếu có key), công cụ phát triển (pre-commit/lint/test), Docker skeleton.
+- Chuẩn hoá quy ước: cấu trúc thư mục, versioning, Makefile, chuẩn log, cách quản lý secrets.
+- Đảm bảo mọi thành viên clone repo có thể chạy được lệnh duy nhất: `make dev` → `make run` → mở `http://localhost:8000/healthz` trả 200 kèm thông tin phiên bản.
+
+II. PHẠM VI
+- Có: Khởi tạo dự án, app skeleton, health check, toolchain dev, Docker skeleton.
+- Không: Chưa triển khai ingest/indexing/retrieval, chưa tích hợp database. (Các phần này thuộc Phase 1–2.)
+
+III. KẾ HOẠCH THEO DẠNG “MỤC TIÊU – NỘI DUNG – GIẢI PHÁP – CÔNG CỤ – KẾT QUẢ ĐẦU RA (DoD)”
+
+1) Repo & Quy ước
+- Nội dung: Khởi tạo repo Git, quy ước nhánh, commit message, .gitignore, bảo vệ nhánh main.
+- Giải pháp: Tạo repo công ty; bật branch protection (require PR + review); thêm .gitignore (Python, venv, __pycache__, .env); file LICENSE, CODEOWNERS.
+- Công cụ: Git/GitHub (hoặc GitLab).
+- Kết quả đầu ra: Repo có nhánh main bảo vệ; README có Quickstart; .gitignore/.gitattributes/LICENCE/CODEOWNERS sẵn sàng.
+
+2) Môi trường Python & Quản lý gói
+- Nội dung: Đặt bản Python chuẩn; ràng buộc phiên bản thư viện lõi.
+- Giải pháp: Dùng Python 3.11; tạo venv; viết requirements.txt (đã pin phiên bản tối thiểu cho Phase 0).
+- Công cụ: Python 3.11, pip, venv.
+- Kết quả đầu ra: `python -m venv .venv` hoạt động; `pip install -r requirements.txt` thành công.
+
+  Gợi ý requirements.txt (Phase 0, nền tảng chạy app + test):
+    fastapi==0.115.0
+    uvicorn[standard]==0.30.6
+    pydantic==2.9.2
+    pydantic-settings==2.5.2
+    python-dotenv==1.0.1
+    httpx==0.27.2
+    loguru==0.7.2
+    pytest==8.3.2
+    pytest-asyncio==0.23.8
+    pre-commit==3.8.0
+
+  (Ghi chú: Thư viện cho ingest/OCR như unstructured, unstructured-inference, pymupdf… sẽ bổ sung trong Phase 1.)
+
+3) Skeleton ứng dụng FastAPI
+- Nội dung: Tạo khung thư mục và module tối thiểu.
+- Giải pháp: Cấu trúc đề xuất:
+    app/
+      api/
+        __init__.py
+        routers/
+          __init__.py
+          health.py           # /healthz
+      core/
+        __init__.py
+        config.py             # Pydantic Settings
+        logging.py            # cấu hình Loguru
+      __init__.py
+      main.py
+    tests/
+      test_health.py
+    .env.example
+    Makefile
+    README.md
+
+- Công cụ: FastAPI, Uvicorn, Loguru, Pydantic Settings.
+- Kết quả đầu ra: Chạy `make run` → server khởi động; GET /healthz trả 200.
+
+4) Quản lý cấu hình & secrets (.env)
+- Nội dung: Tách cấu hình qua biến môi trường, mẫu .env.
+- Giải pháp: Tạo `core/config.py` dùng `pydantic-settings`; khai báo các trường:
+    APP_ENV=local|dev|prod
+    API_PORT=8000
+    LOG_LEVEL=INFO
+    LLM_PROVIDER=openai|gemini|none
+    OPENAI_API_KEY=...
+    GEMINI_API_KEY=...
+- Công cụ: pydantic-settings, python-dotenv.
+- Kết quả đầu ra: `.env.example` đầy đủ; chạy thiếu key LLM không làm app crash (healthz vẫn OK, smoke LLM bỏ qua).
+
+5) Logging & Quan sát cơ bản
+- Nội dung: Chuẩn hoá log, thêm middleware log request/response tối thiểu (ẩn secrets).
+- Giải pháp: `loguru` + format chuẩn; middleware chỉ log method, path, latency; mask header Authorization.
+- Công cụ: Loguru.
+- Kết quả đầu ra: Log nhất quán; không lộ secrets trong log.
+
+6) Endpoint sức khoẻ (/healthz) & thông tin phiên bản
+- Nội dung: Kiểm tra sống/chết và hiển thị thông tin build.
+- Giải pháp: /healthz trả JSON gồm: status, app_env, version, commit_sha (đọc từ biến môi trường), uptime (kể từ start), optional: llm_provider_ready (true/false nếu có KEY).
+- Công cụ: FastAPI.
+- Kết quả đầu ra: `curl http://localhost:8000/healthz` trả 200 + JSON có version/uptime.
+
+7) Smoke test (tùy chọn nếu có KEY)
+- Nội dung: Kiểm tra nhanh kết nối LLM (không phụ thuộc logic RAG).
+- Giải pháp: Tạo script `scripts/smoke_llm.py`; nếu có OPENAI_API_KEY hoặc GEMINI_API_KEY thì gọi 1 prompt rất ngắn với timeout 5s và retry 1 lần.
+- Công cụ: httpx (timeout/retry).
+- Kết quả đầu ra: `make smoke` in ra PASS/FAIL; không có KEY thì skip và báo “SKIPPED”.
+
+8) Makefile & lệnh tiện ích
+- Nội dung: Chuẩn hoá các lệnh thường dùng.
+- Giải pháp: Makefile gồm:
+    make dev        # tạo venv, cài reqs
+    make run        # chạy uvicorn app.main:app --reload --port ${API_PORT:-8000}
+    make test       # pytest -q
+    make lint       # ruff/flake8 (tùy chọn) + mypy (nếu muốn)
+    make smoke      # chạy smoke LLM
+- Công cụ: make, pytest, (ruff/mypy nếu dùng).
+- Kết quả đầu ra: Lệnh chạy OK trên máy mới clone.
+
+9) Chất lượng mã & hook pre-commit
+- Nội dung: Thiết lập kiểm tra trước commit.
+- Giải pháp: `pre-commit` với hooks: trailing-whitespace, end-of-file-fixer, detect-private-key, (tùy chọn) ruff/mypy.
+- Công cụ: pre-commit.
+- Kết quả đầu ra: `pre-commit install` thành công; commit vi phạm bị chặn.
+
+10) Docker skeleton (khởi tạo)
+- Nội dung: Cung cấp Dockerfile cơ bản để chạy app.
+- Giải pháp: Dockerfile (python:3.11-slim), tạo user không phải root, copy reqs, install, copy app, expose port 8000, entrypoint uvicorn.
+- Công cụ: Docker.
+- Kết quả đầu ra: `docker build` và `docker run` khởi động app; /healthz trả 200.
+  (compose và tối ưu image/layer sẽ hoàn thiện ở Phase 4.)
+
+11) Tài liệu hoá Quickstart
+- Nội dung: Viết README phần Quickstart ngắn.
+- Giải pháp: Hướng dẫn 5 bước: clone → make dev → cp .env.example .env → make run → mở /healthz.
+- Công cụ: Markdown.
+- Kết quả đầu ra: README rõ ràng, chạy được end-to-end trên máy trống.
+
+IV. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
+- /healthz trả 200 với JSON: {status, version, commit_sha, app_env, uptime, llm_provider_ready?}.
+- `make dev`, `make run`, `make test`, `make smoke` hoạt động; test_health tối thiểu pass.
+- `.env.example` đầy đủ biến; chạy không có KEY LLM vẫn khởi động bình thường.
+- Logging chuẩn, không rò rỉ secrets; pre-commit hoạt động.
+- Dockerfile build/run thành công; README Quickstart giúp người mới chạy được trong <10 phút.
+
+V. RỦI RO & BIỆN PHÁP
+- Khác môi trường máy (Windows/macOS/Linux) → chuẩn hoá qua Docker + ghi chú Python 3.11.
+- Thiếu thư viện hệ điều hành (sẽ phát sinh ở Phase 1 cho OCR) → ghi chú sớm trong README, nhưng chưa cài ở Phase 0.
+- Lộ secrets → dùng .gitignore, pre-commit detect-private-key, tuyệt đối không commit .env.
+
+(— Hết Phase 0 —)

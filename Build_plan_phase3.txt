@@ -1,0 +1,133 @@
+PHASE 3 — ĐÁNH GIÁ, DEMO UI & GIÁM SÁT (EVALUATION + STREAMLIT + SME ANNOTATION)
+
+I. MỤC TIÊU
+- Xây hệ thống đánh giá chuẩn cho RAG (offline + online): đo lường Recall/Precision ở retrieval, Faithfulness/Groundedness ở câu trả lời, Citation correctness, Latency/Cost.
+- Tạo **Golden Set** cân bằng (≥ 120 QA) bao phủ tài liệu thí điểm (P&ID 04000, datasheet KT06101, SOP/OM), gồm câu hỏi xác định, quy trình, an toàn, “locate tag”, tra thông số, và câu hỏi phủ định/không đủ bằng chứng.
+- Cung cấp **UI demo (Streamlit)** cho SME vận hành/đánh giá: hiển thị “click‑to‑cite” (bbox highlight), vẽ bản xem trước trang PDF, bật/tắt HyDE, thay đổi tham số k/rrf/expand‑parent, xem logs/latency/tokens.
+- Ghi nhận phản hồi SME (Correct/Partially/Incorrect, Citation OK?, Notes) và sinh dataset huấn luyện/eval cho Phase 4.
+
+II. PHẠM VI
+- Có: Bộ đánh giá offline (batch), UI demo tương tác, công cụ gán nhãn/feedback, ghi log chi tiết, dashboard cơ bản.
+- Không: Tối ưu chuyên sâu/ablation (đẩy qua Phase 4), phát hành chính thức (prod).
+
+III. GOLDEN SET & PHÂN BỐ KỊCH BẢN
+1) Quy mô & ngôn ngữ
+- Quy mô tối thiểu: 120 QA (khuyến nghị 150), ngôn ngữ chính: VI; thêm 10–20% EN để kiểm tính bền.
+2) Ma trận bao phủ
+- doc_category: pid / datasheet / sop / om (mỗi nhóm ≥ 25–30 câu).
+- loại truy vấn: 
+  • Lookup tham số (áp suất/nhiệt độ/giới hạn). 
+  • “Locate tag” (KT06101, line#, instrument). 
+  • Thủ tục/safety (các bước, cảnh báo, PPE). 
+  • Giải thích sơ đồ/luồng (PID high‑level). 
+  • Negative/Unsupported (cố tình hỏi thứ không có). 
+  • Ambiguous (nhiều khả năng, yêu cầu làm rõ).
+- độ khó: easy/medium/hard (mỗi mức ~1/3).
+3) Cấu trúc dữ liệu golden set (JSONL)
+{
+  "id": "Q0001",
+  "query": "Áp suất vận hành tối đa của KT06101?",
+  "expected_answer": "… (ngắn gọn, có con số/đơn vị) …",
+  "doc_hints": ["PVCFC-KT06101-datasheet-v1"],
+  "expected_citations": [{"doc_id":"…","page":12}], 
+  "language": "vi", "category": "datasheet", "type": "lookup", "difficulty": "easy"
+}
+4) Quy trình tạo
+- Draft bởi kỹ sư (tham chiếu trực tiếp tài liệu), review chéo, SME phê duyệt. 
+- Ít nhất 10% câu **negative** (“không đủ bằng chứng”). 
+- Lưu version: `golden_vX.jsonl` + CHANGELOG.
+
+IV. METRICS & CHỈ TIÊU
+1) Retrieval‑level (offline & online)
+- Recall@k (k=5,10), MRR@k, nDCG@k; Context Precision/Recall (RAGAs).
+- Chỉ tiêu gợi ý: Recall@5 ≥ 70% (datasheet/sop), Recall@10 ≥ 80% tổng.
+2) Answer‑level
+- Faithfulness / Groundedness (RAGAs/TruLens), Answer Correctness (SME rubric), Citation precision/recall (tự động đối sánh doc_id/page).
+- Chỉ tiêu gợi ý: Faithfulness ≥ 0.8 (trung bình), Citation precision ≥ 95%, Citation recall ≥ 90%.
+3) Hiệu năng
+- Latency p50/p95, Time breakdown theo bước (transform/retrieve/rerank/generate), chi phí tokens/$.
+4) Độ tin cậy
+- Error rate (timeouts/validation), Cache hit‑rate.
+
+V. PIPELINE EVALUATION (OFFLINE BATCH)
+1) Retrieval eval
+- Input: golden queries (+ doc_hints nếu có). 
+- Chạy retriever (FAISS+BM25 → RRF → expand‑parent) không sinh answer.
+- Tính: Recall/MRR/nDCG; log topN với scores, index_version, params.
+2) End‑to‑end eval
+- Chạy full pipeline (với/không HyDE, và cấu hình k khác nhau).
+- Tính RAGAs: Faithfulness, Context Precision/Recall, Answer Relevancy.
+- Tự động kiểm **citation**: so khớp doc_id/page với expected_citations (nếu có). 
+3) Runner
+- `tools/eval_retrieval.py`, `tools/eval_e2e.py`.
+- Xuất CSV/JSON: bảng chi tiết + tổng hợp theo category/type/difficulty.
+- Lưu `run_id`, `model_version`, `index_version`, tham số, timestamps.
+4) Báo cáo
+- `artifacts/eval/phase3_report.md`: bảng tổng hợp, biểu đồ (plotly).
+
+VI. STREAMLIT DEMO & SME ANNOTATION
+1) Tính năng UI
+- Sidebar: chọn **doc_category/doc_id**, bật/tắt HyDE, chỉnh k_bm25/k_faiss/final_k, top_rerank, tiếng Việt/Anh.
+- Trình bày kết quả: 
+  • Câu trả lời Markdown + **Danh sách citations** rõ: [Doc; Page; BBox?]. 
+  • Bảng “Top hits” (BM25/FAISS/RRF) kèm score để minh bạch.
+- **Click‑to‑cite**: 
+  • Khi click citation → hiển thị preview trang PDF (render bằng PyMuPDF) + **overlay bbox**. 
+  • Nếu bbox=null (scan) → highlight text window.
+- Telemetry: hiển thị tổng latency + breakdown; tokens in/out; cache hit; model info.
+- Xuất phiên: lưu query, answer, citations, params vào `logs/ui_sessions.jsonl`.
+2) SME annotation
+- Nút đánh giá: Correct / Partially / Incorrect; Citation OK? (Yes/No); Notes (textbox).
+- Lưu annotation vào `artifacts/annotation/annotations.jsonl` (kèm `session_id`, `query_id`, `annotator`).
+- Hỗ trợ import/export golden: chuyển annotation thành entries golden (có kiểm tra trùng lặp).
+3) Trang “Experiments”
+- So sánh 2 cấu hình (A/B): hiển thị bảng đối chiếu metrics (latency, cite rate, faithfulness ước lượng) từ log.
+
+VII. LOGGING, TRACING & DASHBOARD
+- Logging JSONL: `logs/requests.jsonl` (mỗi request gồm timing_by_stage, params, errors, citations_used).
+- Tracing: trace_id gắn vào mọi log; có endpoint /debug/trace/{id} (dev only).
+- Dashboard mini (Streamlit tab): tải logs → vẽ phân bố latency p50/p95, tỉ lệ lỗi, cache hit, breakdown theo loại câu hỏi.
+- Tự động “mining” hard‑cases: phát hiện truy vấn có faithfulness thấp hoặc cite thiếu để thêm vào golden vNext.
+
+VIII. MAKEFILE & LỆNH
+- make demo                 # chạy Streamlit UI demo
+- make eval                 # chạy full batch eval (retrieval + e2e) trên golden_vX.jsonl
+- make eval-retrieval       # chỉ đo retrieval
+- make export-logs          # gom logs/ui_sessions + requests → CSV/JSON
+- make mine-hardcases       # trích hard cases từ logs đưa vào artifacts/hardcases.jsonl
+
+IX. THƯ VIỆN/PHỤ THUỘC (BỔ SUNG CHO PHASE 3)
+- streamlit==1.38.0
+- ragas==0.1.14
+- langsmith==0.1.98   # nếu dùng
+- trulens-eval==0.24.1  # tuỳ chọn, tương đương RAGAs
+- plotly==5.24.1
+- pymupdf==1.24.9      # render PDF + bbox overlay
+- pillow==10.4.0
+- pandas==2.2.2, numpy==1.26.4
+
+X. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
+- Golden set ≥ 120 QA (có 10–20% negative), có version + changelog.
+- Batch eval chạy được, xuất **phase3_report.md**: 
+  • Retrieval: Recall@5 ≥ 70%, Recall@10 ≥ 80% (tổng); 
+  • Answer‑level: Faithfulness ≥ 0.8; Citation precision ≥ 95%, recall ≥ 90%.
+- Streamlit demo: hiển thị answer + citations; click‑to‑cite **render được overlay bbox** (với tài liệu vector). 
+- SME annotation hoạt động; xuất được `annotations.jsonl`, import → cập nhật golden vNext.
+- Logs/tracing và dashboard mini hoạt động; có biểu đồ latency, error, cache hit.
+
+XI. RỦI RO & ỨNG PHÓ
+- Thiếu bbox (scan): fallback highlight text window + flag “needs‑OCR‑improvement” để Phase 1 revisit.
+- Chấm điểm tự động có sai số: dùng SME rubric làm ground truth; cross‑check 10–15% bằng 2 annotator → tính agreement (Cohen’s κ).
+- Streamlit hiệu năng thấp cho file lớn: cache preview trang; chỉ render khi click; giới hạn max pages per preview.
+- Bias tập câu hỏi: ma trận bao phủ và negative cases; mining hard‑cases từ logs.
+- Bảo mật: logs không chứa trích nguyên văn dài (giới hạn snippet); ẩn secrets.
+
+XII. BÀN GIAO (ARTEFACTS KỲ VỌNG)
+- tools/eval_retrieval.py, tools/eval_e2e.py
+- artifacts/eval/phase3_report.md (+ CSV/JSON kết quả)
+- streamlit_app/: Home, Search, Citations Preview, Experiments, Dashboard
+- artifacts/annotation/annotations.jsonl
+- golden_sets/golden_vX.jsonl (+ CHANGELOG.md)
+- logs/requests.jsonl, logs/ui_sessions.jsonl
+
+(— Hết Phase 3 —)

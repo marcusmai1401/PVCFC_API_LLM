@@ -1,0 +1,144 @@
+PHASE 4 — TỐI ƯU, BẢO MẬT & CHUYỂN GIAO (OPTIMIZATION + SECURITY HARDENING + RELEASE)
+
+I. MỤC TIÊU
+- Hoàn thiện tối ưu hiệu năng/độ chính xác dựa trên kết quả Phase 3 (ablation/A-B test).
+- Củng cố bảo mật: secrets, SBOM/scan lỗ hổng, hardening container, quyền truy cập, logging an toàn, data governance.
+- Đóng gói triển khai: Docker/Compose (hoặc Helm ở bước kế), quan sát hoá (Prometheus + OTel), backup/restore index.
+- Chuẩn bị bàn giao: runbook vận hành, tài liệu phát hành, checklist release/rollback, đào tạo người dùng & vận hành.
+
+II. PHẠM VI
+- Có: tối ưu tham số RAG; tối ưu token/cost/latency; hardening bảo mật; CI/CD; Dockerfile & docker-compose; dashboard/alert; tài liệu bàn giao.
+- Không: mở rộng chức năng mới lớn (giữ nguyên 3 API), thay đổi mô hình LLM vượt phạm vi đã chốt (trừ khi do bảo mật/chi phí).
+
+III. TỐI ƯU HIỆU NĂNG & ĐỘ CHÍNH XÁC (ABLATION / A-B TEST)
+1) Hạng mục tối ưu
+   - Chunk size & window: small (250–400) vs medium (400–600), window ±1/±2 câu.
+   - Hybrid k: k_bm25/k_faiss (30/30, 50/50, 80/80) → top_rrf (40/60/80).
+   - Expand-parent: parent_tokens (800/1200/1600); sentence-window vs fixed-parent.
+   - Reranker: cross-encoder/ms-marco-MiniLM-L-6-v2 vs -L-12-v2; top_rerank 10/20/40.
+   - HyDE: on/off; số biến thể 1/2/3; chiều dài 50/100 tokens.
+   - Prompt: ngắn/gọn vs đầy đủ; format citation cứng/linh hoạt.
+   - CoVe: on/off; số check-queries 2/4; k=5/10 cho CoVe.
+2) Quy trình A-B
+   - Lấy 120–150 QA từ Golden (Phase 3), chia stratified theo doc_category/type/difficulty.
+   - Chạy tools/ablation.py → bảng: Faithfulness, Citation precision/recall, Recall@k, Latency p50/p95, Cost.
+   - Chọn cấu hình “best balanced” theo trọng số (40% Faithfulness, 25% Citation, 20% Recall@10, 10% Latency, 5% Cost).
+3) DoD tối ưu (gợi ý)
+   - + ≥ 0.05 điểm Faithfulness trung bình so với Phase 3 baseline hoặc ≥ 10% giảm p95 latency; giữ Citation precision ≥ 95%.
+
+IV. TỐI ƯU CHI PHÍ & TỐI ƯU TOKEN
+- Cache chiến lược: cache retrieve/rerank 10–30 phút; cache answer cho câu tĩnh (không PII, TTL/etag).
+- Giảm tokens: nén context (loại trùng), tóm tắt parent dài, hạ final_context_k khi rerank score cao.
+- Batch embedding & lazy load index; memory-map FAISS; warm-up cache với top queries.
+- Chế độ tiết kiệm: tắt HyDE khi query ngắn/rõ; giảm top_rerank giờ cao điểm.
+
+V. BẢO MẬT & TUÂN THỦ
+1) Secrets & cấu hình
+   - .env chỉ dev; prod dùng secrets manager (Vault/SOPS/Cloud Secret Manager).
+   - Không ghi secrets vào log; mask Authorization/api_key/cookie.
+2) Supply chain & SBOM
+   - Khóa phiên bản, sinh SBOM (cyclonedx), scan CVE (Trivy, pip-audit).
+   - CI chặn merge nếu có High/Critical CVE (ngoại lệ cần phê duyệt).
+3) Hardening container
+   - Dockerfile multi-stage; base python:3.11-slim hoặc distroless.
+   - Chạy non-root; readOnlyRootFilesystem; drop capabilities.
+   - Scan image (Trivy) trước khi push.
+4) Network & API
+   - Rate-limit & throttling; CORS tối thiểu; security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy).
+   - Input validation Pydantic; giới hạn kích thước payload.
+5) Data governance
+   - Retention logs 90 ngày; ẩn snippet dài; không lưu ngữ cảnh có PII nhạy cảm.
+   - RBAC cho index & manifests; audit trail thao tác admin.
+
+VI. ĐÓNG GÓI TRIỂN KHAI (DOCKER / COMPOSE)
+1) Dockerfile
+   - Multi-stage builder → runtime; copy tối thiểu; PYTHONDONTWRITEBYTECODE=1, PYTHONUNBUFFERED=1.
+   - Healthcheck liveness/readiness gọi /healthz.
+2) docker-compose.yml (dev/stage)
+   services:
+     api:
+       build: .
+       image: pvcfc/rag-api:${VERSION}
+       environment: [APP_ENV=stage, …]
+       ports: ["8000:8000"]
+       depends_on: [redis, otel]
+       read_only: true
+       security_opt: ["no-new-privileges:true"]
+       deploy: { resources: { limits: { cpus: "2", memory: "2g" } } }
+     redis:
+       image: redis:7
+       ports: ["6379:6379"]
+       command: ["redis-server", "--appendonly", "yes"]
+     otel:
+       image: otel/opentelemetry-collector:latest
+     prometheus:
+       image: prom/prometheus:latest
+     grafana:
+       image: grafana/grafana:latest
+   volumes:
+     - ./artifacts/index:/app/artifacts/index  # persist FAISS/BM25
+3) Helm (tùy chọn sau compose)
+   - Chart: Deployment + Service + HPA; ConfigMap/Secret; Ingress + TLS.
+
+VII. GIÁM SÁT, LOGS & CẢNH BÁO
+- Metrics Prometheus: latency tổng/thành phần, cache hit rate, error 4xx/5xx, rate-limit, token usage.
+- Alert rules: p95_latency > 8s (5m), error_rate > 2% (5m), model_timeout surge, cache_hit < 10% (30m).
+- Dashboards Grafana: tổng quan RAG, chi tiết step, heatmap lỗi theo endpoint, traffic theo doc_category.
+- Tracing OTel: trace end-to-end; log correlation qua trace_id.
+
+VIII. BACKUP & PHỤC HỒI
+- Sao lưu artifacts/index/faiss, artifacts/index/bm25, manifests/ hàng ngày; gắn index_version.
+- Khôi phục: tools/restore_index.py; kiểm checksum; smoke test 10 truy vấn.
+- Lưu index_vX.Y.Z để rollback nhanh.
+
+IX. CI/CD
+- GitHub Actions/GitLab CI:
+  • Lint/test → build image → SBOM + Trivy scan → push registry (stage) → e2e smoke → manual approval → deploy prod.
+  • Tag image theo semver + commit_sha.
+- Secrets qua OIDC/Secrets Manager; không để secrets trong repo.
+- Tự động tạo release notes & CHANGELOG.md (Conventional Commits).
+
+X. TÀI LIỆU HOÁ & RUNBOOK
+1) Tài liệu kỹ thuật
+   - Kiến trúc; luồng dữ liệu; format citations; schema metadata; cấu hình mặc định/override.
+2) Runbook Incident
+   - Checklist sự cố: API 5xx, model timeout, index hỏng, cache chết, secrets lộ.
+   - Quy trình chẩn đoán (healthz, logs, tracing, Prometheus) và khôi phục.
+   - Ma trận mức độ (sev1/sev2/sev3) + RACI.
+3) Hướng dẫn người dùng
+   - Cách gọi /ask, /locate, /report; template câu hỏi tốt; giới hạn hệ thống; cách báo lỗi.
+
+XI. ĐÀO TẠO & CHUYỂN GIAO
+- Training 1: Kiến trúc & vận hành (2 giờ) — audience: kỹ sư/IT.
+- Training 2: Sử dụng API & Demo UI (1.5 giờ) — audience: SME/người dùng.
+- Bàn giao đầy đủ artefacts (mục XV).
+
+XII. MAKEFILE & LỆNH
+- make build          # build Docker image prod
+- make compose-up     # docker compose up -d (stage)
+- make scan           # trivy image scan + pip-audit
+- make sbom           # cyclonedx-py
+- make backup-index   # tar & timestamp artifacts/index + manifests
+- make restore-index  # khôi phục từ tar gần nhất
+- make release        # tag semver + changelog + push
+
+XIII. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
+- Báo cáo ablation/A-B: cải thiện ≥ 0.05 Faithfulness hoặc giảm ≥ 10% p95 latency; Citation precision vẫn ≥ 95%.
+- Docker image cứng hoá (non-root, scan pass: không High/Critical CVE mở) + compose chạy OK.
+- CI/CD trơn tru; SBOM tự động; scan bắt buộc trước merge.
+- Monitoring + alert hoạt động; dashboard có latency, lỗi, cache hit; thử cảnh báo giả lập.
+- Backup/restore index chạy thành công; smoke retrieval pass.
+- Runbook & tài liệu bàn giao hoàn chỉnh; training hoàn tất, có biên bản nghiệm thu.
+
+XIV. RỦI RO & ỨNG PHÓ
+- Lệ thuộc model ngoài (SLA/giới hạn): cache, degrade mode (tắt HyDE/giảm k), fallback provider (nếu config).
+- CVE gấp: chính sách hotfix, chặn merge, phát hành bản vá nhanh.
+- Chi phí tăng đột biến: hạ tham số, bật cache mạnh, lập lịch batch/ngoài giờ.
+- Mất dữ liệu index: khôi phục từ backup gần nhất + rebuild bán phần từ processed/.
+
+XV. BÀN GIAO (ARTEFACTS KỲ VỌNG)
+- Dockerfile, docker-compose.yml (+ Helm chart nếu có)
+- CI/CD pipeline (yaml), scripts scan & sbom
+- tools/ablation.py, tools/backup_index.sh, tools/restore_index.py
+- Grafana dashboards (JSON), Prometheus rules (YAML)
+- Runbook.md, Architecture.md, CHANGELOG.md, ReleaseNotes.md
