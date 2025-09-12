@@ -15,7 +15,7 @@ II. PHẠM VI
 III. DỮ LIỆU THÍ ĐIỂM & CHỈ TIÊU
 - Tài liệu: (1) P&ID 04000 (vector), (2) Datasheet KT06101 (có bảng/thông số), (3) SOP/OM (có thể là scan).
 - Chỉ tiêu chất lượng gợi ý (để DoD kiểm tra):
-  • Vector pages có bbox coverage ≥ 80% block text. 
+  • Vector pages có bbox coverage ≥ 80% block text.
   • OCR recall (ước tính bằng mẫu 10 trang scan): ≥ 90% từ hợp lệ sau hậu xử lý (lower/diacritics/merge‑hyphen).
   • Bảng trích xuất được ≥ 80% bảng chính (ít nhất 1 bảng/10 trang với datasheet).
   • Mỗi chunk có đủ metadata cốt lõi (doc_id, doc_category, page, section_path hoặc parent_id).
@@ -77,7 +77,7 @@ VII. HẠNG MỤC CHI TIẾT (Mục tiêu – Nội dung – Giải pháp – C�
 - Nội dung: Chuẩn hoá tag thiết bị (KT06101, line#, instrument tag) và đơn vị (bar↔MPa, °C↔K).
 - Giải pháp: Bộ quy tắc regex + map; lưu cặp (original_value, normalized_value) trong metadata; thêm field tags[].
 - Công cụ: regex, pandas (chuẩn hoá bảng tham chiếu).
-- DoD: 100% tham chiếu tag mẫu nhận diện đúng; đơn vị nhiệt độ/áp suất chuẩn hoá nhất quán trong 10 mẫu kiểm. 
+- DoD: 100% tham chiếu tag mẫu nhận diện đúng; đơn vị nhiệt độ/áp suất chuẩn hoá nhất quán trong 10 mẫu kiểm.
 
 6) Chuẩn hoá Markdown & heading map
 - Nội dung: Xuất Markdown “giàu cấu trúc” (tiêu đề, đoạn, bảng, hình/ghi chú).
@@ -99,10 +99,10 @@ VII. HẠNG MỤC CHI TIẾT (Mục tiêu – Nội dung – Giải pháp – C�
 
 9) Hybrid indexing (FAISS + BM25)
 - Nội dung: Tạo chỉ mục kết hợp cho retrieval sau này.
-- Giải pháp: 
-  • Embedding: OpenAI text‑embedding‑3‑large hoặc BGE‑large (local). 
+- Giải pháp:
+  • Embedding: OpenAI text‑embedding‑3‑large hoặc BGE‑large (local).
   • FAISS index trên vector; lưu mapping chunk_id → offset.
-  • BM25 index bằng rank_bm25 (hoặc Elastic/SPL if available). 
+  • BM25 index bằng rank_bm25 (hoặc Elastic/SPL if available).
   • Lưu thông tin index_version & tham số build.
 - Công cụ: faiss‑cpu, sentence‑transformers (nếu BGE), rank‑bm25, numpy.
 - DoD: Hai chỉ mục xây dựng thành công; sanity‑check truy vấn thô trả về chunk hợp lý (5–10 truy vấn mẫu).
@@ -149,7 +149,7 @@ X. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
 XI. RỦI RO & BIỆN PHÁP
 - OCR phụ thuộc hệ điều hành (Tesseract): cung cấp hướng dẫn cài và fallback; log cảnh báo nếu thiếu.
 - Bảng/phương trình phức tạp: chấp nhận Markdown kém hoàn hảo, lưu thêm JSON gốc để dùng lại sau.
-- Trang xoay/không chuẩn: áp dụng rotate detection + thử nhiều chiến lược sort bbox (x‑then‑y vs reading‑order). 
+- Trang xoay/không chuẩn: áp dụng rotate detection + thử nhiều chiến lược sort bbox (x‑then‑y vs reading‑order).
 - Tài liệu dung lượng lớn: ingest theo batch; giới hạn RAM (streaming parse).
 - Bảo mật: chỉ ingest đường dẫn whitelisted; không gửi file ra ngoài; kiểm soát .env và log.
 

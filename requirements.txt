@@ -1,0 +1,14 @@
+# Phase 0 - Foundation dependencies
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+httpx==0.27.2
+loguru==0.7.2
+pytest==8.3.2
+pytest-asyncio==0.23.8
+pre-commit==3.8.0
+
+# Note: Phase 1+ dependencies for document processing (unstructured, pymupdf, etc.)
+# will be added later when needed

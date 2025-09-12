@@ -15,12 +15,12 @@ III. GOLDEN SET & PHÂN BỐ KỊCH BẢN
 - Quy mô tối thiểu: 120 QA (khuyến nghị 150), ngôn ngữ chính: VI; thêm 10–20% EN để kiểm tính bền.
 2) Ma trận bao phủ
 - doc_category: pid / datasheet / sop / om (mỗi nhóm ≥ 25–30 câu).
-- loại truy vấn: 
-  • Lookup tham số (áp suất/nhiệt độ/giới hạn). 
-  • “Locate tag” (KT06101, line#, instrument). 
-  • Thủ tục/safety (các bước, cảnh báo, PPE). 
-  • Giải thích sơ đồ/luồng (PID high‑level). 
-  • Negative/Unsupported (cố tình hỏi thứ không có). 
+- loại truy vấn:
+  • Lookup tham số (áp suất/nhiệt độ/giới hạn).
+  • “Locate tag” (KT06101, line#, instrument).
+  • Thủ tục/safety (các bước, cảnh báo, PPE).
+  • Giải thích sơ đồ/luồng (PID high‑level).
+  • Negative/Unsupported (cố tình hỏi thứ không có).
   • Ambiguous (nhiều khả năng, yêu cầu làm rõ).
 - độ khó: easy/medium/hard (mỗi mức ~1/3).
 3) Cấu trúc dữ liệu golden set (JSONL)
@@ -29,12 +29,12 @@ III. GOLDEN SET & PHÂN BỐ KỊCH BẢN
   "query": "Áp suất vận hành tối đa của KT06101?",
   "expected_answer": "… (ngắn gọn, có con số/đơn vị) …",
   "doc_hints": ["PVCFC-KT06101-datasheet-v1"],
-  "expected_citations": [{"doc_id":"…","page":12}], 
+  "expected_citations": [{"doc_id":"…","page":12}],
   "language": "vi", "category": "datasheet", "type": "lookup", "difficulty": "easy"
 }
 4) Quy trình tạo
-- Draft bởi kỹ sư (tham chiếu trực tiếp tài liệu), review chéo, SME phê duyệt. 
-- Ít nhất 10% câu **negative** (“không đủ bằng chứng”). 
+- Draft bởi kỹ sư (tham chiếu trực tiếp tài liệu), review chéo, SME phê duyệt.
+- Ít nhất 10% câu **negative** (“không đủ bằng chứng”).
 - Lưu version: `golden_vX.jsonl` + CHANGELOG.
 
 IV. METRICS & CHỈ TIÊU
@@ -51,13 +51,13 @@ IV. METRICS & CHỈ TIÊU
 
 V. PIPELINE EVALUATION (OFFLINE BATCH)
 1) Retrieval eval
-- Input: golden queries (+ doc_hints nếu có). 
+- Input: golden queries (+ doc_hints nếu có).
 - Chạy retriever (FAISS+BM25 → RRF → expand‑parent) không sinh answer.
 - Tính: Recall/MRR/nDCG; log topN với scores, index_version, params.
 2) End‑to‑end eval
 - Chạy full pipeline (với/không HyDE, và cấu hình k khác nhau).
 - Tính RAGAs: Faithfulness, Context Precision/Recall, Answer Relevancy.
-- Tự động kiểm **citation**: so khớp doc_id/page với expected_citations (nếu có). 
+- Tự động kiểm **citation**: so khớp doc_id/page với expected_citations (nếu có).
 3) Runner
 - `tools/eval_retrieval.py`, `tools/eval_e2e.py`.
 - Xuất CSV/JSON: bảng chi tiết + tổng hợp theo category/type/difficulty.
@@ -68,11 +68,11 @@ V. PIPELINE EVALUATION (OFFLINE BATCH)
 VI. STREAMLIT DEMO & SME ANNOTATION
 1) Tính năng UI
 - Sidebar: chọn **doc_category/doc_id**, bật/tắt HyDE, chỉnh k_bm25/k_faiss/final_k, top_rerank, tiếng Việt/Anh.
-- Trình bày kết quả: 
-  • Câu trả lời Markdown + **Danh sách citations** rõ: [Doc; Page; BBox?]. 
+- Trình bày kết quả:
+  • Câu trả lời Markdown + **Danh sách citations** rõ: [Doc; Page; BBox?].
   • Bảng “Top hits” (BM25/FAISS/RRF) kèm score để minh bạch.
-- **Click‑to‑cite**: 
-  • Khi click citation → hiển thị preview trang PDF (render bằng PyMuPDF) + **overlay bbox**. 
+- **Click‑to‑cite**:
+  • Khi click citation → hiển thị preview trang PDF (render bằng PyMuPDF) + **overlay bbox**.
   • Nếu bbox=null (scan) → highlight text window.
 - Telemetry: hiển thị tổng latency + breakdown; tokens in/out; cache hit; model info.
 - Xuất phiên: lưu query, answer, citations, params vào `logs/ui_sessions.jsonl`.
@@ -108,10 +108,10 @@ IX. THƯ VIỆN/PHỤ THUỘC (BỔ SUNG CHO PHASE 3)
 
 X. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
 - Golden set ≥ 120 QA (có 10–20% negative), có version + changelog.
-- Batch eval chạy được, xuất **phase3_report.md**: 
-  • Retrieval: Recall@5 ≥ 70%, Recall@10 ≥ 80% (tổng); 
+- Batch eval chạy được, xuất **phase3_report.md**:
+  • Retrieval: Recall@5 ≥ 70%, Recall@10 ≥ 80% (tổng);
   • Answer‑level: Faithfulness ≥ 0.8; Citation precision ≥ 95%, recall ≥ 90%.
-- Streamlit demo: hiển thị answer + citations; click‑to‑cite **render được overlay bbox** (với tài liệu vector). 
+- Streamlit demo: hiển thị answer + citations; click‑to‑cite **render được overlay bbox** (với tài liệu vector).
 - SME annotation hoạt động; xuất được `annotations.jsonl`, import → cập nhật golden vNext.
 - Logs/tracing và dashboard mini hoạt động; có biểu đồ latency, error, cache hit.
 

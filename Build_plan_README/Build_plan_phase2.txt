@@ -97,7 +97,7 @@ VI. ENDPOINTS (SCHEMA & VÍ DỤ)
 - Chức năng: định vị “thực thể/ký hiệu/đoạn” trên tài liệu (đặc biệt P&ID).
 - Request (JSON):
   {
-    "query": "KT06101", 
+    "query": "KT06101",
     "filters": { "doc_category": ["pid"], "doc_id": ["PVCFC-PID-04000-v1"] }
   }
 - Xử lý: ưu tiên chunk có bbox; nếu tài liệu scan/không có bbox → trả page + text window.

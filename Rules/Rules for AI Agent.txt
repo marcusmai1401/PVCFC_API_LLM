@@ -1,0 +1,3 @@
+1. Các đoạn code không được sử dụng icon hoặc emoji, v..v
+
+2. Sau khi thực hiện thay đổi code, hãy viết 1 file miêu tả công việc đã làm vào folder CHANGELOG_README

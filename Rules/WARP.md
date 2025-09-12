@@ -8,7 +8,7 @@ This is a **Vietnamese and English technical documentation RAG (Retrieval-Augmen
 
 **Core Capabilities:**
 - Multi-format document processing (vector PDFs, scanned PDFs)
-- Intelligent chunking with hierarchical structure  
+- Intelligent chunking with hierarchical structure
 - Hybrid search with semantic and keyword matching
 - Three main API endpoints: `/ask`, `/locate`, `/report`
 - Citation-backed answers with source traceability
@@ -97,7 +97,7 @@ tools/                   # CLI utilities for ingestion, evaluation
 ### Technology Stack
 - **Backend**: Python 3.11+, FastAPI, Uvicorn
 - **Document Processing**: unstructured.io, PyMuPDF, pytesseract
-- **Search**: FAISS (vector), BM25 (keyword), cross-encoder reranking  
+- **Search**: FAISS (vector), BM25 (keyword), cross-encoder reranking
 - **LLM Integration**: OpenAI, Gemini (configurable)
 - **Evaluation**: RAGAs framework, custom metrics
 - **UI Demo**: Streamlit with PDF preview and citation highlighting
@@ -231,7 +231,7 @@ Minimum 120 QA pairs covering:
 # View system health
 curl http://localhost:8000/healthz
 
-# Check metrics (when Prometheus is running)  
+# Check metrics (when Prometheus is running)
 curl http://localhost:9090/metrics
 
 # View application logs
