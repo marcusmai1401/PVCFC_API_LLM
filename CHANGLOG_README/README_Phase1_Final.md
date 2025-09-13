@@ -254,3 +254,10 @@ Phase 1 đã hoàn thành vượt mong đợi:
 
 **Status**: Phase 1 Foundation [COMPLETED]  
 **Next**: Phase 2 RAG Pipeline & API Development
+
+---
+
+References (development materials):
+- See `docs/phase1_development_notes.md` for development/debug notes
+- See `docs/bug_fixes_summary.md` for detailed bug fixes
+- See `docs/phase1_readme.md` for developer-facing usage during development
