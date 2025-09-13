@@ -54,14 +54,18 @@ clean: ## Xóa cache và temp files
 install-git-hooks: ## Cài pre-commit hooks
 	$(PYTHON_VENV) -m pre_commit install
 
-# Phase 1+ commands (sẽ implement sau)
+# Phase 1 commands - Production Ready
 ingest-pilot: ## Ingest pilot documents (Phase 1)
 	@echo "Ingesting pilot documents..."
-	@echo "Will be implemented in Phase 1"
+	$(PYTHON_VENV) tools/extract_pilot.py
 
 build-index: ## Build search indices (Phase 1)
-	@echo "Building search indices..."
-	@echo "Will be implemented in Phase 1"
+	@echo "Building BM25 search index..."
+	$(PYTHON_VENV) tools/demo_pipeline.py
+
+qa-extraction: ## Run QA on extracted documents
+	@echo "Running extraction quality analysis..."
+	$(PYTHON_VENV) tools/qa_extraction.py
 
 demo: ## Launch Streamlit demo UI (Phase 3)
 	@echo "Launching demo UI..."

@@ -1,0 +1,825 @@
+{
+  "headings": [
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "1/8",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 0,
+      "font_size": 12.0
+    },
+    {
+      "text": "ITEM No. UREA SERVICE: 1",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Unit:",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101 DRIVER FOR CO2 COMPRESSOR 2",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Supplier;",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Quantity: 1 3",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 0,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "2/8",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 1,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "3",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "4 Auxiliary systems-Utility requirements □",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "5",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "6",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "7",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "8",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "9 REFERENCE SPECIFICATION",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 1,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "3/8",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 2,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "3 ROTATING ELEMENTS",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "4 Speed Max allowable:",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "6 Shaft type:",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "7 Integral wheels",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "8 Double extended",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "9 No. stages",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 2,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "4/8",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 3,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "3 LUBRICATIN AND CONTROL OIL SYSTEMS",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "4 Reference specs:",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "6",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "7 Common oil system with compressor",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "8",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "9 Turbine MFR to supply:",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 3,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "5/8",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 4,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "3 CONTROLS AND INSTRUMENTATION:",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "4 Instrument and control panel specifications and scope of Additional requirements:",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "5 Supply shall be in accordance with the following the",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "7 API 614 appendix B pages: ○",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "8 Purchasers data sheets: ○",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "9 API 670 appendix D pages ○",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 4,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "6/8",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 5,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "3 TURNING GEAR",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "5 Furnished by: VENDOR",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "6 Type:",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "7 Engagement",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "8 MFR:",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "9 Mounted by: Vendor",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 5,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "7/8",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 6,
+      "font_size": 12.0
+    },
+    {
+      "text": "1",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "2",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "3 INSPECTION AND TESTING",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "5 Shop inspection",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 6,
+      "font_size": 10.5
+    },
+    {
+      "text": "DOC NO. 07087-CP22-KT06101 WEC",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "CA. MAU FERTILIZER PLANT",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "8/8",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "0 E Rev. UREA UNIT Page",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "SPECIAL PURPOSE STEAM TURBINE DATA SHEET",
+      "level": "heading1",
+      "page": 7,
+      "font_size": 12.0
+    },
+    {
+      "text": "ITEM No. SERVICE: DRIVER FOR CO2 COMPRESSOR",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "KT06101",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "Remark:",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "Prepd/ Date",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "Chekd/Date",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    },
+    {
+      "text": "Apprd/Date",
+      "level": "heading3",
+      "page": 7,
+      "font_size": 10.5
+    }
+  ],
+  "pages": [
+    {
+      "page_num": 0,
+      "char_count": 2880,
+      "block_count": 163
+    },
+    {
+      "page_num": 1,
+      "char_count": 1808,
+      "block_count": 118
+    },
+    {
+      "page_num": 2,
+      "char_count": 1875,
+      "block_count": 136
+    },
+    {
+      "page_num": 3,
+      "char_count": 1959,
+      "block_count": 99
+    },
+    {
+      "page_num": 4,
+      "char_count": 1713,
+      "block_count": 95
+    },
+    {
+      "page_num": 5,
+      "char_count": 2222,
+      "block_count": 138
+    },
+    {
+      "page_num": 6,
+      "char_count": 3106,
+      "block_count": 182
+    },
+    {
+      "page_num": 7,
+      "char_count": 501,
+      "block_count": 22
+    }
+  ],
+  "statistics": {
+    "total_blocks": 953,
+    "total_characters": 16064,
+    "avg_blocks_per_page": 119.125
+  }
+}

@@ -10,5 +10,21 @@ pytest==8.3.2
 pytest-asyncio==0.23.8
 pre-commit==3.8.0
 
-# Note: Phase 1+ dependencies for document processing (unstructured, pymupdf, etc.)
-# will be added later when needed
+# Phase 1 - Document Processing & Indexing dependencies
+pymupdf==1.24.9
+pdfplumber==0.11.4
+rank-bm25==0.2.2
+numpy==1.26.4
+pandas==2.2.2
+rapidfuzz==3.9.6
+jsonlines==4.0.0
+typer==0.12.3
+tiktoken==0.7.0  # For tokenization
+rich==13.7.1  # For rich terminal output
+
+# Note: These require OS-level installation:
+# - unstructured==0.15.13
+# - unstructured-inference==0.7.36
+# - pytesseract==0.3.13 (requires Tesseract OCR)
+# - camelot-py==0.11.0
+# - faiss-cpu==1.8.0.post1 (will add when implementing vector index)

@@ -1,3 +1,7 @@
 1. Các đoạn code không được sử dụng icon hoặc emoji, v..v
 
 2. Sau khi thực hiện thay đổi code, hãy viết 1 file miêu tả công việc đã làm vào folder CHANGELOG_README
+
+3. Folder C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\docs là folder dùng để lưu trữ lại những thông tin trong quá trình phát triển các build phase, khi chỉnh sửa thông tin hoặc bổ sung trong quá trình hoàn thiện hoặc debug thì ghi tài liệu vào đây
+
+4. Folder C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\CHANGLOG_README dùng để lưu trữ lại thông tin SAU KHI HOÀN THÀNH TOÀN BỘ 1 PHASE, tức là sau khi hoàn thành 100% pha thì lưu vào đây thành 1 file md, các thông tin được lấy từ codebase và C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\docs

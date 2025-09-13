@@ -302,3 +302,5 @@ make smoke
 - All answers must include source citations for auditability
 - The system refuses to answer when insufficient evidence is available
 - Regular evaluation against golden datasets is critical for maintaining quality
+
+MUST FOLLOW THE RULES in C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\Rules\Rules for AI Agent.txt
