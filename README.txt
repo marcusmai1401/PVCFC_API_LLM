@@ -100,4 +100,5 @@ Hệ thống sẽ cung cấp 3 điểm cuối API chính:
 3.  **Giai đoạn 3: Kiểm thử, Đánh giá và Tinh chỉnh:** Xây dựng Golden Set, UI Demo, và thực hiện các vòng lặp đánh giá (tự động và bởi SME) để tối ưu hệ thống.
 4.  **Giai đoạn 4: Hoàn thiện, Đóng gói và Chuyển giao:** Tối ưu hóa hiệu năng, đóng gói ứng dụng bằng Docker, và hoàn thiện toàn bộ tài liệu dự án.
 
-NOTE: Lưu ý trong quá trình viết code không sử dụng icon, emoji, v..v
+Các chi tiết thực hiện giai đoạn được đề cập trong C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\Build_plan_README
+Cần phải tuân thủ tuyệt đối kế hoạch trong Build_plan_README trừ khi có yêu cầu khác.
