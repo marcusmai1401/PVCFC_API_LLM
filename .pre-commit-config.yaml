@@ -51,17 +51,19 @@ repos:
         name: Security check with Bandit
         args: ['-r', 'app/', '-ll']
         exclude: tests/
+        additional_dependencies: ['pbr']
+        pass_filenames: false
 
-  # Local hooks
+  # Local hooks - pytest only runs on push to avoid slowing down commits
   - repo: local
     hooks:
       - id: pytest
         name: Run tests
-        entry: python -m pytest
-        language: python
+        entry: pytest
+        language: system
         files: \.(py)$
         pass_filenames: false
-        always_run: true
+        stages: [push]
 
 # Global excludes
 exclude: |

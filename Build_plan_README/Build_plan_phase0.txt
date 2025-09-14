@@ -68,6 +68,12 @@ III. KẾ HOẠCH THEO DẠNG “MỤC TIÊU – NỘI DUNG – GIẢI PHÁP –
     API_PORT=8000
     LOG_LEVEL=INFO
     LLM_PROVIDER=openai|gemini|none
+    LLM_TIER=light|heavy
+    LLM_LIGHT_PROVIDER=(tùy chọn, nếu khác provider chính)
+    LLM_MODEL_LIGHT=...
+    LLM_MODEL_HEAVY=...
+    EMBEDDING_PROVIDER=openai|local|none
+    EMBEDDING_MODEL=...
     OPENAI_API_KEY=...
     GEMINI_API_KEY=...
 - Công cụ: pydantic-settings, python-dotenv.
@@ -87,9 +93,9 @@ III. KẾ HOẠCH THEO DẠNG “MỤC TIÊU – NỘI DUNG – GIẢI PHÁP –
 
 7) Smoke test (tùy chọn nếu có KEY)
 - Nội dung: Kiểm tra nhanh kết nối LLM (không phụ thuộc logic RAG).
-- Giải pháp: Tạo script `scripts/smoke_llm.py`; nếu có OPENAI_API_KEY hoặc GEMINI_API_KEY thì gọi 1 prompt rất ngắn với timeout 5s và retry 1 lần.
-- Công cụ: httpx (timeout/retry).
-- Kết quả đầu ra: `make smoke` in ra PASS/FAIL; không có KEY thì skip và báo “SKIPPED”.
+- Giải pháp: Tạo script `tools/test_gemini_2_5.py`; nếu có GEMINI_API_KEY thì gọi 1 prompt ngắn tới `gemini-2.5-flash` và `gemini-2.5-pro` (stream) với timeout ngắn.
+- Công cụ: google-genai (client chính thức), httpx (tùy chọn timeout/retry).
+- Kết quả đầu ra: In PASS/FAIL theo từng model; không có KEY thì skip và báo “SKIPPED”.
 
 8) Makefile & lệnh tiện ích
 - Nội dung: Chuẩn hoá các lệnh thường dùng.
@@ -104,7 +110,7 @@ III. KẾ HOẠCH THEO DẠNG “MỤC TIÊU – NỘI DUNG – GIẢI PHÁP –
 
 9) Chất lượng mã & hook pre-commit
 - Nội dung: Thiết lập kiểm tra trước commit.
-- Giải pháp: `pre-commit` với hooks: trailing-whitespace, end-of-file-fixer, detect-private-key, (tùy chọn) ruff/mypy.
+- Giải pháp: `pre-commit` với hooks: trailing-whitespace, end-of-file-fixer, detect-private-key, black, isort, bandit (kèm `additional_dependencies: ['pbr']`). Khuyến nghị bổ sung scan secrets (gitleaks/detect-secrets) ở CI.
 - Công cụ: pre-commit.
 - Kết quả đầu ra: `pre-commit install` thành công; commit vi phạm bị chặn.
 

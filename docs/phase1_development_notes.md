@@ -8,7 +8,7 @@
 
 ### 1.1 Bug trong VectorExtractor
 - **Hyphenation bug**: List mutation khi iterate gây crash
-- **Processing order**: Merge trước sort làm sai thứ tự text  
+- **Processing order**: Merge trước sort làm sai thứ tự text
 - **Rotation handling**: Mutate page object gây side effects
 - **Unused parameters**: `handle_rotation` không được dùng
 
@@ -30,7 +30,7 @@
 - `tag_normalizer.py`: P&ID equipment tag extraction
 - `unit_normalizer.py`: Technical unit standardization
 
-### 2.2 Pipeline components  
+### 2.2 Pipeline components
 - `markdown_converter.py`: Convert blocks to Markdown
 - `hierarchical_chunker.py`: Smart chunking với parent_id
 - `bm25_indexer.py`: Offline search indexing
@@ -50,7 +50,7 @@
    - All pages rotated 270°
    - Structure detected correctly
 
-2. **CO2 Compressor Data Sheet** (8 pages, vector)  
+2. **CO2 Compressor Data Sheet** (8 pages, vector)
    - 953 blocks extracted
    - 16,064 characters
    - Technical units found: bar(g), °C, m³/h
@@ -61,7 +61,7 @@
    - Skipped for OCR (Phase 2)
 
 4. **Operation Manual** (37 pages, scan)
-   - Correctly identified as scan  
+   - Correctly identified as scan
    - Skipped for OCR (Phase 2)
 
 ### 3.2 Quality metrics achieved

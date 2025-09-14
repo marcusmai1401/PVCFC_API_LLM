@@ -7,7 +7,7 @@ I. MỤC TIÊU
 - Thêm bước Chain‑of‑Verification (CoVe) nhẹ để giảm ảo giác trong câu trả lời.
 
 II. PHẠM VI
-- Có: Module Retriever + Reranker + Generator + CoVe; các API; quản lý model (LLM Factory); cấu hình; caching/rate‑limit; test & e2e.
+- Có: Module Retriever + Reranker + Generator + CoVe; các API; quản lý model (LLM service/factory); cấu hình; caching/rate‑limit; test & e2e.
 - Không: Tối ưu nâng cao/ablation, Docker compose, security hardening nâng cao (Phase 4).
 
 III. THIẾT KẾ KIẾN TRÚC (Ở MỨC MODULE)
@@ -19,9 +19,10 @@ app/
   core/
     config.py         # tham số k, k_parent, rate_limit...
     logging.py, metrics.py, tracing.py
-    llm_factory.py    # quản lý provider/model, retry, timeouts
-    cache.py          # LRU/Redis (tùy)
-    rate_limit.py     # token bucket
+  services/
+    llm.py            # quản lý provider/model/tier, retry, timeouts
+    locator.py        # dành cho /locate (map chunk → page/bbox)
+    reporter.py       # dành cho /report (dựng tài liệu từ answer/citations)
   rag/
     query_transform.py  # normalize, HyDE, expansion, filters
     retriever.py        # FAISS+BM25, RRF, expand_parent
@@ -29,9 +30,6 @@ app/
     generator.py        # answer + citations
     cove.py             # chain-of-verification (light)
     schemas.py          # pydantic schema cho I/O
-  services/
-    locator.py          # dành cho /locate (map chunk → page/bbox)
-    reporter.py         # dành cho /report (dựng tài liệu từ answer/citations)
   deps/
     indices.py        # open FAISS/BM25, manifest, mmap embeddings
     loaders.py        # đọc processed/ JSONL/MD từ Phase 1
@@ -88,7 +86,7 @@ VI. ENDPOINTS (SCHEMA & VÍ DỤ)
       {"doc_id":"PVCFC-OM-KT06101-v1","page":5}
     ],
     "context_used": ["chunk_id1","chunk_id2", "..."],
-    "meta": { "latency_ms": 2300, "model": "gpt-*-*", "k": 8 }
+    "meta": { "latency_ms": 2300, "model": "gemini-2.5-pro", "k": 8 }
   }
 - Lỗi chuẩn hoá:
   400 (payload sai), 422 (filters không hợp lệ), 503 (model timeout).
@@ -127,8 +125,8 @@ VI. ENDPOINTS (SCHEMA & VÍ DỤ)
     "meta": {"total_latency_ms": 5400}
   }
 
-VII. LLM FACTORY & PROMPTS
-- LLM Factory: chọn provider theo ENV (openai/gemini/azure/local), fallback/timeout/retry; cấu hình temperature=0.2 (QA), top_p=0.9.
+VII. LLM SERVICE & PROMPTS
+- LLM Service (`app/services/llm.py`): chọn provider theo tier (light/heavy) từ ENV; `LLM_LIGHT_PROVIDER` (tuỳ chọn) có thể khác `LLM_PROVIDER`. Quản lý retry/timeouts; truyền model theo `LLM_MODEL_LIGHT/LLM_MODEL_HEAVY`.
 - Prompts:
   • query_transform: normalize + HyDE prompt ngắn, yêu cầu 2–3 giả định khác nhau.
   • generator: buộc format trả lời + citations bắt buộc (nếu thiếu nguồn thì trả lời “không rõ/không đủ”).
@@ -148,7 +146,7 @@ IX. TEST & E2E
 - Load test nhẹ: 30 RPS trong 1 phút (khoá model để không tốn chi phí).
 
 X. THƯ VIỆN/PHỤ THUỘC (BỔ SUNG CHO PHASE 2)
-- rank-bm25 (nếu chưa có), faiss-cpu (Phase 1), sentence-transformers (cho rerank nếu cần), transformers (nếu dùng rerank local), openai or google‑ai‑python (tuỳ provider), httpx, tenacity (retry), opentelemetry‑api/sdk, prometheus‑client.
+- rank-bm25 (nếu chưa có), faiss-cpu (Phase 1), sentence-transformers (cho rerank nếu cần), transformers (nếu dùng rerank local), openai hoặc **google-genai** (tuỳ provider), httpx, tenacity (retry), opentelemetry‑api/sdk, prometheus‑client.
 
 XI. ĐỊNH NGHĨA HOÀN THÀNH (DoD)
 - /ask: trả lời có citations hợp lệ cho ≥ 90% truy vấn sanity; nếu không có bằng chứng → nói rõ “không đủ nguồn”.
@@ -166,7 +164,7 @@ XII. RỦI RO & ỨNG PHÓ
 XIII. BÀN GIAO (ARTEFACTS KỲ VỌNG)
 - rag/query_transform.py, rag/retriever.py, rag/reranker.py, rag/generator.py, rag/cove.py, rag/schemas.py
 - api/routers/ask.py, locate.py, report.py
-- core/llm_factory.py, core/cache.py, core/rate_limit.py, core/metrics.py, core/tracing.py
+- services/llm.py, core/cache.py, core/rate_limit.py, core/metrics.py, core/tracing.py
 - tests/ (unit + e2e)
 - README (API spec + ví dụ cURL)
 

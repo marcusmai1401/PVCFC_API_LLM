@@ -67,15 +67,15 @@ V. PIPELINE EVALUATION (OFFLINE BATCH)
 
 VI. STREAMLIT DEMO & SME ANNOTATION
 1) Tính năng UI
-- Sidebar: chọn **doc_category/doc_id**, bật/tắt HyDE, chỉnh k_bm25/k_faiss/final_k, top_rerank, tiếng Việt/Anh.
+- Sidebar: chọn **doc_category/doc_id**, bật/tắt HyDE, chỉnh k_bm25/k_faiss/final_k, top_rerank, tiếng Việt/Anh, **chọn tier (light/heavy)**.
 - Trình bày kết quả:
   • Câu trả lời Markdown + **Danh sách citations** rõ: [Doc; Page; BBox?].
   • Bảng “Top hits” (BM25/FAISS/RRF) kèm score để minh bạch.
 - **Click‑to‑cite**:
   • Khi click citation → hiển thị preview trang PDF (render bằng PyMuPDF) + **overlay bbox**.
   • Nếu bbox=null (scan) → highlight text window.
-- Telemetry: hiển thị tổng latency + breakdown; tokens in/out; cache hit; model info.
-- Xuất phiên: lưu query, answer, citations, params vào `logs/ui_sessions.jsonl`.
+- Telemetry: hiển thị tổng latency + breakdown; tokens in/out; cache hit; **provider/model/tier** đang dùng.
+- Xuất phiên: lưu query, answer, citations, params vào `logs/ui_sessions.jsonl` (kèm provider/model/tier).
 2) SME annotation
 - Nút đánh giá: Correct / Partially / Incorrect; Citation OK? (Yes/No); Notes (textbox).
 - Lưu annotation vào `artifacts/annotation/annotations.jsonl` (kèm `session_id`, `query_id`, `annotator`).

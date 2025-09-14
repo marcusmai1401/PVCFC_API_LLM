@@ -1,7 +1,7 @@
 # Phase 1: PDF Processing Modules - Development Guide
 
 ## Overview
-Development guide cho Phase 1 modules. Thông tin này dành cho developers trong quá trình implement và debug. 
+Development guide cho Phase 1 modules. Thông tin này dành cho developers trong quá trình implement và debug.
 
 Thông tin final completion status xem tại `CHANGLOG_README/README_Phase1_Final.md`.
 
@@ -171,7 +171,7 @@ The following modules will be implemented in Phase 2:
    ```bash
    # PowerShell
    $env:PYTHONPATH="."
-   
+
    # Bash/Linux
    export PYTHONPATH="."
    ```

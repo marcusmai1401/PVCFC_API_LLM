@@ -36,6 +36,7 @@ V. BẢO MẬT & TUÂN THỦ
 1) Secrets & cấu hình
    - .env chỉ dev; prod dùng secrets manager (Vault/SOPS/Cloud Secret Manager).
    - Không ghi secrets vào log; mask Authorization/api_key/cookie.
+   - Bật pre-commit hooks để phát hiện secret (detect-private-key; khuyến nghị thêm gitleaks/detect-secrets baseline).
 2) Supply chain & SBOM
    - Khóa phiên bản, sinh SBOM (cyclonedx), scan CVE (Trivy, pip-audit).
    - CI chặn merge nếu có High/Critical CVE (ngoại lệ cần phê duyệt).
@@ -96,6 +97,7 @@ IX. CI/CD
   • Lint/test → build image → SBOM + Trivy scan → push registry (stage) → e2e smoke → manual approval → deploy prod.
   • Tag image theo semver + commit_sha.
 - Secrets qua OIDC/Secrets Manager; không để secrets trong repo.
+- **Scan secrets ở CI**: chạy gitleaks/detect-secrets trên PR để chặn leak trước khi merge.
 - Tự động tạo release notes & CHANGELOG.md (Conventional Commits).
 
 X. TÀI LIỆU HOÁ & RUNBOOK

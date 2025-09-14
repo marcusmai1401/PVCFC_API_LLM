@@ -100,7 +100,7 @@ VII. HẠNG MỤC CHI TIẾT (Mục tiêu – Nội dung – Giải pháp – C�
 9) Hybrid indexing (FAISS + BM25)
 - Nội dung: Tạo chỉ mục kết hợp cho retrieval sau này.
 - Giải pháp:
-  • Embedding: OpenAI text‑embedding‑3‑large hoặc BGE‑large (local).
+  • Embedding: DEV/QA ưu tiên OpenAI `text-embedding-3-small` (tiết kiệm); PROD cân nhắc `text-embedding-3-large` hoặc BGE‑large (local) khi có số liệu cần nâng chất lượng.
   • FAISS index trên vector; lưu mapping chunk_id → offset.
   • BM25 index bằng rank_bm25 (hoặc Elastic/SPL if available).
   • Lưu thông tin index_version & tham số build.

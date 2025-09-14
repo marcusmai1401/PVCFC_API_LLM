@@ -6,7 +6,7 @@
 **File:** `app/rag/extractors/vector_extractor.py`
 **Function:** `_fix_hyphenation`
 
-**Problem:** 
+**Problem:**
 - Original code modified the blocks list during iteration by setting `blocks[i+1] = None`
 - This caused errors in subsequent iterations when trying to access `block.text` on None values
 

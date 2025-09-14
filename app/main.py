@@ -116,10 +116,10 @@ app = create_app()
 
 if __name__ == "__main__":
     # Run app directly (cho development)
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=settings.api_port,
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",  # nosec B104 - bind all interfaces for containerized deployment
+            port=settings.api_port,
         reload=settings.app_env == "local",
         log_config=None,  # Sử dụng loguru thay vì uvicorn logging
     )
