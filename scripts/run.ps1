@@ -35,4 +35,4 @@ Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host ""
 
 # Chạy server
-& "venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 0.0.0.0 --port $port
+& "venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port $port

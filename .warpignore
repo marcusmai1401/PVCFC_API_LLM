@@ -1,0 +1,72 @@
+# Warp Ignore Configuration for PVCFC RAG API Project
+# This file configures what Warp AI can access in this project
+
+# Grant access to environment configuration
+!.env
+!env.example
+
+# Grant access to all source code
+!app/**
+!tools/**
+!tests/**
+!streamlit_app/**
+!scripts/**
+
+# Grant access to documentation and configs
+!docs/**
+!CHANGLOG_README/**
+!Build_plan_README/**
+!Rules/**
+!*.md
+!*.txt
+!*.yml
+!*.yaml
+!*.json
+!*.toml
+!*.cfg
+!*.ini
+
+# Grant access to configuration files
+!requirements.txt
+!Dockerfile
+!docker-compose*.yml
+!Makefile
+!*.ps1
+
+# Grant access to data and artifacts for analysis
+!data/**
+!artifacts/**
+
+# Grant access to Git configuration
+!.git/**
+!.gitignore
+!.gitattributes
+
+# Grant access to Python package files
+!pyproject.toml
+!setup.py
+!setup.cfg
+
+# Grant access to IDE/editor configs
+!.vscode/**
+!.idea/**
+!*.code-workspace
+
+# Grant access to CI/CD configs
+!.github/**
+!.gitlab-ci.yml
+!azure-pipelines.yml
+
+# Explicitly allow common file types
+!*.py
+!*.js
+!*.ts
+!*.html
+!*.css
+!*.sql
+!*.sh
+!*.bat
+!*.cmd
+
+# Note: By using ! prefix, we're explicitly allowing access to these files and directories
+# This overrides any default restrictions Warp might have

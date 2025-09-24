@@ -37,6 +37,7 @@ app/
 IV. THÔNG SỐ MẶC ĐỊNH (CÓ THỂ ĐIỀU CHỈNH QUA CONFIG)
 - k_bm25 = 50, k_faiss = 50  → hợp nhất RRF lấy top_rrf = 60
 - expand_parent: parent_tokens ≈ 1200–1600, strategy = sentence window
+- page_range_expansion: luôn bật; max_pages_to_scan = 5; min_cluster_size = 2 (gom cụm trang liên tiếp theo doc_id)
 - reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2, top_rerank = 20
 - final_context_k = 8 (số đoạn đưa vào generator)
 - max_answer_tokens = 512 (có thể 768 cho báo cáo dài)
@@ -126,7 +127,7 @@ VI. ENDPOINTS (SCHEMA & VÍ DỤ)
   }
 
 VII. LLM SERVICE & PROMPTS
-- LLM Service (`app/services/llm.py`): chọn provider theo tier (light/heavy) từ ENV; `LLM_LIGHT_PROVIDER` (tuỳ chọn) có thể khác `LLM_PROVIDER`. Quản lý retry/timeouts; truyền model theo `LLM_MODEL_LIGHT/LLM_MODEL_HEAVY`.
+- LLM Service (`app/services/llm.py`): một cấu hình production mặc định (không còn tiers/modes), ưu tiên độ chính xác; quản lý retry/timeouts; model lấy từ ENV.
 - Prompts:
   • query_transform: normalize + HyDE prompt ngắn, yêu cầu 2–3 giả định khác nhau.
   • generator: buộc format trả lời + citations bắt buộc (nếu thiếu nguồn thì trả lời “không rõ/không đủ”).
@@ -140,10 +141,10 @@ VIII. CACHING, RATE‑LIMIT, ERROR HANDLING, QUAN SÁT
 - Tracing: trace_id ở header; ghi lại pipeline timing cho debug.
 
 IX. TEST & E2E
-- Unit test: retriever (FAISS/BM25 mock nhỏ), reranker (scoring tăng cho gold), generator (format citations).
+- Unit test: retriever (FAISS/BM25 mock nhỏ), reranker (scoring tăng cho gold), generator (format citations), page-range expansion (gom cụm trang đúng thứ tự, giới hạn scan).
 - Golden set (Phase 3 sẽ mở rộng): sanity‑check 20 QA → kiểm precision@5 ≥ 60%, cite rate = 100% (không trả nếu thiếu).
-- E2E: test 3 endpoint với filters khác nhau; test fallback locate khi bbox = null.
-- Load test nhẹ: 30 RPS trong 1 phút (khoá model để không tốn chi phí).
+- E2E: test 3 endpoint với filters khác nhau; test fallback locate khi bbox = null; xác minh nhảy đúng trang.
+- Load test nhẹ: 30 RPS trong 1 phút (có thể mock LLM để không tốn chi phí).
 
 X. THƯ VIỆN/PHỤ THUỘC (BỔ SUNG CHO PHASE 2)
 - rank-bm25 (nếu chưa có), faiss-cpu (Phase 1), sentence-transformers (cho rerank nếu cần), transformers (nếu dùng rerank local), openai hoặc **google-genai** (tuỳ provider), httpx, tenacity (retry), opentelemetry‑api/sdk, prometheus‑client.

@@ -57,6 +57,8 @@ class HierarchicalChunker:
         chunk_overlap: int = 50,
         use_token_count: bool = True,
         tokenizer_model: str = "cl100k_base",
+        chunking_strategy: str = "hierarchical",  # 'hierarchical' or 'sentence-window'
+        sentence_window_size: int = 3,  # Number of sentences per window
     ):
         """
         Initialize chunker
@@ -72,6 +74,8 @@ class HierarchicalChunker:
         self.min_chunk_size = min_chunk_size
         self.chunk_overlap = chunk_overlap
         self.use_token_count = use_token_count
+        self.chunking_strategy = chunking_strategy
+        self.sentence_window_size = sentence_window_size
 
         # Initialize tokenizer if using token count
         if use_token_count:
@@ -89,7 +93,7 @@ class HierarchicalChunker:
         self, markdown: str, doc_id: str, metadata: Optional[Dict[str, Any]] = None
     ) -> List[Chunk]:
         """
-        Chunk markdown document hierarchically
+        Chunk markdown document using selected strategy
 
         Args:
             markdown: Markdown text
@@ -99,19 +103,27 @@ class HierarchicalChunker:
         Returns:
             List of chunks
         """
+        # Use sentence-window strategy if specified
+        if self.chunking_strategy == "sentence-window":
+            return self._chunk_sentence_window(markdown, doc_id, metadata)
+
+        # If using small-to-big strategy
+        if self.chunking_strategy == "small-to-big":
+            return self._chunk_small_to_big_markdown(markdown, doc_id, metadata)
+
+        # Otherwise use hierarchical strategy
         # Parse markdown structure
         sections = self._parse_markdown_structure(markdown)
 
-        # Create chunks from sections
+        # Create chunks from sections with parent-child relationships
         chunks = []
         chunk_index = 0
 
         for section in sections:
-            section_chunks = self._chunk_section(
+            section_chunks = self._chunk_section_with_parent(
                 section=section,
                 doc_id=doc_id,
                 chunk_index=chunk_index,
-                parent_id=None,
                 metadata=metadata or {},
             )
             chunks.extend(section_chunks)
@@ -133,8 +145,8 @@ class HierarchicalChunker:
             List of chunks
         """
         if not doc_id:
-                doc_id = extraction_result.get("file_path", "unknown")
-                doc_id = hashlib.sha256(doc_id.encode()).hexdigest()[:8]
+            doc_id = extraction_result.get("file_path", "unknown")
+            doc_id = hashlib.sha256(doc_id.encode()).hexdigest()[:8]
 
         chunks = []
         chunk_index = 0
@@ -486,6 +498,299 @@ class HierarchicalChunker:
     def _generate_chunk_id(self, doc_id: str, chunk_index: int) -> str:
         """Generate unique chunk ID"""
         return f"{doc_id}_chunk_{chunk_index:04d}"
+
+    def _chunk_section_with_parent(
+        self,
+        section: Dict[str, Any],
+        doc_id: str,
+        chunk_index: int,
+        metadata: Dict[str, Any],
+    ) -> List[Chunk]:
+        """
+        Chunk a section with parent-child relationships.
+        Creates a parent chunk for the heading and child chunks for content.
+
+        Args:
+            section: Section dictionary
+            doc_id: Document ID
+            chunk_index: Current chunk index
+            metadata: Chunk metadata
+
+        Returns:
+            List of chunks with parent-child relationships
+        """
+        chunks = []
+        parent_chunk_id = None
+
+        # Create parent chunk if section has a heading
+        if section.get("heading"):
+            parent_chunk_id = self._generate_chunk_id(doc_id, chunk_index)
+
+            # Parent chunk contains heading and summary
+            parent_text = f"{section['heading']}"
+
+            # Add first part of content as summary (max 200 chars)
+            content = "\n".join(section["content"])
+            if content.strip():
+                summary = content[:200].strip()
+                if len(content) > 200:
+                    summary += "..."
+                parent_text = f"{parent_text}\n\n{summary}"
+
+            parent_chunk = Chunk(
+                chunk_id=parent_chunk_id,
+                text=parent_text,
+                doc_id=doc_id,
+                page_start=section["page_start"],
+                page_end=section["page_end"],
+                char_count=len(parent_text),
+                token_count=len(self.tokenizer.encode(parent_text))
+                if self.use_token_count and self.tokenizer
+                else 0,
+                chunk_index=chunk_index,
+                parent_chunk_id=None,  # Parent chunks don't have parents
+                heading=section["heading"],
+                level=section["level"],
+                metadata={**metadata, "chunk_type": "parent"},
+            )
+            chunks.append(parent_chunk)
+            chunk_index += 1
+
+        # Create child chunks for content
+        content = "\n".join(section["content"])
+        if content.strip():
+            # Use existing _chunk_section logic but with parent_id
+            child_chunks = self._chunk_section(
+                section=section,
+                doc_id=doc_id,
+                chunk_index=chunk_index,
+                parent_id=parent_chunk_id,
+                metadata={**metadata, "chunk_type": "child"},
+            )
+            chunks.extend(child_chunks)
+
+        return chunks
+
+    def _chunk_sentence_window(
+        self, text: str, doc_id: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> List[Chunk]:
+        """
+        Chunk text using sentence-window strategy.
+        Each chunk contains a window of sentences with overlap.
+
+        Args:
+            text: Text to chunk
+            doc_id: Document ID
+            metadata: Optional metadata
+
+        Returns:
+            List of chunks
+        """
+        import re
+
+        # Split into sentences more robustly
+        # Match sentence endings followed by space (but not end of string)
+        sentence_endings = re.findall(r"[^.!?]*[.!?]", text)
+        sentences = [s.strip() for s in sentence_endings if s.strip()]
+
+        if not sentences:
+            return []
+
+        chunks = []
+        chunk_index = 0
+
+        # Extract page information from text if available
+        page_start = 0
+        page_end = 0
+        page_pattern = re.compile(r"<!-- Page (\d+) -->")
+        page_matches = page_pattern.findall(text)
+        if page_matches:
+            page_nums = [int(p) - 1 for p in page_matches]
+            page_start = min(page_nums)
+            page_end = max(page_nums)
+
+        # Create sliding window chunks
+        # Calculate step based on overlap percentage
+        overlap_sentences = max(
+            0, int(self.sentence_window_size * self.chunk_overlap / 100)
+        )
+        window_step = max(1, self.sentence_window_size - overlap_sentences)
+
+        i = 0
+        while i < len(sentences):
+            # Get window of sentences
+            window_end = min(i + self.sentence_window_size, len(sentences))
+            window_sentences = sentences[i:window_end]
+            chunk_text = " ".join(window_sentences)
+
+            # Skip if too short
+            if len(chunk_text) < self.min_chunk_size and window_end < len(sentences):
+                i += 1
+                continue
+
+            # Create chunk
+            chunk_id = self._generate_chunk_id(doc_id, chunk_index)
+            chunk = Chunk(
+                chunk_id=chunk_id,
+                text=chunk_text,
+                doc_id=doc_id,
+                page_start=page_start,
+                page_end=page_end,
+                char_count=len(chunk_text),
+                token_count=len(self.tokenizer.encode(chunk_text))
+                if self.use_token_count and self.tokenizer
+                else 0,
+                chunk_index=chunk_index,
+                parent_chunk_id=None,
+                heading=None,
+                level=0,
+                metadata={
+                    **metadata,
+                    "chunking_strategy": "sentence-window",
+                    "window_size": self.sentence_window_size,
+                }
+                if metadata
+                else {
+                    "chunking_strategy": "sentence-window",
+                    "window_size": self.sentence_window_size,
+                },
+            )
+            chunks.append(chunk)
+            chunk_index += 1
+
+            # Move window forward
+            i += window_step
+
+        return chunks
+
+    def _chunk_small_to_big_markdown(
+        self, markdown: str, doc_id: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> List[Chunk]:
+        """
+        Chunk markdown by aggregating small units (sentences) up to target size within sections.
+        Preserves parent-child relationships by creating a parent chunk per heading section.
+        """
+        import re
+
+        sections = self._parse_markdown_structure(markdown)
+        chunks: List[Chunk] = []
+        chunk_index = 0
+
+        for section in sections:
+            # Create parent chunk first (if has heading)
+            parent_chunk_id = None
+            if section.get("heading"):
+                parent_chunk_id = self._generate_chunk_id(doc_id, chunk_index)
+                content = "\n".join(section["content"]).strip()
+                summary = (
+                    content[:200].strip() + ("..." if len(content) > 200 else "")
+                    if content
+                    else ""
+                )
+                parent_text = section["heading"] + ("\n\n" + summary if summary else "")
+                parent_chunk = Chunk(
+                    chunk_id=parent_chunk_id,
+                    text=parent_text,
+                    doc_id=doc_id,
+                    page_start=section["page_start"],
+                    page_end=section["page_end"],
+                    char_count=len(parent_text),
+                    token_count=len(self.tokenizer.encode(parent_text))
+                    if self.use_token_count and self.tokenizer
+                    else 0,
+                    chunk_index=chunk_index,
+                    parent_chunk_id=None,
+                    heading=section["heading"],
+                    level=section["level"],
+                    metadata={**(metadata or {}), "chunk_type": "parent"},
+                )
+                chunks.append(parent_chunk)
+                chunk_index += 1
+
+            # Chunk content by sentences, aggregate up to max_chunk_size
+            content = "\n".join(section["content"]).strip()
+            if not content:
+                continue
+            sentences = re.findall(r"[^.!?]*[.!?]", content)
+            sentences = [s.strip() for s in sentences if s.strip()]
+            if not sentences:
+                continue
+
+            current_sentences: List[str] = []
+            current_size = 0
+
+            for sent in sentences:
+                sent_size = (
+                    len(self.tokenizer.encode(sent))
+                    if self.use_token_count and self.tokenizer
+                    else len(sent)
+                )
+
+                if current_sentences and current_size + sent_size > self.max_chunk_size:
+                    # flush current chunk
+                    chunk_text = " ".join(current_sentences)
+                    c = Chunk(
+                        chunk_id=self._generate_chunk_id(doc_id, chunk_index),
+                        text=chunk_text,
+                        doc_id=doc_id,
+                        page_start=section["page_start"],
+                        page_end=section["page_end"],
+                        char_count=len(chunk_text),
+                        token_count=current_size if self.use_token_count else 0,
+                        chunk_index=chunk_index,
+                        parent_chunk_id=parent_chunk_id,
+                        heading=section["heading"],
+                        level=section["level"],
+                        metadata={
+                            **(metadata or {}),
+                            "chunk_type": "child",
+                            "chunking_strategy": "small-to-big",
+                        },
+                    )
+                    chunks.append(c)
+                    chunk_index += 1
+
+                    # overlap by one last sentence if overlap configured
+                    if self.chunk_overlap > 0 and current_sentences:
+                        current_sentences = [current_sentences[-1], sent]
+                        current_size = (
+                            len(self.tokenizer.encode(current_sentences[0]))
+                            if self.use_token_count and self.tokenizer
+                            else len(current_sentences[0])
+                        ) + sent_size
+                    else:
+                        current_sentences = [sent]
+                        current_size = sent_size
+                else:
+                    # accumulate
+                    current_sentences.append(sent)
+                    current_size += sent_size
+
+            # flush remaining
+            if current_sentences:
+                chunk_text = " ".join(current_sentences)
+                c = Chunk(
+                    chunk_id=self._generate_chunk_id(doc_id, chunk_index),
+                    text=chunk_text,
+                    doc_id=doc_id,
+                    page_start=section["page_start"],
+                    page_end=section["page_end"],
+                    char_count=len(chunk_text),
+                    token_count=current_size if self.use_token_count else 0,
+                    chunk_index=chunk_index,
+                    parent_chunk_id=parent_chunk_id,
+                    heading=section["heading"],
+                    level=section["level"],
+                    metadata={
+                        **(metadata or {}),
+                        "chunk_type": "child",
+                        "chunking_strategy": "small-to-big",
+                    },
+                )
+                chunks.append(c)
+                chunk_index += 1
+
+        return chunks
 
     def get_chunk_statistics(self, chunks: List[Chunk]) -> Dict[str, Any]:
         """

@@ -1,8 +1,8 @@
-# Phase 1 - Final Report
-## PDF Processing & Offline Search System
+# PVCFC RAG API — Phase 1 Final Report
+## PDF Processing & Offline Search (Hybrid Index)
 
-### Date: 13/09/2025
-### Status: ✅ **COMPLETED**
+Date: 2025-09-13
+Status: COMPLETED 100%
 
 ---
 
@@ -163,6 +163,14 @@ Code - API_LLM_PVCFC/
 3. **Image Handling**: Not implemented
 4. **Form Fields**: Not supported
 
+---
+
+## Addendum (2025-09-24) — Ingestion Multithread + Advanced Chunking DoD
+
+- Ingestion (Multithread): Completed and validated. Parallel processing with isolated `PDFProcessor` per thread; OCR fallback available when enabled; emits JSON and JSONL (chunks/manifests). Tests confirm sequential vs threaded parity and thread‑safety.
+- Chunking & Metadata Enrichment: Completed and validated. `HierarchicalChunker` creates parent/child chunks; metadata (`doc_type`, `revision`, `source_format`, `file_name`, page, heading/level) is propagated to every chunk; chunk statistics computed.
+- Document Classification: Rule‑based classifier is integrated and populates `doc_type` and `revision`. LLM fallback classifier (e.g., Gemini/GPT) is intentionally not implemented in Phase 1 per scope (not required now). The hook (`classify_with_llm`) exists for a future phase.
+
 ## Next Steps - Phase 2 Recommendations
 
 ### High Priority
@@ -195,6 +203,70 @@ The system is production-ready for vector PDF processing and provides a solid fo
 
 ---
 
-**Prepared by:** AI Assistant
-**Date:** 13/09/2025
-**Version:** 1.0 Final
+## API examples (cURL)
+
+Phase 1 không cung cấp API chuyên biệt (tập trung xử lý/indexing offline). Có thể dùng health endpoint của Phase 0 để xác thực server:
+
+```bash
+curl -X GET http://localhost:8000/healthz
+```
+
+Các thao tác indexing/search dùng tools CLI:
+
+```bash
+# Extract + build BM25 (ví dụ theo tools sẵn có)
+python tools/extract_pilot.py
+python tools/demo_pipeline.py
+
+# Tìm kiếm FAISS (nếu đã build FAISS)
+python tools/search_faiss_local.py --faiss-dir artifacts/index/faiss --query "compressor pressure" --k 5
+```
+
+## Known issues & workarounds
+
+- PyMuPDF DLL (Windows):
+  - Cài Microsoft Visual C++ 2015–2022 Redistributable (x64)
+  - `pip install --force-reinstall pymupdf==1.24.9`
+  - Dùng WSL/Container để ổn định
+- Lần đầu tải model local embeddings có thể chậm: chuẩn bị cache/venv trước.
+
+---
+
+## Appendix: Hybrid Index Complete (Merged)
+
+Tóm tắt hợp nhất từ `Phase1_Hybrid_Index_Complete.md`:
+
+### Completed Components
+- BM25 index: `artifacts/index/bm25/` — keyword search, sub-second latency
+- FAISS index: `artifacts/index/faiss/` — semantic search (`BAAI/bge-small-en-v1.5`)
+- Cấu hình local embeddings mẫu:
+  ```env
+  EMBEDDING_PROVIDER=local
+  EMBEDDING_LLM=local
+  EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+  ```
+
+### Example results
+- Query "CO2 compressor operating pressure": BM25=6.32; FAISS=0.755; hybrid cho coverage tốt
+- Query "steam turbine specifications": đa dạng nguồn từ cả hai chỉ mục
+
+### Tools
+- Build: `tools/build_faiss_local.py`, `tools/extract_pilot.py`, `tools/demo_pipeline.py`
+- Search: `tools/search_faiss_local.py`, `tools/test_hybrid_search.py`
+
+### Performance
+- Build time: ~20s (bao gồm tải model lần đầu)
+- Search latency: <100ms/query; Memory: ~200MB (model loaded)
+
+### Commands (PowerShell)
+```powershell
+python tools/build_faiss_local.py --bm25-dir artifacts/index/bm25 --faiss-dir artifacts/index/faiss --model BAAI/bge-small-en-v1.5
+python tools/search_faiss_local.py --faiss-dir artifacts/index/faiss --query "compressor pressure" --k 5
+python tools/test_hybrid_search.py
+```
+
+---
+
+Prepared by: AI Assistant
+Date: 2025-09-13
+Version: 1.0 Final

@@ -1,0 +1,53 @@
+[server]
+# Maximum size for uploaded files (in MB)
+maxUploadSize = 200
+
+# Maximum size for message payloads (in MB)
+maxMessageSize = 200
+
+# Enable file watching to auto-reload on changes
+fileWatcherType = "auto"
+
+# Disable usage statistics
+gatherUsageStats = false
+
+# Run on port 8501 (default)
+port = 8501
+
+# Enable CORS for development
+enableCORS = false
+
+# Enable hot reloading
+runOnSave = true
+
+[browser]
+# Disable gathering usage stats from the browser
+gatherUsageStats = false
+
+# Server address for the browser
+serverAddress = "localhost"
+
+[theme]
+# Modern theme settings
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[runner]
+# Magic commands are enabled by default
+magicEnabled = true
+
+# Install packages automatically
+fastReruns = true
+
+[client]
+# Show error details
+showErrorDetails = true
+
+# Enable caching to improve performance
+caching = true
+
+# Display rerun button when script errors
+displayEnabled = true

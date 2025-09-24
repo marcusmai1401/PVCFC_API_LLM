@@ -1,0 +1,36 @@
+# Start Streamlit UI for PVCFC RAG
+$ErrorActionPreference = "Stop"
+
+Write-Host "Starting PVCFC RAG Debug UI..." -ForegroundColor Green
+Write-Host "UI will run on http://localhost:8501" -ForegroundColor Yellow
+Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
+Write-Host ""
+
+# Set API base URL environment variable
+[Environment]::SetEnvironmentVariable("PVCFC_API_BASE_URL", "http://localhost:8000", "Process")
+Write-Host "API Base URL set to: http://localhost:8000" -ForegroundColor Cyan
+Write-Host ""
+
+# Check if API is running
+Write-Host "Checking API connectivity..." -ForegroundColor Yellow
+try {
+    $resp = Invoke-WebRequest -Uri "http://localhost:8000/healthz" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+    Write-Host "[OK] API is running and healthy" -ForegroundColor Green
+    try { $health = $resp.Content | ConvertFrom-Json } catch { $health = $null }
+    if ($health) {
+        Write-Host ("  Environment: {0}" -f $health.app_env) -ForegroundColor Gray
+        Write-Host ("  LLM Provider: {0} (Ready: {1})" -f $health.llm_provider, $health.llm_provider_ready) -ForegroundColor Gray
+    }
+}
+catch {
+    Write-Host "[WARN] API is not reachable at http://localhost:8000" -ForegroundColor Yellow
+    Write-Host "  Please start the API first: .\start_api.ps1" -ForegroundColor Yellow
+    Write-Host ""
+    $answer = Read-Host "Do you want to continue anyway? (y/N)"
+    if ($answer -ne 'y') { exit 1 }
+}
+Write-Host ""
+
+# Start Streamlit
+Write-Host "Starting Streamlit UI..." -ForegroundColor Green
+streamlit run "streamlit_app/app.py"

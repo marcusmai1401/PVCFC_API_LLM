@@ -45,11 +45,15 @@ OPENAI_EMBEDDING_MODELS = [
 
 # Google Gemini Models
 GEMINI_CHAT_MODELS = [
-    # Gemini 2.0 Flash (newest, with thinking/reasoning)
+    # Gemini 2.5 series (newest, 65K output tokens!)
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    # Gemini 2.0 Flash (with thinking/reasoning)
     "gemini-2.0-flash-exp",
     "gemini-2.0-flash-thinking-exp",
     "gemini-2.0-flash-thinking-exp-1219",
-    # Gemini 1.5 Pro series (latest stable)
+    # Gemini 1.5 Pro series (stable)
     "gemini-1.5-pro",
     "gemini-1.5-pro-latest",
     "gemini-1.5-pro-002",

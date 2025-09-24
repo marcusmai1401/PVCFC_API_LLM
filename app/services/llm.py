@@ -169,3 +169,100 @@ def get_embedding_model() -> Optional[str]:
         pass  # Provider validation will handle its own errors
 
     return model
+
+
+class LLMService:
+    """Unified LLM service for RAG pipeline"""
+
+    def __init__(self, settings=None):
+        """Initialize LLM service with settings"""
+        from app.core.config import settings as default_settings
+
+        self.settings = settings or default_settings
+        self._clients = {}  # Cache for LLM clients
+
+    def _get_client(self, tier: Tier):
+        """Get or create LLM client for a tier"""
+        if tier not in self._clients:
+            from app.services.llm_client import create_llm_client
+
+            self._clients[tier] = create_llm_client(tier)
+        return self._clients[tier]
+
+    async def complete(
+        self,
+        prompt: str,
+        max_tokens: Optional[int] = None,
+        tier: Tier = "light",
+        temperature: float = 0.7,
+        system_prompt: Optional[str] = None,
+    ) -> str:
+        """Generate completion using LLM
+
+        Args:
+            prompt: User prompt
+            max_tokens: Maximum tokens to generate
+            tier: Model tier (light or heavy)
+            temperature: Sampling temperature
+            system_prompt: System instructions
+
+        Returns:
+            Generated text response
+        """
+        client = self._get_client(tier)
+
+        # Set default max_tokens based on tier if not provided
+        if max_tokens is None:
+            max_tokens = 2000 if tier == "light" else 4000
+
+        response = client.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        return response.content
+
+    async def generate(
+        self,
+        prompt: str,
+        context: str = None,
+        citations_required: bool = True,
+        tier: Tier = "heavy",
+        **kwargs,
+    ) -> dict:
+        """Generate response with citations for RAG
+
+        Args:
+            prompt: User query
+            context: Retrieved context
+            citations_required: Whether to force citations
+            tier: Model tier
+            **kwargs: Additional parameters
+
+        Returns:
+            Dict with answer and metadata
+        """
+        # Build full prompt with context
+        if context:
+            system_prompt = (
+                "You are a technical assistant for PVCFC. "
+                "Answer based ONLY on the provided context. "
+                "Include citations in [Doc_ID; Page] format."
+            )
+            full_prompt = f"Context:\n{context}\n\nQuestion: {prompt}"
+        else:
+            system_prompt = "You are a technical assistant for PVCFC."
+            full_prompt = prompt
+
+        # Generate response
+        answer = await self.complete(
+            prompt=full_prompt, system_prompt=system_prompt, tier=tier, **kwargs
+        )
+
+        return {
+            "answer": answer,
+            "model": get_model_for(tier),
+            "provider": get_provider_for(tier),
+        }

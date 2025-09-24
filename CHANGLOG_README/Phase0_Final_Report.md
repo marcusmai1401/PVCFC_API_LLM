@@ -1,8 +1,6 @@
-# PVCFC RAG API - Phase 0 Foundation
+# PVCFC RAG API — Phase 0 Final Report (Foundation)
 
-**Hệ thống API Truy vấn Tài liệu Kỹ thuật PVCFC**
-
-Đây là Phase 0 (Foundation) - thiết lập nền tảng cho dự án API RAG (Retrieval-Augmented Generation) để truy xuất và phân tích tri thức từ tài liệu kỹ thuật PVCFC.
+Hệ thống API Truy vấn Tài liệu Kỹ thuật PVCFC — Foundation tổng kết cho Phase 0.
 
 Status: Phase 0 đã hoàn thành 100% và không yêu cầu bất kỳ API key nào. Ứng dụng mặc định chạy với LLM_PROVIDER=none.
 
@@ -155,6 +153,17 @@ RATE_LIMIT_PER_MINUTE=60  # Rate limiting
 GET /healthz
 ```
 
+## API examples (cURL)
+
+```bash
+curl -X GET http://localhost:8000/healthz
+```
+
+## Known issues & workarounds
+
+- Nếu smoke test FAIL ở `health_endpoint`, hãy chắc chắn server đang chạy (`python -m app.main`).
+- Trên Windows, nếu gặp lỗi chạy scripts PowerShell: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
 Response:
 ```json
 {
@@ -231,33 +240,12 @@ Hooks bao gồm:
 - Detect private keys
 - Run tests
 
-## Roadmap
+## Roadmap tóm tắt
 
-### Phase 0: Foundation [Completed]
-- [x] FastAPI skeleton với health endpoint
-- [x] Logging và error handling
-- [x] Configuration management
-- [x] Docker container
-- [x] Testing framework
-- [x] Development tooling
-
-### Phase 1: Document Processing (Next)
-- [ ] PDF parsing (vector + scan)
-- [ ] Text extraction và normalization
-- [ ] Hierarchical chunking
-- [ ] Search indexing (FAISS + BM25)
-
-### Phase 2: RAG Pipeline
-- [ ] Query transformation (HyDE)
-- [ ] Hybrid retrieval
-- [ ] Cross-encoder reranking
-- [ ] LLM generation với citations
-
-### Phase 3: Evaluation & UI
-- [ ] Golden dataset
-- [ ] Evaluation metrics
-- [ ] Streamlit demo UI
-- [ ] SME annotation tools
+- Phase 0: Foundation — Completed
+- Phase 1: Document Processing & Indexing — Next
+- Phase 2: RAG Pipeline
+- Phase 3: Evaluation & UI
 
 ## Troubleshooting
 

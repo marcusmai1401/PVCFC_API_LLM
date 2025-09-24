@@ -182,8 +182,10 @@ class BM25Indexer:
         index_dir = Path(index_dir)
 
         # Load BM25 index
-            with open(index_dir / "bm25_index.pkl", "rb") as f:
-                self.index = pickle.load(f)  # nosec B301 - loading trusted system-generated index
+        with open(index_dir / "bm25_index.pkl", "rb") as f:
+            self.index = pickle.load(
+                f
+            )  # nosec B301 - loading trusted system-generated index
 
         # Load documents
         with open(index_dir / "documents.json", "r", encoding="utf-8") as f:
@@ -194,8 +196,10 @@ class BM25Indexer:
             self.metadata = json.load(f)
 
         # Load tokenized docs
-            with open(index_dir / "tokenized_docs.pkl", "rb") as f:
-                self.tokenized_docs = pickle.load(f)  # nosec B301 - loading trusted system-generated data
+        with open(index_dir / "tokenized_docs.pkl", "rb") as f:
+            self.tokenized_docs = pickle.load(
+                f
+            )  # nosec B301 - loading trusted system-generated data
 
         # Load config
         with open(index_dir / "config.json", "r") as f:

@@ -8,12 +8,16 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
-from app.api.routers import health
+from app.api.routers import ask, health, locate, report
 from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
+from app.core.metrics import get_metrics, get_metrics_content_type
+from app.core.rate_limit import RateLimitMiddleware, configure_rate_limiter
+from app.core.tracing import TracingMiddleware, get_current_trace
+from app.deps.indices import get_index_manager, startup_indices
 
 
 @asynccontextmanager
@@ -28,14 +32,33 @@ async def lifespan(app: FastAPI):
     logger.info(f"Port: {settings.api_port}")
     logger.info(f"Version: {settings.version} ({settings.commit_sha[:8]})")
 
-    # TODO Phase 1+: Khởi tạo index, load models, warm up cache
+    # Initialize indices and dependencies
+    try:
+        # Load search indices
+        result = await startup_indices(settings)
+        if result["status"] == "loaded":
+            logger.info(
+                f"Indices loaded: BM25={result['bm25_ready']}, FAISS={result['faiss_ready']}"
+            )
+            # Store retriever in app state
+            manager = get_index_manager(settings)
+            app.state.retriever = manager.get_retriever()
+            app.state.settings = settings
+        else:
+            logger.warning(f"Indices not fully loaded: {result}")
+    except Exception as e:
+        logger.error(f"Failed to initialize indices: {str(e)}")
+        # App can still run without indices for health checks
+
+    # Configure rate limiter
+    configure_rate_limiter(requests_per_minute=60, burst_size=20, per_ip=True)
+
     logger.info("Startup completed")
 
     yield
 
     # Shutdown
     logger.info("PVCFC RAG API shutting down...")
-    # TODO Phase 1+: Cleanup resources, close connections
     logger.info("Shutdown completed")
 
 
@@ -73,13 +96,43 @@ def create_app() -> FastAPI:
     # Logging middleware - phải thêm trước các middleware khác
     app.add_middleware(LoggingMiddleware)
 
+    # Add tracing middleware
+    app.add_middleware(TracingMiddleware)
+
+    # Add rate limiting middleware
+    app.add_middleware(RateLimitMiddleware)
+
     # Include routers
     app.include_router(health.router, tags=["Health"])
 
-    # Placeholder routers cho các phase sau
-    # app.include_router(ask.router, prefix="/api/v1", tags=["Query"])
-    # app.include_router(locate.router, prefix="/api/v1", tags=["Location"])
-    # app.include_router(report.router, prefix="/api/v1", tags=["Reports"])
+    # Phase 2 routers - RAG endpoints
+    app.include_router(ask.router, tags=["Query"])
+    app.include_router(locate.router, tags=["Location"])
+    app.include_router(report.router, tags=["Reports"])
+
+    # Metrics endpoint (Prometheus format)
+    @app.get("/metrics", tags=["Monitoring"], response_class=PlainTextResponse)
+    async def metrics_endpoint():
+        """Get Prometheus metrics"""
+        return PlainTextResponse(
+            content=get_metrics(), media_type=get_metrics_content_type()
+        )
+
+    # Trace endpoint
+    @app.get("/trace", tags=["Monitoring"])
+    async def trace_endpoint():
+        """Get current trace"""
+        trace = get_current_trace()
+        if trace:
+            return trace
+        return {"message": "No active trace"}
+
+    # Index stats endpoint
+    @app.get("/index-stats", tags=["Monitoring"])
+    async def index_stats():
+        """Get index statistics"""
+        manager = get_index_manager()
+        return manager.get_index_stats()
 
     # Global exception handler
     @app.exception_handler(Exception)
@@ -116,10 +169,10 @@ app = create_app()
 
 if __name__ == "__main__":
     # Run app directly (cho development)
-        uvicorn.run(
-            "app.main:app",
-            host="0.0.0.0",  # nosec B104 - bind all interfaces for containerized deployment
-            port=settings.api_port,
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",  # bind to localhost for development
+        port=settings.api_port,
         reload=settings.app_env == "local",
         log_config=None,  # Sử dụng loguru thay vì uvicorn logging
     )

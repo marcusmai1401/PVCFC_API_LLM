@@ -1,0 +1,86 @@
+# HyDE Configuration
+# Configuration for Hypothetical Document Embedding generation
+
+hyde:
+  # Enable/disable HyDE globally
+  enabled: true  # Re-enabled with paid tier
+
+  # Fallback behavior when API fails
+  fallback_to_normal_search: true
+
+  # Retry configuration for API failures
+  retry:
+    max_attempts: 3
+    base_delay: 1.0  # seconds
+    exponential_backoff: true
+
+  # Cache configuration to reduce API calls
+  cache:
+    enabled: true
+    ttl: 3600  # seconds (1 hour)
+    max_size: 1000  # max cached queries
+
+  # API tier selection
+  api_tier: "light"  # Options: light, standard, premium
+
+  # Generation parameters
+  generation:
+    temperature: 0.7
+    max_tokens: 200
+    num_hypotheses: 3  # Number of HyDE documents to generate
+
+# API Configuration
+api:
+  gemini:
+    # Rate limit handling
+    rate_limit:
+      # For free tier (AI Studio)
+      free_tier:
+        requests_per_minute: 15
+        tokens_per_minute: 1000000
+        requests_per_day: 1500
+
+      # For paid tier (if upgraded)
+      paid_tier:
+        requests_per_minute: 360
+        tokens_per_minute: 4000000
+        requests_per_day: 30000
+
+    # Current tier (change this if you upgrade)
+    current_tier: "paid"
+
+    # Alternative models to try on failure
+    fallback_models:
+      - "gemini-1.5-flash"
+      - "gemini-1.5-pro"
+
+    # Error handling
+    error_handling:
+      on_503: "retry_with_backoff"  # Options: retry_with_backoff, skip, fail
+      on_429: "wait_and_retry"      # Options: wait_and_retry, skip, fail
+      on_quota_exceeded: "disable_hyde"  # Options: disable_hyde, wait_until_reset, fail
+
+# Optimization strategies for free tier
+optimization:
+  # Batch similar queries together
+  batch_queries: true
+  batch_window: 5  # seconds to wait for batching
+
+  # Skip HyDE for certain query types
+  skip_hyde_for:
+    - "LOCATE"  # Equipment location queries don't benefit much
+    - "REPORT"  # Report generation queries
+
+  # Use simpler prompts for free tier
+  use_simple_prompts: true
+
+  # Enable query result caching
+  cache_results: true
+  cache_duration: 3600  # 1 hour
+
+# Monitoring and alerts
+monitoring:
+  track_api_usage: true
+  log_failures: true
+  alert_on_quota_warning: true
+  quota_warning_threshold: 0.8  # Alert when 80% of quota used

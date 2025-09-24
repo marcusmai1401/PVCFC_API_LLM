@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     )
 
     # Cấu hình Embedding (provider/model). Cho phép alias qua EMBEDDING_LLM
-    embedding_provider: Literal["openai", "local", "none"] = "none"
-    embedding_llm: Optional[Literal["openai", "local", "none", ""]] = None
+    embedding_provider: Literal["openai", "gemini", "local", "none"] = "none"
+    embedding_llm: Optional[Literal["openai", "gemini", "local", "none", ""]] = None
     embedding_model: Optional[str] = Field(default=None, description="Embedding model")
 
     # Cấu hình cache và rate limiting (cho Phase 2)

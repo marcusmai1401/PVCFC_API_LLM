@@ -31,16 +31,17 @@ data/
 artifacts/
   index/faiss/         # chỉ mục vector
   index/bm25/          # chỉ mục BM25
+  pages/{doc_id}/{page}.png  # ảnh preview trang để nhảy trang trong UI
 manifests/
   corpus.jsonl         # manifest các tài liệu & phiên bản
   checksums.jsonl      # dấu vân tay file → phát hiện thay đổi
 
 VI. ĐỊNH DANH & SCHEMA METADATA
-- doc_id: chuẩn hoá, duy nhất, ổn định (ví dụ “PVCFC-PID-04000-v1”; hoặc hash tên + checksum).
+- doc_id: chuẩn hoá, duy nhất, ổn định (ví dụ “P&ID/Unit04-PID-04000-v1”; hoặc hash tên + checksum).
 - chunk_id: “{doc_id}::c{order}”.
 - parent_id: id khối cha (tiêu đề/section) cho expand‑parent.
 - Các trường metadata (bắt buộc nếu có):
-  doc_id, doc_category (pid|datasheet|sop|om|…), source_format (vector|scan|mixed),
+  doc_id, doc_category (P&ID|Management of Change|Root Cause Analysis|Technical Data|…), source_format (vector|scan|mixed),
   source_path, version, checksum, page (int), bbox [x0,y0,x1,y1] (nếu có),
   text (chuỗi), section_path (“1/1.2/1.2.1” hoặc “H1>H2>H3”),
   order (int), lang, tables (JSON list), tags (list), units_normalized (bool),
@@ -92,8 +93,8 @@ VII. HẠNG MỤC CHI TIẾT (Mục tiêu – Nội dung – Giải pháp – C�
 - DoD: Chunks có đủ parent_id; kiểm tra tỉ lệ overlap hợp lý; tổng số chunk/ tài liệu nằm trong ngưỡng dự kiến.
 
 8) Doc classifier (doc_category)
-- Nội dung: Gắn nhãn doc_category = {pid|datasheet|sop|om|…}.
-- Giải pháp: Rule‑first theo cụm từ/cấu trúc (PID có ký hiệu thiết bị/line; datasheet có bảng specs; SOP/OM có step/notice), fallback LLM nếu confidence thấp.
+- Nội dung: Gắn nhãn doc_category = {P&ID|Management of Change|Root Cause Analysis|Technical Data|…}.
+- Giải pháp: Rule‑first theo cụm từ/cấu trúc (P&ID có ký hiệu thiết bị/line; Technical Data có bảng thông số; MOC/RCA có ngôn ngữ thay đổi/sự cố), fallback LLM nếu confidence thấp.
 - Công cụ: rule engine (regex), (tùy chọn) LLM nhẹ.
 - DoD: 100% chunk có doc_category; error ≤ 5% trên mẫu kiểm 200 chunk.
 
