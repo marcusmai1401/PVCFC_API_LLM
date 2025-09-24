@@ -199,6 +199,14 @@ server_output.txt
 audit_run.txt
 
 # =====================================
+# LOCAL AI/IDE CONTROL FILES (do not publish)
+# =====================================
+.cursorignore
+.warpignore
+.warpindexingignore
+Rules/
+
+# =====================================
 # IMPORTANT NOTES:
 # =====================================
 # 1. This .gitignore protects sensitive files from GitHub
