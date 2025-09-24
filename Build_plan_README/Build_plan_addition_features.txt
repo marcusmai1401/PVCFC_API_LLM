@@ -1,0 +1,201 @@
+BỔ SUNG TÍNH NĂNG — TÌM KIẾM THEO TAG, NHẢY TRANG, Q&A CÓ TRÍCH DẪN, VÀ REPORT (BẢN HỢP NHẤT)
+
+I. MỤC TIÊU
+- Người dùng nhập tag thiết bị → hệ thống tìm mọi thông tin liên quan (tài liệu PDF theo 4 loại, bảng ngoài như sự cố/đề nghị thay đổi/bảo dưỡng khi có) và hiển thị tổng quan.
+- Khi chọn tài liệu, UI mở tài liệu và nhảy đúng trang liên quan đến tag (page-level, 1-based).
+- Hỏi-Đáp (Q&A) chi tiết, chính xác, kèm trích dẫn (doc_id; page) dạng footnote; tự động trả lời theo ngôn ngữ đầu vào (vi/en).
+- Tạo report cơ bản (markdown) theo template cố định các trường mong muốn.
+
+II. PHẠM VI (MVP)
+- 4 loại tài liệu chính: P&ID, Management of Change (MOC), Root Cause Analysis (RCA), Technical Data.
+- Tìm kiếm mặc định trên tất cả dữ liệu đã index (4 loại tài liệu; có thể mở rộng Word/Excel/PPT), có filter theo loại trong UI.
+- Nhảy đúng trang (page-level). Chưa cần highlight bbox (sẽ bổ sung sau).
+- Q&A chi tiết + trích dẫn footnote; fallback tóm tắt từ top‑1 chunk nếu LLM không trả lời.
+- Device Overview: tabs Documents/Incidents/Change Requests/Maintenance/Q&A/Report, có filter thời gian cho bảng ngoài.
+
+III. KIẾN TRÚC DỮ LIỆU & THƯ MỤC
+- Cấu trúc thư mục (đề xuất):
+  data/
+    raw/
+      pdfs/
+        P&ID/
+        Management of Change/
+        Root Cause Analysis/
+        Technical Data/
+    external/
+      incidents.xlsx
+      changes.xlsx
+      maintenance.xlsx
+
+  artifacts/
+    pages/{doc_id}/{page}.png       # Ảnh trang để preview/nhảy trang chắc chắn
+    index/
+      bm25/...                      # BM25
+      faiss/...                     # FAISS
+
+IV. QUY ƯỚC ĐỊNH DANH & PHÂN LOẠI
+- doc_type: một trong 4 loại (P&ID, Management of Change, Root Cause Analysis, Technical Data).
+- doc_id: "{doc_type}/{slug_file_name}" (duy nhất theo file path). Ví dụ: "P&ID/Unit04-PID-04000-v1".
+- Phân loại tài liệu (auto + override):
+  - Ingest: dùng LLM nhẹ (Gemini 2.5 Flash) + rule để phân loại nhanh 4 loại.
+  - Nếu chưa chắc, fallback theo tên thư mục cha.
+  - Cho phép override bằng cách di chuyển file sang thư mục đúng (hoặc CSV mapping về sau).
+
+V. NGUỒN DỮ LIỆU NGOÀI (EXCEL)
+- Đặt tại "data/external/". Manual refresh (nút Rebuild Index).
+- Schema mặc định (tạm):
+  - incidents: tag, title, date, severity, status, description.
+  - changes: tag, change_id, title, proposer, status, date, summary.
+  - maintenance: tag, wo_id, task, date, result, notes.
+
+VI. CHUẨN HOÁ TAG & TÌM KIẾM
+- Chuẩn hoá Tag: uppercase, loại bỏ khoảng trắng/gạch. Ví dụ: "06 PT001" → "06PT001", "PT-001" → "PT001".
+- Lưu ý P&ID: tag có thể bị tách trên nhiều dòng (ví dụ 04 / PT / 4264); giai đoạn sau dùng bbox/vision để cải thiện.
+- Regex nhận diện tag (khởi đầu): \b[A-Z0-9]{2,}(?:-?[A-Z0-9]{2,})*\b (điều chỉnh dần theo dữ liệu thật).
+- Phạm vi tìm kiếm mặc định: tất cả doc_type + bảng ngoài; UI cho phép filter theo 4 loại.
+
+VII. HÀNH VI UI
+- Device Overview (khi nhập tag):
+  - Header: tag chuẩn hoá, (tùy chọn) mô tả ngắn nếu trích được.
+  - Tabs:
+    • Documents: danh sách tài liệu theo 4 loại (cây thư mục). Click mở PDF và nhảy đúng trang.
+    • Incidents: bảng filter theo thời gian (30/90/365 ngày).
+    • Change Requests: tương tự.
+    • Maintenance History: tương tự.
+    • Q&A: khung hỏi‑đáp về thiết bị (auto‑language).
+    • Report: tạo report markdown 1‑click.
+  - Bộ lọc: theo doc_type, time‑window cho bảng ngoài, free‑text filter trong Documents.
+- Mở tài liệu & nhảy trang:
+  - Ưu tiên embed PDF native trong UI.
+  - Đảm bảo nhảy đúng trang: kèm nút/preview ảnh "artifacts/pages/{doc_id}/{page}.png" khi viewer không nhảy chính xác với #page=N.
+  - Trang hiển thị 1‑based (1,2,3,…).
+
+VIII. Q&A CÓ TRÍCH DẪN
+- Chính sách trả lời: chi tiết, chính xác, có trích dẫn.
+- Trích dẫn dạng footnote ở cuối: "[1] {doc_id}; p.{page}" (đồng thời lưu citations để UI hiển thị bảng khi cần).
+- Tự động nhận diện ngôn ngữ (vi/en) và trả lời theo ngôn ngữ của câu hỏi.
+- Intent & điều hướng:
+  - /ask: luôn ưu tiên Q&A. Nếu transform nhận diện LOCATE vì có tag nhưng câu không chứa từ khoá định vị ("ở đâu", "vị trí", "trang", "where", …) → ép về ASK.
+  - /locate: chỉ dùng khi người dùng thật sự hỏi định vị.
+- Fallbacks:
+  - No‑results: sinh câu trả lời tổng quát – nêu rõ không có nguồn cụ thể.
+  - Có ngữ cảnh nhưng LLM rỗng/failed: tóm tắt từ top‑1 chunk, gắn uncited_fallback=true để UI không tự chèn citation mồ côi.
+  - Cải thiện Gemini client: dùng system_instruction chuẩn; nếu response.text rỗng thì đọc từ candidates.
+- Đọc dải trang liên tục (page‑range expansion, luôn bật):
+  - Sau RRF/re‑rank sơ bộ: gom theo doc_id, sắp theo page, phát hiện cụm trang liên tiếp có tổng điểm cao.
+  - Chọn cụm tốt nhất với ngưỡng cấu hình (ví dụ max_pages_to_scan=5, min_cluster_size=2), tải toàn bộ nội dung cụm làm context chính.
+
+IX. REPORT CƠ BẢN (MARKDOWN)
+- Trường mặc định:
+  - Overview thiết bị
+  - Thông số chính (trích từ Technical Data)
+  - Sự cố gần nhất
+  - Đề nghị thay đổi đang mở
+  - Bảo dưỡng gần nhất
+  - Citations (footnote)
+- Đầu ra: Markdown (có thể map sang CSV/Excel về sau).
+
+X. API & LUỒNG XỬ LÝ
+- Tận dụng API hiện có:
+  - POST /ask: Q&A chi tiết + citations (doc_id, page). Auto‑language.
+  - POST /locate: tìm vị trí/trang (khi câu hỏi định vị).
+  - POST /report: sinh báo cáo markdown theo các sub‑query cố định (sẽ điều chỉnh template).
+  - GET /index-stats, GET /metrics, GET /trace để giám sát.
+- Bổ sung (MVP):
+  - Ingestion classify: phân loại doc_type (LLM nhẹ) khi ingest.
+  - Page preview service (nội bộ): render ảnh trang và cache tại "artifacts/pages/{doc_id}/{page}.png" dùng cho UI.
+  - (Tuỳ chọn) GET /device/{tag}: tổng hợp quick overview (tài liệu liên quan + bảng ngoài) — giai đoạn đầu có thể build trực tiếp trong UI rồi API hoá.
+
+XI. INGESTION & INDEXING
+- Pipeline ingest:
+  Quét data/raw/pdfs/ → phân loại doc_type (LLM nhẹ + rule) → gắn doc_id → extract text (PyMuPDF; OCR khi cần) → chunking → build BM25 & FAISS.
+- Metadata chunk yêu cầu có doc_id và page (ưu tiên page 1‑based để trích dẫn ổn định; nếu chỉ có page_start/page_end thì lấy page_start làm fallback).
+- Render trước ảnh trang PDF ra PNG (DPI 200–300) để hỗ trợ nhảy trang chắc chắn.
+
+XII. EMBEDDING & FAISS
+- Embedding: ưu tiên local (sentence‑transformers) để chủ động chi phí/độ trễ. Gợi ý: "BAAI/bge-small-en-v1.5" hoặc "bge-base" (tuỳ dung lượng). Có thể thử Gemini embeddings về sau.
+- FAISS: bắt buộc cho 1–5M vectors.
+- GPU (ví dụ RTX 4060): dùng cho cross‑encoder rerank để tăng chất lượng (tùy chọn bật/tắt).
+
+XIII. CƠ SỞ DỮ LIỆU (METADATA)
+- Giai đoạn đầu: file‑based (PDF + Excel + chỉ mục). Có thể dùng SQLite để lưu metadata (doc list, mapping doc_id, cache phân loại).
+- Chuẩn bị lộ trình nâng cấp Postgres khi mở rộng người dùng/concurrency/reports lớn.
+
+XIV. NGÔN NGỮ TÀI LIỆU
+- Chuẩn hoá toàn bộ build plan (Phase 0–4) sử dụng TIẾNG VIỆT.
+
+XV. KẾ HOẠCH TRIỂN KHAI THEO PHASE (MVP)
+1) Ingestion & cấu trúc dữ liệu
+   - Tạo cấu trúc thư mục; công cụ ingest phân loại doc_type + extract + chunk + index.
+   - Đảm bảo metadata chunk có doc_id và page.
+   - Render ảnh trang về artifacts/pages/…
+2) UI Device Overview
+   - Trang nhập tag → hiển thị cây Documents theo 4 loại; tabs Incidents/Changes/Maintenance (đọc Excel nếu có).
+   - Popup mở PDF (native) + nút/preview ảnh trang.
+3) Q&A
+   - Ép /ask luôn Q&A (trừ câu định vị); trích dẫn footnote; auto‑language.
+   - Luôn bật page‑range expansion cho cụm trang liên quan nhất trước khi gọi LLM.
+   - Fallback top‑1 chunk; cải thiện Gemini client khi response rỗng.
+4) Report (markdown)
+   - Nút “Generate Report” theo template đơn giản.
+5) Tối ưu hoá & quan sát
+   - Bật rerank GPU, tinh chỉnh k, HyDE, cache; metrics/trace.
+
+XVI. ĐIỀU CHỈNH THEO PHỤ LỤC (ÁP VÀO PHASE 0–4)
+- PHASE 1 — Ingest & Indexing (bổ sung):
+  1) Phân loại doc_type tự động khi ingest (LLM nhẹ + rule), cho phép override.
+  2) Metadata chunk phải có doc_id và page (1‑based).
+  3) Render trước ảnh trang artifacts/pages/{doc_id}/{page}.png (DPI 200–300).
+  4) Chuẩn hoá tag (nhấn mạnh đặc thù P&ID nhiều dòng, ghi chú để phase sau dùng bbox/vision).
+- PHASE 2 — Retrieval & API (điều chỉnh):
+  1) Bỏ khái niệm tier/mode (light/heavy); chỉ còn một cấu hình production ưu tiên độ chính xác.
+  2) Bật quét dải trang (page‑range expansion) luôn.
+  3) /ask luôn Q&A (điều hướng như phần Intent); trả lời chi tiết, footnote citations; auto‑language.
+  4) Fallback rõ ràng: no‑results (tổng quát, nêu thiếu nguồn); LLM rỗng (tóm tắt top‑1, uncited_fallback=true). Cải thiện Gemini client với system_instruction và đọc candidates.
+- PHASE 3 — Demo UI & Evaluation (điều chỉnh):
+  1) Device Overview: tabs như mục VII; mở PDF + preview ảnh trang để đảm bảo nhảy đúng page.
+  2) Q&A UI: bỏ lựa chọn execution_mode; tự động nhận diện ngôn ngữ; hiển thị answer + footnote citations.
+  3) Evaluation: thêm tiêu chí “citation đúng trang” và hiệu quả page‑range expansion.
+- PHASE 4 — Tối ưu & Chuyển giao (bổ sung):
+  1) Hiệu năng: FAISS tối ưu cho 1–5M vectors; (tuỳ chọn) bật rerank GPU để tăng chất lượng.
+  2) Metadata/DB: giai đoạn đầu file‑based + SQLite; chuẩn bị lộ trình Postgres khi mở rộng người dùng/tính năng.
+
+XVII. TIÊU CHÍ HOÀN THÀNH (DoD — HỢP NHẤT)
+- Nhập tag → hiển thị Device Overview (Documents theo 4 loại + 3 bảng ngoài nếu có), filter theo loại & thời gian.
+- Mở tài liệu và nhảy đúng trang liên quan (kèm preview ảnh khi cần).
+- /ask: luôn trả lời chi tiết + footnote citations (doc_id; page); auto‑language; page‑range expansion áp dụng mặc định.
+- Tạo report markdown với trường mặc định; citations ở cuối report.
+- Ingestion phân loại doc_type tự động (LLM nhẹ) + cho phép chỉnh tay; build BM25/FAISS; metadata chunk có page.
+- Log/metrics hoạt động; latency tổng và breakdown hiển thị trong UI.
+
+XVIII. RỦI RO & GHI CHÚ KỸ THUẬT
+- P&ID tag nhiều dòng: MVP chưa highlight bbox; dựa vào text extraction. Giai đoạn sau dùng bbox/vision verify.
+- Trích dẫn page: nhất quán 1‑based; nếu chỉ có page_start/page_end, dùng page_start làm fallback.
+- PDF viewer trong UI có thể không luôn nhảy đúng #page=N; dùng preview ảnh trang làm phương án dự phòng.
+
+XIX. MỞ RỘNG TƯƠNG LAI (GHI NHẬN)
+- P&ID interactive: anchor mỗi thiết bị trên PDF, xổ dữ liệu liên quan ngay trên bản vẽ.
+- Control system API: hiển thị PV/real‑time values trên UI theo tag.
+- 3D viewer: deep‑link tới vị trí/đối tượng.
+
+XX. PHỤ LỤC — VÍ DỤ YÊU CẦU DỮ LIỆU & REPORT
+- Tag input: "04FE2046" (hoặc biến thể có khoảng trắng/gạch), tự động chuẩn hoá trước khi tìm.
+- Report markdown mẫu (rút gọn):
+  ## Thiết bị: 04FE2046
+  ### Thông số chính
+  - …
+  ### Sự cố gần nhất
+  - … (ngày, mức độ, mô tả)
+  ### Đề nghị thay đổi đang mở
+  - …
+  ### Bảo dưỡng gần nhất
+  - …
+
+  ### Nguồn
+  [1] Technical Data/TD-xxxx; p.12
+  [2] P&ID/Unit04-PID-04000-v1; p.3
+
+XXI. THAM CHIẾU
+- Nguồn gốc nội dung: hợp nhất từ "Build_plan_README/New_features_required.txt" và "Build_plan_README/Build_plan_addendum_device_search.txt".
+
+(— Hết tài liệu —)
