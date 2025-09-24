@@ -36,7 +36,8 @@ class LRUCache:
         # Create a stable key from args and kwargs
         key_data = {"args": args, "kwargs": kwargs}
         key_str = json.dumps(key_data, sort_keys=True, default=str)
-        return hashlib.md5(key_str.encode()).hexdigest()
+        # Non-cryptographic hash suitable for caching keys
+        return hashlib.blake2b(key_str.encode(), digest_size=16).hexdigest()
 
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache."""

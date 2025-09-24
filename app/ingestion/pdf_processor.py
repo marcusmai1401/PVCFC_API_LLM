@@ -381,18 +381,23 @@ class PDFProcessor:
         """Generate a cache key for OCR results"""
         # Create a unique key based on file path and page
         key_string = f"{pdf_path}:{page_num}"
-        return hashlib.md5(key_string.encode()).hexdigest()
+        # Use blake2b for non-security hash keys to satisfy security scanners
+        return hashlib.blake2b(key_string.encode(), digest_size=16).hexdigest()
 
     def _get_cached_ocr(self, cache_key: str) -> Optional[str]:
         """Retrieve cached OCR result"""
         if not self.enable_ocr:
             return None
 
-        cache_file = self.ocr_cache_dir / f"{cache_key}.pkl"
+        cache_file = self.ocr_cache_dir / f"{cache_key}.json"
         if cache_file.exists():
             try:
-                with open(cache_file, "rb") as f:
-                    return pickle.load(f)
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict) and "text" in data:
+                        return data.get("text")
+                    if isinstance(data, str):
+                        return data
             except Exception as e:
                 logger.warning(f"Failed to load OCR cache: {e}")
         return None
@@ -402,10 +407,10 @@ class PDFProcessor:
         if not self.enable_ocr:
             return
 
-        cache_file = self.ocr_cache_dir / f"{cache_key}.pkl"
+        cache_file = self.ocr_cache_dir / f"{cache_key}.json"
         try:
-            with open(cache_file, "wb") as f:
-                pickle.dump(text, f)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump({"text": text}, f, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"Failed to cache OCR result: {e}")
 

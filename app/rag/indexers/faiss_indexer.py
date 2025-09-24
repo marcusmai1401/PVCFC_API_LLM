@@ -104,8 +104,9 @@ class VectorIndexer:
         metas = [d.metadata for d in self.documents]
         with open(index_dir / "texts.json", "w", encoding="utf-8") as f:
             json.dump(texts, f, ensure_ascii=False, indent=2)
-        with open(index_dir / "metadatas.pkl", "wb") as f:
-            pickle.dump(metas, f)
+        # Save metadata as JSON to avoid pickle security concerns
+        with open(index_dir / "metadatas.json", "w", encoding="utf-8") as f:
+            json.dump(metas, f, ensure_ascii=False, indent=2)
 
         if _FAISS_AVAILABLE:
             faiss.write_index(
@@ -122,8 +123,8 @@ class VectorIndexer:
         index_dir = Path(index_dir)
         with open(index_dir / "texts.json", "r", encoding="utf-8") as f:
             texts = json.load(f)
-        with open(index_dir / "metadatas.pkl", "rb") as f:
-            metas = pickle.load(f)
+        with open(index_dir / "metadatas.json", "r", encoding="utf-8") as f:
+            metas = json.load(f)
 
         if _FAISS_AVAILABLE:
             self.index = faiss.read_index(str(index_dir / "faiss.index"))

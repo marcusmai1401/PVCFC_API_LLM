@@ -328,8 +328,9 @@ class TextChunker:
         """Generate unique chunk ID"""
         # Create hash of doc_id + index + text preview
         content = f"{doc_id}_{index}_{text[:100]}"
-        hash_obj = hashlib.md5(content.encode())
-        return f"{doc_id}_chunk_{index}_{hash_obj.hexdigest()[:8]}"
+        # Non-cryptographic stable hash for IDs
+        digest = hashlib.blake2b(content.encode(), digest_size=8).hexdigest()
+        return f"{doc_id}_chunk_{index}_{digest}"
 
     def chunk_document(
         self, document: Dict[str, Any], doc_id: Optional[str] = None

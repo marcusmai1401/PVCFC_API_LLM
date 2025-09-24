@@ -771,6 +771,10 @@ def create_generator(config: Optional[GeneratorConfig] = None) -> ResponseGenera
     return ResponseGenerator(config or GeneratorConfig())
 
 
+# Backward compatibility alias expected by some tests
+RAGGenerator = ResponseGenerator
+
+
 # Convenience function
 def generate_answer(
     query: TransformedQuery, retrieved_docs: List[RetrievalResult], **kwargs
