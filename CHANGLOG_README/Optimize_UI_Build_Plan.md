@@ -1,41 +1,41 @@
-# Optimize UI Build Plan — PVCFC RAG Debug/Performance Frontend
+# Kế hoạch Build UI Tối ưu hoá — PVCFC RAG Debug/Performance Frontend
 
 Owner: PVCFC Engineering
 Date: 2025-09-16
-Status: Draft for review
-Related design docs:
+Status: Bản nháp để review
+Tài liệu thiết kế liên quan:
 - docs/TECH_DESIGN_DEBUG_UI.md
 - docs/TECH_DESIGN_INGEST_AND_VISION.md
 
-Purpose
-- Lập kế hoạch triển khai chi tiết một UI phục vụ debug/tối ưu hiệu suất cho hệ thống RAG (không phải production), bao gồm: popup PDF đúng trang/vị trí, report template, highlight entities, quan sát hoạt động của LLM tier nhẹ/nặng (và embedding), tích hợp nút “Ingest/OCR” một chạm, và (tùy chọn) Vision-Assisted Verification.
+Mục đích
+- Lập kế hoạch triển khai chi tiết một UI phục vụ debug/tối ưu hiệu suất cho hệ thống RAG (không phải production), bao gồm: popup PDF đúng trang/vị trí, report template, highlight entities, quan sát hoạt động của LLM tier nhẹ/nặng (và embedding), tích hợp nút “Ingest/OCR” một chạm, và (tuỳ chọn) Vision‑Assisted Verification.
 
-Non-Goals (giai đoạn này)
+Ngoài phạm vi (giai đoạn này)
 - Không triển khai UI production cho end-users.
 - Không triển khai hệ thống phân quyền/SSO.
 - Không triển khai đầy đủ workflow OCR/HOCR cho mọi loại layout phức tạp (làm mức đủ dùng).
 
-Assumptions & Dependencies
-- API hiện có: /ask, /locate, /report, /healthz, /metrics, /index-stats.
+Giả định & Phụ thuộc
+- API hiện có: /ask, /locate, /report, /healthz, /metrics, /index‑stats.
 - Sẽ bổ sung endpoint ingest: /ingest/start, /ingest/status/{job_id}, /indices/reload (theo TECH_DESIGN_INGEST_AND_VISION.md).
-- Artifacts mong đợi cho UI:
+- Artefact mong đợi cho UI:
   - artifacts/index/{bm25,faiss}
   - (Phase 2) artifacts/pages/{doc_id}/{page}.png (render PDF)
   - (Phase 2) artifacts/pages/{doc_id}/{page}.hocr.json (bbox từ OCR cho scan)
 - LLM client trả metadata model/tokens nếu SDK hỗ trợ; nếu không có, UI phải degrade gracefully.
 
-High-Level Milestones
-- Phase 0: Project setup & Navigation skeleton
+Mốc chính (High‑level)
+- Phase 0: Thiết lập dự án & khung điều hướng
 - Phase 1: Core Query Lab (timeline, retrieval/rerank/generation, citations)
-- Phase 2: PDF popup & precise highlight (bbox/HOCR); multi-term highlight
-- Phase 3: Ingest Panel (one-click ingest/OCR) + index reload
-- Phase 4: Report Lab (template render/export)
-- Phase 5: Tier Inspector (A/B light vs heavy) + optional embedding view
-- Phase 6: Vision Verify (optional) panel & integration (feature-flag)
-- Phase 7: Advanced debug tools, metrics/log tailing, scenarios, presets
-- Phase 8: Hardening (perf polish, error handling), Docs & Handover
+- Phase 2: PDF popup & highlight chính xác (bbox/HOCR); multi‑term highlight
+- Phase 3: Ingest Panel (ingest/OCR một chạm) + reload index
+- Phase 4: Report Lab (render/export template)
+- Phase 5: Tier Inspector (A/B light vs heavy) + tuỳ chọn embedding view
+- Phase 6: Vision Verify (tùy chọn, feature‑flag)
+- Phase 7: Công cụ debug nâng cao, metrics/log tailing, scenarios, presets
+- Phase 8: Hardening (tối ưu hiệu năng, xử lý lỗi), Docs & bàn giao
 
-Tracking Model
+Mô hình theo dõi
 - Mỗi phase có: deliverables, tasks, acceptance criteria, risks, effort estimate (tương đối), owner.
 
 -----------------------------------------------------------------------

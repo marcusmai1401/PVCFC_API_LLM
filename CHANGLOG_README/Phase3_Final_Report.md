@@ -1,27 +1,27 @@
-# PVCFC RAG API — Phase 3 Final Report (Changelog)
+# PVCFC RAG API — Báo cáo Kết thúc Phase 3 (Nhật ký thay đổi)
 
-## I. Executive Summary
-- Goal: Deliver Evaluation + UI Demo + Observability improvements on top of Phase 1/2, with OCR to cover scanned PDFs and consolidated developer UX.
-- Status: COMPLETED (Phase 3 feature set implemented and validated locally).
-- Highlights:
-  - Streamlit UI wired to real indices + Gemini Live mode (answers grounded in your documents).
-  - OCR fallback integrated; BM25 index rebuilt with OCR (coverage for scanned/mixed PDFs).
-  - Batch evaluation (retrieval-only) executes end-to-end; evaluator context manager bug fixed.
-  - Absolute index paths; HyDE guarded (OFF by default in UI); docs consolidated.
+## I. Tóm tắt điều hành
+- Mục tiêu: Bàn giao Đánh giá + UI Demo + cải tiến Observability trên nền Phase 1/2, bổ sung OCR cho PDF scan, hợp nhất trải nghiệm cho lập trình viên.
+- Trạng thái: HOÀN THÀNH (tập hợp tính năng Phase 3 đã triển khai và xác thực cục bộ).
+- Điểm nhấn:
+  - Streamlit UI kết nối trực tiếp với chỉ mục thật + chế độ Gemini Live (câu trả lời bám tài liệu).
+  - Tích hợp OCR fallback; build lại chỉ mục BM25 có OCR (bao phủ PDF scan/mixed).
+  - Batch evaluation (chỉ retrieval) chạy end‑to‑end; đã sửa lỗi context manager của evaluator.
+  - Dùng đường dẫn chỉ mục tuyệt đối; HyDE ràng buộc (mặc định OFF trong UI); tài liệu được hợp nhất.
 
-## II. Scope & Deliverables
-### In scope (implemented)
+## II. Phạm vi & Sản phẩm bàn giao
+### Trong phạm vi (đã triển khai)
 - Real‑data UI demo (Streamlit) integrated with `HybridRetriever` and Gemini.
 - OCR fallback in ingestion; CLI flag `--enable-ocr` in BM25 builder; cached OCR.
 - Retrieval batch evaluation runner with CSV/JSON reports.
 - Consolidated documentation: `docs/Phase3_Integration_Guide.md`.
 - Observability continuity from Phase 2: metrics/traces/index stats.
 
-### Out of scope
+### Ngoài phạm vi
 - Production authentication/authorization and quotas (Phase 4).
 - Advanced A/B framework and full ablation study; long‑running dashboards.
 
-## III. Changes by Module
+## III. Thay đổi theo module
 ### 1) UI & LLM Integration
 - `streamlit_app/components/rag_demo.py`
   - Toggle “🚀 Use Real Gemini API”
@@ -52,7 +52,7 @@
 - `docs/Phase3_Integration_Guide.md` created (unified guide)
 - Legacy Phase 3 docs consolidated and removed to reduce duplication
 
-## IV. Usage — End‑to‑End
+## IV. Hướng dẫn sử dụng — End‑to‑End
 ### 1) Build BM25 with OCR
 ```bash
 python tools/build_bm25_index.py --input-dir data/raw/phase1_pilot --enable-ocr
@@ -86,23 +86,23 @@ Outputs:
 - CSV summary: `artifacts/eval/evaluation_summary_*.csv`
 - JSON report: `artifacts/eval/evaluation_report_*.json`
 
-## V. Results & Observations
-- UI retrieved real content from `Data Sheet for CO2 Compressor Steam Turbine.rev0E` and others.
-- After OCR rebuild, total BM25 chunks ≈ 570 (from 4 PDFs), strong hits for CO2 compressor.
-- Evaluation runner: success rate 100% post fix; CSV/JSON generated successfully.
+## V. Kết quả & ghi nhận
+- UI truy hồi nội dung thực từ `Data Sheet for CO2 Compressor Steam Turbine.rev0E` và các tài liệu khác.
+- Sau khi rebuild với OCR, tổng số BM25 chunks ≈ 570 (từ 4 PDF), kết quả tốt cho chủ đề CO2 compressor.
+- Evaluation runner: tỉ lệ thành công 100% sau khi sửa; xuất CSV/JSON thành công.
 
-## VI. Known Issues & Workarounds
-- FAISS coverage limited if embeddings not configured; fallback to BM25 works.
-- HyDE can fail if light tier is not configured; default OFF in UI.
-- Streamlit config warnings on older keys; see incident doc for Streamlit config cleanup.
+## VI. Vấn đề đã biết & hướng xử lý
+- FAISS bị giới hạn nếu chưa cấu hình embeddings; fallback BM25 vẫn hoạt động.
+- HyDE có thể lỗi nếu chưa cấu hình light tier; mặc định OFF trong UI.
+- Cảnh báo cấu hình Streamlit với các khóa cũ; xem tài liệu sự cố để dọn dẹp cấu hình.
 
-## VII. Recommendations (toward Phase 4)
+## VII. Khuyến nghị (hướng Phase 4)
 - Add A/B experiments page to UI (HyDE on/off, rerank variations) with automatic metric logging.
 - Extend evaluation to E2E (faithfulness/citation), wire to running backend.
 - Security hardening: authN/Z, quotas, audit logs.
 - Optional: distributed cache (Redis) and circuit breakers for stability.
 
-## VIII. Artifacts & Paths
+## VIII. Artefact & Đường dẫn
 - Indices: `artifacts/index/bm25/`, `artifacts/index/faiss/`
 - Chunks: `artifacts/chunks/chunks.json`
 - Evaluation: `artifacts/eval/`
@@ -115,5 +115,5 @@ Outputs:
 - Evaluation: `app/evaluation/batch_runner.py`, `tools/run_evaluation.py`
 - Docs: `docs/Phase3_Integration_Guide.md`
 
-## X. Conclusion
-Phase 3 delivers a usable, grounded UI demo with real retrieval and OCR coverage, plus batch retrieval evaluation and improved robustness. The stack is ready for Phase 4 optimization, A/B testing, and production‑grade controls.
+## X. Kết luận
+Phase 3 đã bàn giao một UI demo sử dụng được, bám nguồn, với truy hồi thực tế và bao phủ OCR, kèm batch evaluation cho retrieval và độ ổn định cao hơn. Hệ thống sẵn sàng cho Phase 4: tối ưu, A/B testing và các kiểm soát ở mức production.

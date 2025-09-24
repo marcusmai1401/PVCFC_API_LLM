@@ -1,12 +1,12 @@
-# PVCFC RAG API — Phase 0 Final Report (Foundation)
+# PVCFC RAG API — Báo cáo Kết thúc Phase 0 (Nền tảng)
 
 Hệ thống API Truy vấn Tài liệu Kỹ thuật PVCFC — Foundation tổng kết cho Phase 0.
 
 Status: Phase 0 đã hoàn thành 100% và không yêu cầu bất kỳ API key nào. Ứng dụng mặc định chạy với LLM_PROVIDER=none.
 
-## Quickstart (5 phút)
+## Khởi động nhanh (5 phút)
 
-### Bước 1: Clone và Setup Environment
+### Bước 1: Clone và thiết lập môi trường
 
 ```bash
 # Clone repository (nếu chưa có)
@@ -21,7 +21,7 @@ make dev
 .\scripts\dev.ps1
 ```
 
-### Bước 2: Cấu hình Environment
+### Bước 2: Cấu hình môi trường
 
 ```bash
 # Copy file cấu hình mẫu
@@ -31,7 +31,7 @@ cp env.example .env
 # Mặc định sẽ chạy với LLM_PROVIDER=none (không cần API key)
 ```
 
-### Bước 3: Chạy Server
+### Bước 3: Chạy server
 
 ```bash
 # Linux/macOS:
@@ -41,13 +41,13 @@ make run
 .\scripts\run.ps1
 ```
 
-### Bước 4: Kiểm tra Health
+### Bước 4: Kiểm tra health
 
 Mở trình duyệt và truy cập:
 - **Health Check:** http://localhost:8000/healthz
 - **API Docs:** http://localhost:8000/docs (chỉ trong dev mode)
 
-### Bước 5: Chạy Tests
+### Bước 5: Chạy tests
 
 ```bash
 # Linux/macOS:
@@ -57,9 +57,9 @@ make test
 .\scripts\test.ps1
 ```
 
-**Hoàn thành!** Bạn đã có foundation app chạy thành công.
+**Hoàn thành!** Bạn đã có ứng dụng nền tảng chạy thành công.
 
-### Bước 6 (tuỳ chọn): Smoke Test
+### Bước 6 (tuỳ chọn): Smoke test
 
 Smoke test kiểm tra nhanh health endpoint, cấu hình, và (nếu có) kết nối LLM. Lưu ý: cần server đang chạy thì bài test health mới PASS.
 
@@ -81,7 +81,7 @@ python tools/smoke_test.py
 
 Nếu server chưa chạy, smoke test sẽ báo FAIL ở health_endpoint; đây là hành vi mong đợi.
 
-## Cấu trúc Dự án
+## Cấu trúc dự án
 
 ```
 Code-API_LLM_PVCFC/
@@ -107,7 +107,7 @@ Code-API_LLM_PVCFC/
 └── README_Phase0.md      # This file
 ```
 
-## Development Commands
+## Lệnh phát triển
 
 ### Linux/macOS (Makefile)
 ```bash
@@ -118,7 +118,7 @@ make smoke    # Test LLM connections (nếu có API key)
 make clean    # Clean cache files
 ```
 
-### Windows (PowerShell Scripts)
+### Windows (PowerShell scripts)
 ```powershell
 .\scripts\dev.ps1    # Setup development environment
 .\scripts\run.ps1    # Run development server
@@ -126,7 +126,7 @@ make clean    # Clean cache files
 .\scripts\smoke.ps1  # Test LLM connections (nếu có API key)
 ```
 
-## Cấu hình Environment Variables
+## Cấu hình biến môi trường
 
 File `.env` (copy từ `env.example`):
 
@@ -146,20 +146,20 @@ CACHE_TTL_MINUTES=10      # Cache TTL
 RATE_LIMIT_PER_MINUTE=60  # Rate limiting
 ```
 
-## API Endpoints
+## API endpoints
 
-### Health Check
+### Health check
 ```http
 GET /healthz
 ```
 
-## API examples (cURL)
+## Ví dụ API (cURL)
 
 ```bash
 curl -X GET http://localhost:8000/healthz
 ```
 
-## Known issues & workarounds
+## Vấn đề đã biết & cách xử lý
 
 - Nếu smoke test FAIL ở `health_endpoint`, hãy chắc chắn server đang chạy (`python -m app.main`).
 - Trên Windows, nếu gặp lỗi chạy scripts PowerShell: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
@@ -179,12 +179,12 @@ Response:
 }
 ```
 
-### Placeholder Endpoints (Phase 2+)
+### Endpoint dự phòng (Phase 2+)
 - `POST /api/v1/ask` - Question answering
 - `POST /api/v1/locate` - Entity location trong P&ID
 - `POST /api/v1/report` - Multi-section reports
 
-## Testing
+## Kiểm thử
 
 ```bash
 # Chạy tất cả tests
@@ -200,7 +200,7 @@ pytest --cov=app tests/
 
 ## Docker
 
-### Build và Run
+### Build và chạy
 ```bash
 # Build image
 docker build -t pvcfc-rag-api .
@@ -212,7 +212,7 @@ docker run -p 8000:8000 pvcfc-rag-api
 curl http://localhost:8000/healthz
 ```
 
-### Environment trong Docker
+### Biến môi trường trong Docker
 ```bash
 # Với custom environment
 docker run -p 8000:8000 -e APP_ENV=prod -e LOG_LEVEL=WARNING pvcfc-rag-api
@@ -221,9 +221,9 @@ docker run -p 8000:8000 -e APP_ENV=prod -e LOG_LEVEL=WARNING pvcfc-rag-api
 docker run --env-file .env -p 8000:8000 pvcfc-rag-api
 ```
 
-## Quality Gates
+## Quality gates
 
-### Pre-commit Hooks
+### Pre-commit hooks
 ```bash
 # Cài đặt hooks
 pip install pre-commit
@@ -240,14 +240,14 @@ Hooks bao gồm:
 - Detect private keys
 - Run tests
 
-## Roadmap tóm tắt
+## Lộ trình tóm tắt
 
 - Phase 0: Foundation — Completed
 - Phase 1: Document Processing & Indexing — Next
 - Phase 2: RAG Pipeline
 - Phase 3: Evaluation & UI
 
-## Troubleshooting
+## Khắc phục sự cố
 
 ### Server không start
 ```bash
@@ -267,7 +267,7 @@ pytest -v --tb=long
 pip list | grep fastapi
 ```
 
-### Import errors
+### Lỗi import
 # PowerShell Execution Policy (Windows)
 ```powershell
 # Nếu gặp lỗi: running scripts is disabled on this system
@@ -285,13 +285,13 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 python -m pytest tests/
 ```
 
-## Support
+## Hỗ trợ
 
 - **Documentation:** Xem các file `Build_plan_phase*.txt`
 - **Architecture:** Xem `WARP.md`
 - **Issues:** Tạo issue trên Git repository
 
-## Notes
+## Ghi chú
 
 - Phase 0 này hoàn toàn **không cần API keys** để chạy
 - Server sẽ start với `LLM_PROVIDER=none` mặc định
@@ -301,5 +301,5 @@ python -m pytest tests/
 
 ---
 
-**Status:** Phase 0 Foundation [Completed]
-**Next:** Phase 1 Document Processing & Indexing
+**Trạng thái:** Phase 0 Nền tảng [Hoàn thành]
+**Tiếp theo:** Phase 1 Xử lý tài liệu & Lập chỉ mục

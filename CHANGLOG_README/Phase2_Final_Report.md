@@ -1,4 +1,4 @@
-PVCFC RAG API — Phase 2 Final Report (Changelog)
+PVCFC RAG API — Báo cáo Kết thúc Phase 2 (Nhật ký thay đổi)
 
 I. Mục tiêu & Phạm vi
 - Mục tiêu: Hoàn thiện RAG API trực tuyến dựa trên nền Phase 1, gồm: Hybrid Retrieval (FAISS + BM25) → RRF → expand‑parent → rerank → generation có citations; bổ sung HyDE và Chain‑of‑Verification (CoVe); triển khai 3 endpoints cốt lõi; thêm observability (metrics/tracing), caching, rate‑limit.
@@ -78,7 +78,7 @@ V. Lý do thiết kế & Quyết định quan trọng
 - CoVe nhẹ để cân bằng latency/độ tin cậy; HyDE bật theo intent.
 - Observability‑first: metrics/tracing sẵn từ Phase 2 để phục vụ Phase 3 tuning.
 
-VI. Ràng buộc & Warnings
+VI. Ràng buộc & Cảnh báo
 - Cần build indices từ dữ liệu thực (BM25/FAISS) để có chất lượng tìm kiếm tốt.
 - PyMuPDF DLL issue trên Windows không ảnh hưởng RAG API; khuyến nghị cài Visual C++ Redistributable hoặc dùng container/WSL.
 - Cross‑encoder có thể nặng trên Windows không GPU; cân nhắc giảm/disable khi cần.
@@ -98,7 +98,7 @@ Phase 2 đã hoàn thiện pipeline RAG ở mức production‑ready với 3 end
 
 ---
 
-## API examples (cURL)
+## Ví dụ API (cURL)
 
 ```bash
 # ASK
@@ -135,7 +135,7 @@ curl -X GET http://localhost:8000/trace
 curl -X GET http://localhost:8000/index-stats
 ```
 
-## Known issues & workarounds
+## Vấn đề đã biết & cách xử lý
 
 - Indices chưa build → search sẽ trả trống: cần chạy tools build BM25/FAISS trước khi test RAG.
 - PyMuPDF DLL (Windows): cài Visual C++ Redistributable, `pip install --force-reinstall pymupdf==1.24.9`, ưu tiên WSL/Container nếu cần.
