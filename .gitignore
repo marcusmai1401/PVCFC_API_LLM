@@ -1,8 +1,208 @@
-.DS_Store
-Thumbs.db
-__pycache__/
-*.pyc
+# =====================================
+# GITHUB IGNORE - PROTECT SENSITIVE FILES
+# =====================================
+# This file prevents sensitive data from being pushed to GitHub
+# while .cursorignore allows Cursor to see everything
+
+# =====================================
+# ENVIRONMENT & SECRETS (CRITICAL!)
+# =====================================
 .env
+.env.*
+*.env
+.env.local
+.env.*.local
+config/secrets.*
+config/local.*
+secrets/
+credentials/
+*.key
+*.pem
+*.cert
+*.crt
+api_keys.txt
+
+# =====================================
+# PYTHON
+# =====================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+PIPFILE.lock
+
+# Virtual Environments
 venv/
+env/
+ENV/
+.venv/
+virtualenv/
+
+# =====================================
+# IDE & EDITORS
+# =====================================
 .vscode/
+.idea/
 .cursor/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# =====================================
+# OS FILES
+# =====================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =====================================
+# TESTING & COVERAGE
+# =====================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+
+# =====================================
+# DATA & MODELS (Often too large)
+# =====================================
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Large model files
+*.h5
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.onnx
+models/*.bin
+models/*.safetensors
+
+# =====================================
+# LOGS & TEMPORARY FILES
+# =====================================
+logs/
+*.log
+log/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# =====================================
+# JUPYTER NOTEBOOKS
+# =====================================
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# =====================================
+# ARTIFACTS & INDICES
+# =====================================
+artifacts/index/bm25/
+artifacts/index/faiss/
+artifacts/embeddings/
+artifacts/*.json
+artifacts/*.pkl
+!artifacts/.gitkeep
+
+# =====================================
+# PACKAGE MANAGERS
+# =====================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================================
+# MISC
+# =====================================
+*.pid
+*.seed
+*.pid.lock
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+instance/
+.webassets-cache
+.scrapy
+target/
+.ropeproject
+celerybeat-schedule
+celerybeat.pid
+*.sage.py
+.spyderproject
+.spyproject
+site/
+
+# =====================================
+# HARDENED DATA & ARTIFACT EXCLUSIONS
+# =====================================
+# Entire company data tree (sensitive)
+data/**
+
+# Entire artifacts tree (processed outputs may contain sensitive content)
+artifacts/**
+!artifacts/.gitkeep
+
+# JSONL artifacts and logs anywhere in the repo
+**/*.jsonl
+
+# Root textual run logs and outputs
+server_error.txt
+server_output.txt
+audit_run.txt
+
+# =====================================
+# IMPORTANT NOTES:
+# =====================================
+# 1. This .gitignore protects sensitive files from GitHub
+# 2. .cursorignore uses negation (!) to give Cursor access
+# 3. Result: GitHub can't see secrets, Cursor can see everything
+# 4. NEVER commit .env or API keys to GitHub!
+# 5. Use git-secrets or similar tools for extra protection
