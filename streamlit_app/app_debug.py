@@ -10,10 +10,17 @@ from pathlib import Path
 
 import streamlit as st
 
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+# Ensure project root is first on sys.path to avoid 'app' module clash
+project_root = str(Path(__file__).resolve().parent.parent)
+sys.path.insert(0, project_root)
 
-# Import components (will create these next)
+# If a non-package 'app' module is already loaded (e.g., streamlit_app/app.py), remove it
+mod_app = sys.modules.get("app")
+if mod_app is not None and not hasattr(mod_app, "__path__"):
+    # This means 'app' refers to a simple module, not the package at project root
+    del sys.modules["app"]
+
+# Import components
 from components import (
     dashboard,
     ingest_panel,
@@ -31,72 +38,48 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for developer-focused theme
-st.markdown(
-    """
+# Theme selection (default: Auto - no custom CSS)
+if "ui_theme" not in st.session_state:
+    st.session_state.ui_theme = os.getenv("PVCFC_UI_THEME", "Auto")
+
+
+def inject_theme_css(theme: str):
+    if theme == "Dark (high-contrast)":
+        st.markdown(
+            """
 <style>
-    /* Developer theme - high contrast, monospace elements */
-    .stApp {
-        background-color: #1a1a1a;
-    }
-
-    /* Make code blocks more prominent */
-    .stCodeBlock {
-        background-color: #0d1117 !important;
-        border: 1px solid #30363d;
-    }
-
-    /* Metric cards */
-    [data-testid="metric-container"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-    }
-
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #0d1117;
-        border-radius: 5px;
-    }
-
-    /* Warning/Error styling */
-    .warning-box {
-        background-color: #3b2300;
-        border: 1px solid #f85149;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
-
-    /* Success styling */
-    .success-box {
-        background-color: #0d2d1f;
-        border: 1px solid #3fb950;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
-
-    /* Info boxes */
-    .info-box {
-        background-color: #161b22;
-        border: 1px solid #388bfd;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
-
-    /* Monospace for technical data */
-    .technical-data {
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 0.9em;
-    }
+  .stApp { background-color: #1a1a1a; color: #e6edf3; }
+  .stCodeBlock { background-color: #0d1117 !important; border: 1px solid #30363d; }
+  [data-testid="metric-container"] { background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+  .stTabs [data-baseweb="tab-list"] { background-color: #0d1117; border-radius: 5px; }
+  .warning-box { background-color: #3b2300; border: 1px solid #f85149; padding: 10px; border-radius: 5px; margin: 10px 0; }
+  .success-box { background-color: #0d2d1f; border: 1px solid #3fb950; padding: 10px; border-radius: 5px; margin: 10px 0; }
+  .info-box { background-color: #161b22; border: 1px solid #388bfd; padding: 10px; border-radius: 5px; margin: 10px 0; }
+  .technical-data { font-family: 'Consolas','Monaco','Courier New',monospace; font-size: 0.9em; }
 </style>
 """,
-    unsafe_allow_html=True,
-)
+            unsafe_allow_html=True,
+        )
+    elif theme == "Light":
+        st.markdown(
+            """
+<style>
+  .stApp { background-color: #f7f9fc; color: #111418; }
+  .stCodeBlock { background-color: #ffffff !important; border: 1px solid #e1e4e8; }
+  [data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #e1e4e8; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+  .stTabs [data-baseweb="tab-list"] { background-color: #eef2f7; border-radius: 6px; }
+  .warning-box { background-color: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 6px; margin: 10px 0; }
+  .success-box { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 6px; margin: 10px 0; }
+  .info-box { background-color: #e9f5ff; border: 1px solid #b6e0fe; padding: 10px; border-radius: 6px; margin: 10px 0; }
+  .technical-data { font-family: 'Consolas','Monaco','Courier New',monospace; font-size: 0.9em; }
+</style>
+""",
+            unsafe_allow_html=True,
+        )
+
+
+# Inject CSS if theme is not Auto
+inject_theme_css(st.session_state.ui_theme)
 
 # Initialize session state
 if "api_base_url" not in st.session_state:
@@ -115,6 +98,20 @@ if "request_history" not in st.session_state:
 # Sidebar configuration
 with st.sidebar:
     st.title("🔧 Debug Configuration")
+
+    # UI Theme
+    st.header("Appearance")
+    st.session_state.ui_theme = st.selectbox(
+        "UI Theme",
+        options=["Auto", "Light", "Dark (high-contrast)"],
+        index=["Auto", "Light", "Dark (high-contrast)"].index(
+            st.session_state.get("ui_theme", "Auto")
+        ),
+        help="Choose a UI theme. 'Auto' uses Streamlit's default.",
+    )
+    inject_theme_css(st.session_state.ui_theme)
+
+    st.divider()
 
     # API Configuration section
     st.header("API Settings")

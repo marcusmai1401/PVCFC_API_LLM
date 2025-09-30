@@ -47,8 +47,56 @@ class Settings(BaseSettings):
     cache_ttl_minutes: int = Field(default=10, description="Cache TTL in minutes")
     rate_limit_per_minute: int = Field(default=60, description="Rate limit per minute")
 
+    # ========================================
+    # Phase 2 - Retrieval & Context
+    # ========================================
+    max_context: int = Field(
+        default=8,
+        description="Maximum number of context chunks to send to LLM for generation",
+    )
+    top_rerank: int = Field(
+        default=20,
+        description="Number of top candidates to keep after reranking (before selecting MAX_CONTEXT)",
+    )
+
+    # ========================================
+    # Phase 2 - Vision & Text Range Scan
+    # ========================================
+    vision_page_selector_enabled: bool = Field(
+        default=True,
+        description="Enable Vision-based multimodal page selector (uses image understanding)",
+    )
+    text_range_scan_enabled: bool = Field(
+        default=False,
+        description="Enable text-only page range scan (fallback when Vision is off)",
+    )
+
+    # ========================================
+    # Phase 2 - Degrade Mode & Resilience
+    # ========================================
+    retrieval_allow_bm25_only_fallback: bool = Field(
+        default=True,
+        description="Allow fallback to BM25-only retrieval when FAISS/embedding service fails",
+    )
+    bm25_k_when_degrade: int = Field(
+        default=80,
+        description="BM25 k value to use when in degrade mode (higher to compensate for missing FAISS)",
+    )
+    rerank_top_n_when_degrade: int = Field(
+        default=50,
+        description="Rerank top N value when in degrade mode (higher for better coverage)",
+    )
+
+    # ========================================
+    # Phase 2 - Cache Configuration
+    # ========================================
+    retrieve_cache_ttl_min: int = Field(
+        default=10,
+        description="TTL for retrieval/rerank cache in minutes (LRU cache with time expiration)",
+    )
+
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="forbid"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     @property

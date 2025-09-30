@@ -125,16 +125,62 @@ class TestIntentDetection:
             intent = transformer.detect_intent(normalized)
             assert intent == QueryIntent.EXPLAIN
 
-    def test_equipment_tag_implies_locate(self):
-        """Test that equipment tags alone imply LOCATE intent"""
+    def test_equipment_tag_defaults_to_ask(self):
+        """Test that equipment tags alone default to ASK intent (Task 2.2)"""
         transformer = QueryTransformer()
 
-        # Single equipment tag should be LOCATE
+        # Single equipment tag without location keywords should be ASK
         intent = transformer.detect_intent("KT06101")
-        assert intent == QueryIntent.LOCATE
+        assert intent == QueryIntent.ASK, "Equipment tag alone should return ASK intent"
 
         intent = transformer.detect_intent("V-202")
-        assert intent == QueryIntent.LOCATE
+        assert intent == QueryIntent.ASK, "Equipment tag alone should return ASK intent"
+
+        intent = transformer.detect_intent("pump P-301A")
+        assert (
+            intent == QueryIntent.ASK
+        ), "Equipment tag with type should return ASK intent"
+
+    def test_equipment_tag_with_location_keywords(self):
+        """Test that equipment tags with location keywords return LOCATE intent"""
+        transformer = QueryTransformer()
+
+        # Equipment tag WITH location keywords should be LOCATE
+        queries_locate = [
+            "where is KT06101",
+            "locate V-202",
+            "find pump P-301A",
+            "KT06101 location",
+            "position of V-202",
+            "page containing P-301A",
+        ]
+
+        for query in queries_locate:
+            normalized = transformer.normalize_query(query)
+            intent = transformer.detect_intent(normalized)
+            assert (
+                intent == QueryIntent.LOCATE
+            ), f"Query '{query}' with location keyword should return LOCATE"
+
+    def test_equipment_tag_with_property_questions(self):
+        """Test that equipment tags with property questions return ASK intent"""
+        transformer = QueryTransformer()
+
+        # Equipment tag with property questions should be ASK
+        queries_ask = [
+            "what is the pressure of KT06101",
+            "KT06101 specifications",
+            "V-202 operating temperature",
+            "P-301A flow rate",
+            "maximum pressure KT06101",
+        ]
+
+        for query in queries_ask:
+            normalized = transformer.normalize_query(query)
+            intent = transformer.detect_intent(normalized)
+            assert (
+                intent == QueryIntent.ASK
+            ), f"Query '{query}' about properties should return ASK"
 
 
 class TestFilterParsing:
@@ -286,8 +332,8 @@ class TestFullTransformation:
         assert result.original == "What is the MAXIMUM pressure of KT06101?"
         assert "maximum" in result.normalized.lower()
         assert "kt06101" in result.normalized.lower()
-        # KT06101 is an equipment tag, so intent should be LOCATE
-        assert result.intent == QueryIntent.LOCATE
+        # Equipment tag present but no location keyword -> intent should be ASK (Task 2.2)
+        assert result.intent == QueryIntent.ASK
         assert result.metadata["has_technical_terms"] == True
         assert result.metadata["word_count"] == 7
 

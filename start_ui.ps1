@@ -2,13 +2,17 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "Starting PVCFC RAG Debug UI..." -ForegroundColor Green
-Write-Host "UI will run on http://localhost:8501" -ForegroundColor Yellow
+Write-Host "UI will run on http://localhost:8502" -ForegroundColor Yellow
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host ""
 
-# Set API base URL environment variable
+# Set API base URL environment variables
 [Environment]::SetEnvironmentVariable("PVCFC_API_BASE_URL", "http://localhost:8000", "Process")
+[Environment]::SetEnvironmentVariable("API_BASE_URL", "http://localhost:8000", "Process")
+# Ensure Python can import local packages
+$env:PYTHONPATH = (Resolve-Path ".").Path
 Write-Host "API Base URL set to: http://localhost:8000" -ForegroundColor Cyan
+Write-Host ("PYTHONPATH = {0}" -f $env:PYTHONPATH) -ForegroundColor Cyan
 Write-Host ""
 
 # Check if API is running
@@ -31,6 +35,6 @@ catch {
 }
 Write-Host ""
 
-# Start Streamlit
+# Start Streamlit (debug UI with enhanced tools)
 Write-Host "Starting Streamlit UI..." -ForegroundColor Green
-streamlit run "streamlit_app/app.py"
+streamlit run "streamlit_app/app_debug.py" --server.port 8502 --server.headless false

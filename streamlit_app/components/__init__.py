@@ -10,3 +10,15 @@ This package contains all the UI components for the interactive Streamlit applic
 """
 
 __version__ = "1.0.0"
+
+# Export all components for easier imports
+__all__ = [
+    "dashboard",
+    "query_lab",
+    "report_lab",
+    "ingest_panel",
+    "tier_inspector",
+    "metrics_logs",
+    "debug_console",
+    "query_lab_enhanced",
+]

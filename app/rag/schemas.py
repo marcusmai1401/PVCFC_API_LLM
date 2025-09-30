@@ -22,6 +22,15 @@ class AskRequest(BaseModel):
     execution_mode: Literal["production", "heavy_only", "light_only"] = Field(
         default="production", description="LLM execution mode"
     )
+    confidence_mode: Literal["legacy", "calibrated"] = Field(
+        default="legacy", description="Confidence computation mode"
+    )
+    enable_vision_generation: bool = Field(
+        default=True,
+        description=(
+            "Enable multimodal answer generation with Gemini 2.5 Pro when documents/pages are available"
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -34,6 +43,8 @@ class AskRequest(BaseModel):
                 "hyde": True,
                 "max_context": 8,
                 "language": "vi",
+                "confidence_mode": "calibrated",
+                "enable_vision_generation": True,
             }
         }
     )
@@ -106,6 +117,9 @@ class Citation(BaseModel):
     )
     confidence: Optional[float] = Field(
         default=None, ge=0.0, le=1.0, description="Confidence score"
+    )
+    pdf_path: Optional[str] = Field(
+        default=None, description="Full path to PDF file if available"
     )
 
 

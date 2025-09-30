@@ -123,8 +123,20 @@ class VectorIndexer:
         index_dir = Path(index_dir)
         with open(index_dir / "texts.json", "r", encoding="utf-8") as f:
             texts = json.load(f)
-        with open(index_dir / "metadatas.json", "r", encoding="utf-8") as f:
-            metas = json.load(f)
+        metas = None
+        json_path = index_dir / "metadatas.json"
+        pkl_path = index_dir / "metadatas.pkl"
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                metas = json.load(f)
+        elif pkl_path.exists():
+            # Backward compatibility: load legacy pickle metadata
+            with open(pkl_path, "rb") as f:
+                metas = pickle.load(f)
+        else:
+            raise FileNotFoundError(
+                f"Neither metadatas.json nor metadatas.pkl found in {index_dir}"
+            )
 
         if _FAISS_AVAILABLE:
             self.index = faiss.read_index(str(index_dir / "faiss.index"))

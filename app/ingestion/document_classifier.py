@@ -464,28 +464,58 @@ class DocumentClassifier:
         file_path: Path,
         first_page_text: Optional[str] = None,
         model_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Optional[str]]:
         """
-        Classify document using LLM (placeholder for future implementation)
+        Classify document using LLM-enhanced classification
 
         Args:
             file_path: Path to the document
             first_page_text: Optional text from first page
             model_name: Optional model to use for classification
+            metadata: Optional document metadata
 
         Returns:
             Tuple of (doc_type, revision)
         """
         # First try rule-based classification
-        doc_type, revision = self.classify(file_path, first_page_text)
+        doc_type, revision = self.classify(file_path, first_page_text, metadata)
 
-        # If unknown, could use LLM here in the future
+        # If unknown or low confidence, use LLM
         if doc_type == "unknown" and model_name:
-            logger.debug(
-                f"Would use LLM '{model_name}' for classification (not implemented)"
-            )
-            # Future: Call local LLM API for classification
-            pass
+            try:
+                from app.services.document_classification_llm import (
+                    DocumentClassificationLLM,
+                )
+
+                logger.info(f"Enhancing classification with LLM '{model_name}'")
+
+                # Initialize LLM classifier
+                llm_classifier = DocumentClassificationLLM()
+
+                # Get enhanced classification
+                (
+                    enhanced_type,
+                    enhanced_revision,
+                ) = llm_classifier.enhance_classification(
+                    rule_based_type=doc_type,
+                    rule_based_revision=revision,
+                    file_path=file_path,
+                    first_page_text=first_page_text,
+                    metadata=metadata,
+                )
+
+                if enhanced_type != doc_type:
+                    logger.info(
+                        f"LLM classification improved: '{doc_type}' -> '{enhanced_type}'"
+                    )
+                    doc_type = enhanced_type
+                    revision = enhanced_revision or revision
+
+            except ImportError as e:
+                logger.warning(f"Could not import LLM classifier: {e}")
+            except Exception as e:
+                logger.error(f"LLM classification failed: {e}")
 
         return doc_type, revision
 

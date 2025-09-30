@@ -11,6 +11,17 @@ import numpy as np
 from loguru import logger
 from rank_bm25 import BM25Okapi
 
+# Import page utilities for consistent page handling
+try:
+    from app.utils.page_utils import extract_page_number
+except ImportError:
+    # Fallback if page_utils not available
+    def extract_page_number(metadata: Dict[str, Any]) -> int:
+        """Basic fallback for page extraction"""
+        if isinstance(metadata, dict):
+            return metadata.get("page", metadata.get("page_start", 1))
+        return 1
+
 
 class BM25Indexer:
     """
@@ -59,6 +70,24 @@ class BM25Indexer:
                 "heading": chunk.get("heading"),
                 "level": chunk.get("level"),
             }
+
+            # Add page field using fallback logic
+            # Priority: page > page_start > page_nums[0] > 1
+            if "page" not in meta or meta["page"] is None:
+                # Try direct page field from chunk
+                if chunk.get("page") is not None:
+                    meta["page"] = chunk["page"]
+                # Try metadata if chunk has it
+                elif chunk.get("metadata", {}).get("page") is not None:
+                    meta["page"] = chunk["metadata"]["page"]
+                # Use extract_page_number with full chunk for complete fallback
+                else:
+                    # Create a combined dict for extraction
+                    combined = {**chunk, **meta}
+                    if "page_nums" in chunk and chunk["page_nums"]:
+                        combined["page_nums"] = chunk["page_nums"]
+                    meta["page"] = extract_page_number(combined)
+
             self.metadata.append(meta)
 
             # Tokenize

@@ -91,8 +91,9 @@ class QueryTransformer:
         self.intent_patterns = {
             QueryIntent.LOCATE: [
                 r"where.*(?:is|are|located)",
-                r"find.*(?:in|on|at)",
-                r"locate",
+                r"\bfind\b",  # Any mention of 'find'
+                r"\blocate\b",
+                r"\blocation\b",  # Any mention of 'location'
                 r"position.*(?:of|in)",
                 r"page.*(?:number|containing)",
             ],
@@ -234,6 +235,14 @@ class QueryTransformer:
         """
         Detect the intent of the query
 
+        Priority order:
+        1. Explicit location keywords -> LOCATE
+        2. Report/summary keywords -> REPORT
+        3. Explain/how/why keywords -> EXPLAIN
+        4. Question patterns (what/when/etc) -> ASK
+        5. Equipment tags alone -> ASK (not LOCATE)
+        6. Default -> ASK
+
         Args:
             query: Normalized query text
 
@@ -242,39 +251,64 @@ class QueryTransformer:
         """
         query_lower = query.lower()
 
-        # Prefer explicit intent keywords over mere presence of equipment tags
-        # LOCATE only if user expresses location/lookup intent
+        # Step 1: Check for explicit LOCATE keywords (highest priority)
+        # Only return LOCATE if user explicitly asks for location
         for pattern in self.intent_patterns[QueryIntent.LOCATE]:
             if re.search(pattern, query_lower):
                 return QueryIntent.LOCATE
 
-        # ASK patterns
-        for pattern in self.intent_patterns[QueryIntent.ASK]:
-            if re.search(pattern, query_lower):
-                return QueryIntent.ASK
-
-        # REPORT patterns
+        # Step 2: Check for REPORT keywords
         for pattern in self.intent_patterns[QueryIntent.REPORT]:
             if re.search(pattern, query_lower):
                 return QueryIntent.REPORT
 
-        # EXPLAIN patterns
+        # Step 3: Handle 'how/why' early: quantitative -> ASK, else EXPLAIN
+        if query_lower.startswith(("how", "why")):
+            ask_terms = [
+                "much",
+                "many",
+                "long",
+                "high",
+                "low",
+                "far",
+                "often",
+                "fast",
+                "slow",
+                "big",
+                "small",
+            ]
+            if any(term in query_lower.split() for term in ask_terms):
+                return (
+                    QueryIntent.ASK
+                )  # e.g., "how much pressure", "how long does it take"
+            return QueryIntent.EXPLAIN
+
+        # Step 4: Check for EXPLAIN keywords (fallback)
         for pattern in self.intent_patterns[QueryIntent.EXPLAIN]:
             if re.search(pattern, query_lower):
                 return QueryIntent.EXPLAIN
 
-        # If query contains equipment tags but no explicit locate keywords,
-        # do NOT force LOCATE; default to ASK
+        # Step 5: Check for ASK patterns
+        for pattern in self.intent_patterns[QueryIntent.ASK]:
+            if re.search(pattern, query_lower):
+                return QueryIntent.ASK
+
+        # Step 5: Handle question words
+        if any(query_lower.startswith(q) for q in ["what", "when", "which", "who"]):
+            return QueryIntent.ASK
+
+        if query_lower.startswith("where"):
+            return QueryIntent.LOCATE
+
+        # Step 6: Equipment tags WITHOUT location keywords -> ASK
+        # This is the key change for Task 2.2
         if re.search(r"\b[A-Z]{1,}[-]?\d{2,}[A-Z]?\b", query.upper()):
+            # Equipment tag found, but no location keywords
+            # User likely asking about the equipment's properties, not location
             return QueryIntent.ASK
 
-        # Default to ASK for other question words
-        if any(query_lower.startswith(q) for q in ["what", "when", "how", "why"]):
-            if query_lower.startswith("where"):
-                return QueryIntent.LOCATE
-            return QueryIntent.ASK
-
-        return QueryIntent.ASK  # Default
+        # Step 7: Default to ASK for all other queries
+        return QueryIntent.ASK
 
     def generate_hyde(
         self, query: str, intent: QueryIntent, language: str = "en"

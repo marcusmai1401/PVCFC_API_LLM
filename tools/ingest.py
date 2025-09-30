@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Ingestion Pipeline CLI Tool
-Processes PDFs with multithreading, OCR support, and JSONL output
+Ingestion Pipeline CLI Tool V1
+Processes PDFs with deduplication, quarantine, and doc_id mapping
 """
 import argparse
 import hashlib
@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +32,7 @@ from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 
 class IngestionPipeline:
     """
-    Multithreaded ingestion pipeline for PDF processing
+    Multithreaded ingestion pipeline for PDF processing with deduplication
     """
 
     def __init__(
@@ -58,7 +59,7 @@ class IngestionPipeline:
             output_dir: Directory for outputs
             workers: Number of worker threads (None for auto)
             enable_ocr: Enable OCR for scanned pages
-            ocr_language: Language for OCR
+            ocr_language: Language for OCR (vie+eng for Vietnamese & English)
             parser: Parser to use ('auto', 'pymupdf', 'unstructured')
             emit_jsonl: Emit JSONL outputs in addition to JSON
             chunk_size: Target chunk size
@@ -91,24 +92,33 @@ class IngestionPipeline:
         # Initialize document classifier
         self.classifier = DocumentClassifier()
 
-        # Thread-safe JSONL writer lock
-        self._jsonl_lock = threading.Lock()
-
-        # Locks for thread safety
+        # Thread-safe locks
         self._jsonl_lock = threading.Lock()
         self._stats_lock = threading.Lock()
+        self._quarantine_lock = threading.Lock()
+        self._dedup_lock = threading.Lock()
+
+        # Deduplication tracking
+        self.content_hash_map = {}  # content_hash -> representative doc
+        self.duplicate_groups = {}  # content_hash -> list of duplicates
 
         # Track processing stats
         self.stats = {
             "total_pdfs": 0,
             "processed": 0,
             "failed": 0,
+            "ocr_count": 0,
+            "duplicates_collapsed": 0,
+            "quarantine_count": 0,
             "scanned_pages": 0,
             "vector_pages": 0,
             "total_chunks": 0,
             "start_time": None,
             "end_time": None,
         }
+
+        # Run ID for batch tracking
+        self.run_id = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     def _setup_output_dirs(self):
         """Create necessary output directories"""
@@ -131,13 +141,14 @@ class IngestionPipeline:
             Processing statistics
         """
         logger.info("=" * 80)
-        logger.info("Starting Ingestion Pipeline")
+        logger.info("Starting Ingestion Pipeline V1")
         logger.info(f"Source: {self.source_dir}")
         logger.info(f"Output: {self.output_dir}")
         logger.info(f"Workers: {self.workers}")
-        logger.info(f"OCR: {self.enable_ocr}")
+        logger.info(f"OCR: {self.enable_ocr} (lang: {self.ocr_language})")
         logger.info(f"Parser: {self.parser}")
         logger.info(f"Chunk strategy: {self.chunk_strategy}")
+        logger.info(f"Run ID: {self.run_id}")
         logger.info("=" * 80)
 
         self.stats["start_time"] = datetime.now()
@@ -145,7 +156,7 @@ class IngestionPipeline:
         # Ensure output directories exist
         self._setup_output_dirs()
 
-        # Find all PDFs
+        # Find all PDFs recursively
         pdf_files = list(self.source_dir.rglob("*.pdf"))
         self.stats["total_pdfs"] = len(pdf_files)
 
@@ -158,6 +169,7 @@ class IngestionPipeline:
         # Initialize manifests
         corpus_manifest = []
         checksums_manifest = []
+        doc_id_map = {}
 
         # Process PDFs in parallel
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
@@ -174,25 +186,51 @@ class IngestionPipeline:
                 try:
                     result = future.result()
                     if result:
-                        corpus_entry, checksum_entry, counts = result
-                        corpus_manifest.append(corpus_entry)
-                        checksums_manifest.append(checksum_entry)
-                        # Aggregate stats safely in main thread
-                        self.stats["processed"] += 1
-                        self.stats["total_chunks"] += counts.get("chunks", 0)
-                        self.stats["scanned_pages"] += counts.get("scanned_pages", 0)
-                        self.stats["vector_pages"] += counts.get("vector_pages", 0)
+                        if result["status"] == "processed":
+                            corpus_entry = result["corpus_entry"]
+                            checksum_entry = result["checksum_entry"]
+                            counts = result["counts"]
 
-                        logger.info(
-                            f"[{self.stats['processed']}/{self.stats['total_pdfs']}] "
-                            f"Processed: {pdf_path.name}"
-                        )
+                            corpus_manifest.append(corpus_entry)
+                            checksums_manifest.append(checksum_entry)
+                            doc_id_map[corpus_entry["doc_id"]] = str(pdf_path)
+
+                            # Update stats
+                            self.stats["processed"] += 1
+                            self.stats["total_chunks"] += counts.get("chunks", 0)
+                            self.stats["scanned_pages"] += counts.get(
+                                "scanned_pages", 0
+                            )
+                            self.stats["vector_pages"] += counts.get("vector_pages", 0)
+                            if counts.get("used_ocr", False):
+                                self.stats["ocr_count"] += 1
+
+                            logger.info(
+                                f"[{self.stats['processed']}/{self.stats['total_pdfs']}] "
+                                f"Processed: {pdf_path.name}"
+                            )
+                        elif result["status"] == "duplicate":
+                            self.stats["duplicates_collapsed"] += 1
+                            logger.info(f"Skipped duplicate: {pdf_path.name}")
+                        elif result["status"] == "quarantine":
+                            self.stats["quarantine_count"] += 1
+                            logger.warning(
+                                f"Quarantined: {pdf_path.name} - {result['reason']}"
+                            )
+
                 except Exception as e:
                     logger.error(f"Failed to process {pdf_path.name}: {e}")
                     self.stats["failed"] += 1
+                    self._add_to_quarantine(pdf_path, "processing_error", str(e))
 
         # Write manifests
         self._write_manifests(corpus_manifest, checksums_manifest)
+
+        # Write doc_id_map.json
+        self._write_doc_id_map(doc_id_map)
+
+        # Write deduplication report
+        self._write_dedup_report()
 
         self.stats["end_time"] = datetime.now()
         duration = (self.stats["end_time"] - self.stats["start_time"]).total_seconds()
@@ -203,58 +241,189 @@ class IngestionPipeline:
         logger.info(f"Total PDFs: {self.stats['total_pdfs']}")
         logger.info(f"Processed: {self.stats['processed']}")
         logger.info(f"Failed: {self.stats['failed']}")
+        logger.info(f"Duplicates collapsed: {self.stats['duplicates_collapsed']}")
+        logger.info(f"Quarantined: {self.stats['quarantine_count']}")
+        logger.info(f"Used OCR: {self.stats['ocr_count']}")
         logger.info(f"Total chunks: {self.stats['total_chunks']}")
         logger.info(f"Duration: {duration:.2f} seconds")
-        logger.info(f"Throughput: {self.stats['processed']/duration:.2f} PDFs/second")
+        if self.stats["processed"] > 0:
+            logger.info(
+                f"Throughput: {self.stats['processed']/duration:.2f} PDFs/second"
+            )
         logger.info("=" * 80)
 
         return self.stats
 
-    def _process_single_pdf(
-        self, pdf_path: Path
-    ) -> Optional[Tuple[Dict, Dict, Dict[str, int]]]:
-        """
-        Process a single PDF (thread-safe)
+    def _calculate_file_hash(self, file_path: Path) -> str:
+        """Calculate SHA256 hash of file bytes"""
+        sha256_hash = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
 
-        Args:
-            pdf_path: Path to PDF file
+    def _calculate_content_hash(self, text: str) -> str:
+        """
+        Calculate SHA1 hash of normalized content
+        Normalization: Unicode NFKC -> lowercase -> collapse whitespace -> remove line-ending hyphens -> strip
+        """
+        # Unicode normalization
+        normalized = unicodedata.normalize("NFKC", text)
+
+        # Lowercase
+        normalized = normalized.lower()
+
+        # Remove line-ending hyphens before collapsing whitespace
+        normalized = normalized.replace("-\n", "").replace("-\r\n", "")
+
+        # Collapse all whitespace (including newlines) to single spaces
+        import re
+
+        normalized = re.sub(r"\s+", " ", normalized)
+
+        # Strip leading/trailing whitespace
+        normalized = normalized.strip()
+
+        # Calculate SHA1 hash
+        return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+
+    def _select_representative(self, candidates: List[Dict]) -> Dict:
+        """
+        Select representative from duplicate candidates based on criteria:
+        1. source_format=vector preferred over scan
+        2. Larger file size
+        3. Newer mtime
+        4. Shorter path
+        """
+
+        def score_candidate(candidate):
+            # Higher score = better representative
+            score = 0
+
+            # Prefer vector format
+            if candidate.get("source_format") == "vector":
+                score += 10000
+
+            # Prefer larger file
+            score += candidate.get("file_size", 0) / (1024 * 1024)  # In MB
+
+            # Prefer newer file (mtime as timestamp)
+            score += candidate.get("mtime", 0) / 1000000  # Scale down
+
+            # Prefer shorter path (negative length)
+            score -= len(candidate.get("file_path", "")) / 1000
+
+            return score
+
+        # Sort by score descending
+        candidates.sort(key=score_candidate, reverse=True)
+        return candidates[0]
+
+    def _add_to_quarantine(self, file_path: Path, reason_code: str, detail: str = ""):
+        """Add file to quarantine log"""
+        quarantine_entry = {
+            "file": str(file_path),
+            "reason_code": reason_code,
+            "detail": detail,
+            "run_id": self.run_id,
+            "ts": datetime.now().isoformat(),
+        }
+
+        quarantine_file = self.output_dir / "quarantine.jsonl"
+
+        with self._quarantine_lock:
+            with open(quarantine_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(quarantine_entry, ensure_ascii=False) + "\n")
+
+    def _process_single_pdf(self, pdf_path: Path) -> Optional[Dict]:
+        """
+        Process a single PDF with deduplication check
 
         Returns:
-            Tuple of (corpus_entry, checksum_entry, counts) or None if failed
+            Dict with status and data
         """
         try:
-            # Calculate file checksum
+            # Calculate file hash
             file_hash = self._calculate_file_hash(pdf_path)
+            file_size = pdf_path.stat().st_size
+            mtime = pdf_path.stat().st_mtime
 
-            # Check if already processed (via checksum)
-            if self._is_already_processed(file_hash):
-                logger.debug(f"Skipping {pdf_path.name} - already processed")
-                return None
+            # Try to extract text first
+            pdf_doc = None
+            used_ocr = False
 
-            pdf_doc: Optional[PDFDocument] = None
-
-            # Parser selection
-            if self.parser == "unstructured":
-                pdf_doc = self._process_with_unstructured(pdf_path)
-            else:
-                # Default to PyMuPDF (+ optional OCR)
+            try:
+                # Try without OCR first to detect if text is extractable
                 processor = PDFProcessor(
-                    enable_ocr=self.enable_ocr,
+                    enable_ocr=False,
                     ocr_language=self.ocr_language,
                     ocr_min_confidence=30.0,
                 )
                 pdf_doc = processor.process_pdf(pdf_path)
 
-                # Auto fallback to unstructured when no text extracted
-                if self.parser == "auto" and pdf_doc.num_pages == 0:
-                    try:
-                        import unstructured  # type: ignore
+                # Check if we need OCR (no text extracted)
+                total_text = "".join(page.text for page in pdf_doc.pages)
+                if (
+                    self.enable_ocr and len(total_text.strip()) < 100
+                ):  # Less than 100 chars
+                    logger.info(
+                        f"No vector text found, applying OCR to {pdf_path.name}"
+                    )
+                    processor = PDFProcessor(
+                        enable_ocr=True,
+                        ocr_language=self.ocr_language,
+                        ocr_min_confidence=30.0,
+                    )
+                    pdf_doc = processor.process_pdf(pdf_path)
+                    used_ocr = True
 
-                        logger.info("Auto parser fallback: trying unstructured parser")
-                        pdf_doc = self._process_with_unstructured(pdf_path)
-                    except ImportError:
-                        logger.debug("Unstructured not installed; skipping fallback")
+            except Exception as e:
+                # Document is corrupted or unreadable
+                self._add_to_quarantine(pdf_path, "corrupt", str(e))
+                return {"status": "quarantine", "reason": "corrupt"}
 
+            # Get full text for content hashing
+            full_text = "\n".join(page.text for page in pdf_doc.pages)
+
+            if not full_text.strip():
+                # No text could be extracted even with OCR
+                self._add_to_quarantine(pdf_path, "ocr_failed", "No text extracted")
+                return {"status": "quarantine", "reason": "ocr_failed"}
+
+            # Calculate content hash
+            content_hash = self._calculate_content_hash(full_text)
+
+            # Check for duplicates
+            with self._dedup_lock:
+                if content_hash in self.content_hash_map:
+                    # This is a duplicate
+                    if content_hash not in self.duplicate_groups:
+                        self.duplicate_groups[content_hash] = []
+
+                    duplicate_info = {
+                        "file_path": str(pdf_path),
+                        "file_hash": file_hash,
+                        "file_size": file_size,
+                        "mtime": mtime,
+                        "source_format": pdf_doc.source_format,
+                    }
+                    self.duplicate_groups[content_hash].append(duplicate_info)
+
+                    return {"status": "duplicate"}
+                else:
+                    # First occurrence of this content
+                    representative_info = {
+                        "file_path": str(pdf_path),
+                        "file_hash": file_hash,
+                        "file_size": file_size,
+                        "mtime": mtime,
+                        "source_format": pdf_doc.source_format,
+                        "pdf_doc": pdf_doc,
+                        "content_hash": content_hash,
+                    }
+                    self.content_hash_map[content_hash] = representative_info
+
+            # Process the representative document
             # Generate doc_id
             doc_id = self._generate_doc_id(pdf_path, pdf_doc)
 
@@ -275,7 +444,7 @@ class IngestionPipeline:
             # Save chunks
             self._save_chunks(chunks, doc_id)
 
-            # Count pages by source_format (coarse)
+            # Count pages by source_format
             scanned_count = pdf_doc.num_pages if pdf_doc.source_format == "scan" else 0
             vector_count = pdf_doc.num_pages if pdf_doc.source_format == "vector" else 0
 
@@ -284,6 +453,7 @@ class IngestionPipeline:
                 "doc_id": doc_id,
                 "file_path": str(pdf_path),
                 "hash_sha256": file_hash,
+                "content_hash": content_hash,
                 "pages": pdf_doc.num_pages,
                 "doc_type": doc_type,
                 "revision": revision,
@@ -294,132 +464,57 @@ class IngestionPipeline:
             checksum_entry = {
                 "file_path": str(pdf_path),
                 "hash_sha256": file_hash,
-                "last_modified": int(pdf_path.stat().st_mtime),
+                "content_hash": content_hash,
+                "last_modified": int(mtime),
             }
 
             counts = {
                 "chunks": len(chunks),
                 "scanned_pages": scanned_count,
                 "vector_pages": vector_count,
+                "used_ocr": used_ocr,
             }
 
-            return corpus_entry, checksum_entry, counts
+            return {
+                "status": "processed",
+                "corpus_entry": corpus_entry,
+                "checksum_entry": checksum_entry,
+                "counts": counts,
+            }
 
         except Exception as e:
             logger.error(f"Error processing {pdf_path}: {e}")
-            return None
-
-    def _process_with_unstructured(self, pdf_path: Path) -> PDFDocument:
-        """Process a PDF using unstructured.io to extract page texts"""
-        try:
-            from unstructured.partition.pdf import partition_pdf  # type: ignore
-        except ImportError as e:
-            raise RuntimeError("unstructured package is not installed") from e
-
-        logger.info(f"Processing with unstructured: {pdf_path}")
-        elements = partition_pdf(filename=str(pdf_path))
-
-        # Group text by page number
-        from collections import defaultdict
-
-        pages_map = defaultdict(list)
-        for el in elements:
-            text = getattr(el, "text", None)
-            if not text:
-                continue
-            meta = getattr(el, "metadata", None)
-            page_num = getattr(meta, "page_number", None) if meta else None
-            # Default to page 1 if missing
-            page_index = int(page_num) if page_num else 1
-            pages_map[page_index].append(text)
-
-        # Build PageContent list
-        pages: List[PageContent] = []
-        total_chars = 0
-        total_words = 0
-        for page_num in sorted(pages_map.keys()):
-            page_text = "\n".join(pages_map[page_num]).strip()
-            char_count = len(page_text)
-            word_count = len(page_text.split())
-            line_count = len(page_text.splitlines())
-            total_chars += char_count
-            total_words += word_count
-            pages.append(
-                PageContent(
-                    page_num=page_num,
-                    text=page_text,
-                    char_count=char_count,
-                    word_count=word_count,
-                    line_count=line_count,
-                    tables=None,
-                    images=None,
-                )
-            )
-
-        # Create PDFDocument (metadata limited)
-        pdf_doc = PDFDocument(
-            file_path=str(pdf_path),
-            file_name=pdf_path.name,
-            title=None,
-            author=None,
-            subject=None,
-            keywords=None,
-            creator=None,
-            producer=None,
-            creation_date=None,
-            modification_date=None,
-            num_pages=len(pages),
-            total_chars=total_chars,
-            total_words=total_words,
-            pages=pages,
-            processing_timestamp=datetime.now().isoformat(),
-            source_format="vector",
-        )
-
-        logger.info(f"Unstructured extracted {len(pages)} pages, {total_words} words")
-        return pdf_doc
-
-    def _calculate_file_hash(self, file_path: Path) -> str:
-        """Calculate SHA256 hash of file"""
-        sha256_hash = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
-
-    def _is_already_processed(self, file_hash: str) -> bool:
-        """Check if file was already processed based on checksum"""
-        checksums_file = self.output_dir / "manifests" / "checksums.jsonl"
-        if not checksums_file.exists():
-            return False
-
-        try:
-            with open(checksums_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    entry = json.loads(line)
-                    if entry.get("hash_sha256") == file_hash:
-                        return True
-        except:
-            pass
-
-        return False
+            self._add_to_quarantine(pdf_path, "read_error", str(e))
+            return {"status": "quarantine", "reason": "read_error"}
 
     def _generate_doc_id(self, pdf_path: Path, pdf_doc: PDFDocument) -> str:
-        """Generate unique document ID"""
+        """Generate safe, unique document ID (no path separators)"""
+        import re
+        import unicodedata
+
         # Use relative path from source_dir if possible
         try:
             rel_path = pdf_path.relative_to(self.source_dir)
-            base_id = str(rel_path.with_suffix("")).replace("\\", "/")
-        except:
+            parts = list(rel_path.parts)
+            if parts:
+                parts[-1] = Path(parts[-1]).stem
+            base_id = "_".join(parts)
+        except Exception:
             base_id = pdf_path.stem
 
-        # Clean and truncate
-        base_id = base_id.replace(" ", "_")[:50]
+        # Normalize unicode and remove invalid characters for Windows filenames
+        base_id = unicodedata.normalize("NFKD", base_id)
+        # Replace any disallowed chars (anything not alnum, dot, underscore, hyphen) with underscore
+        base_id = re.sub(r"[^A-Za-z0-9._-]+", "_", base_id)
+        # Collapse multiple underscores
+        base_id = re.sub(r"_+", "_", base_id).strip("_")
+        # Truncate to reasonable length
+        base_id = base_id[:80] if base_id else "document"
 
         # Add hash suffix for uniqueness
         hash_suffix = hashlib.md5(str(pdf_path).encode()).hexdigest()[:8]
 
-        return f"{base_id}_{hash_suffix}"
+        return f"DOCID_{base_id}_{hash_suffix}"
 
     def _classify_document(
         self, pdf_path: Path, pdf_doc: PDFDocument
@@ -501,7 +596,7 @@ class IngestionPipeline:
                     )
 
             if not markdown_text:
-                # Simple conversion from pdf_doc pages (unstructured)
+                # Simple conversion from pdf_doc pages
                 extraction = {"file_path": pdf_doc.file_path, "pages": []}
                 for page in pdf_doc.pages:
                     extraction["pages"].append(
@@ -605,64 +700,75 @@ class IngestionPipeline:
                         f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
     def _write_manifests(self, corpus: List[Dict], checksums: List[Dict]):
-        """Write manifest files by merging with existing entries (idempotent)"""
+        """Write manifest files (atomic)"""
         corpus_file = self.output_dir / "manifests" / "corpus.jsonl"
         checksums_file = self.output_dir / "manifests" / "checksums.jsonl"
-
-        # Load existing entries
-        existing_corpus: List[Dict] = []
-        existing_checksums: List[Dict] = []
-
-        if corpus_file.exists():
-            try:
-                with open(corpus_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        existing_corpus.append(json.loads(line))
-            except Exception as e:
-                logger.warning(f"Failed to read existing corpus manifest: {e}")
-
-        if checksums_file.exists():
-            try:
-                with open(checksums_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        existing_checksums.append(json.loads(line))
-            except Exception as e:
-                logger.warning(f"Failed to read existing checksums manifest: {e}")
-
-        # Merge and de-duplicate
-        merged_corpus_map = {}
-        for entry in existing_corpus + corpus:
-            key = (entry.get("file_path"), entry.get("hash_sha256"))
-            merged_corpus_map[key] = entry  # prefer latest
-        merged_corpus = list(merged_corpus_map.values())
-
-        merged_checksums_map = {}
-        for entry in existing_checksums + checksums:
-            key = (entry.get("file_path"), entry.get("hash_sha256"))
-            merged_checksums_map[key] = entry
-        merged_checksums = list(merged_checksums_map.values())
 
         # Write corpus manifest
         temp_file = corpus_file.with_suffix(".tmp")
         with open(temp_file, "w", encoding="utf-8") as f:
-            for entry in merged_corpus:
+            for entry in corpus:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         temp_file.replace(corpus_file)
 
         # Write checksums manifest
         temp_file = checksums_file.with_suffix(".tmp")
         with open(temp_file, "w", encoding="utf-8") as f:
-            for entry in merged_checksums:
+            for entry in checksums:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         temp_file.replace(checksums_file)
 
-        logger.info(f"Wrote {len(merged_corpus)} entries to corpus manifest")
-        logger.info(f"Wrote {len(merged_checksums)} entries to checksums manifest")
+        logger.info(f"Wrote {len(corpus)} entries to corpus manifest")
+        logger.info(f"Wrote {len(checksums)} entries to checksums manifest")
+
+    def _write_doc_id_map(self, doc_id_map: Dict[str, str]):
+        """Write doc_id_map.json (atomic)"""
+        map_file = self.output_dir / "doc_id_map.json"
+        temp_file = map_file.with_suffix(".tmp")
+
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(doc_id_map, f, indent=2, ensure_ascii=False)
+
+        temp_file.replace(map_file)
+        logger.info(f"Wrote {len(doc_id_map)} entries to doc_id_map.json")
+
+    def _write_dedup_report(self):
+        """Write deduplication report"""
+        if not self.duplicate_groups:
+            return
+
+        report_file = self.output_dir / "manifests" / "dedup_report.json"
+        temp_file = report_file.with_suffix(".tmp")
+
+        report = {
+            "run_id": self.run_id,
+            "timestamp": datetime.now().isoformat(),
+            "total_unique": len(self.content_hash_map),
+            "total_duplicates": sum(
+                len(group) for group in self.duplicate_groups.values()
+            ),
+            "duplicate_groups": {},
+        }
+
+        for content_hash, duplicates in self.duplicate_groups.items():
+            representative = self.content_hash_map[content_hash]
+            report["duplicate_groups"][content_hash] = {
+                "representative": representative["file_path"],
+                "duplicates": duplicates,
+            }
+
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+
+        temp_file.replace(report_file)
+        logger.info(
+            f"Wrote deduplication report with {len(self.duplicate_groups)} groups"
+        )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Ingest PDF documents with multithreading and OCR support"
+        description="Ingest PDF documents with deduplication and quarantine support"
     )
 
     parser.add_argument(
@@ -691,7 +797,10 @@ def main():
     )
 
     parser.add_argument(
-        "--ocr-lang", type=str, default="eng", help="Language for OCR (default: eng)"
+        "--ocr-lang",
+        type=str,
+        default="vie+eng",
+        help="Language for OCR (default: vie+eng for Vietnamese & English)",
     )
 
     parser.add_argument(
@@ -806,7 +915,7 @@ def main():
     stats = pipeline.run()
 
     # Exit with appropriate code
-    if stats["failed"] > 0:
+    if stats["failed"] > 0 or stats["quarantine_count"] > 0:
         sys.exit(1)
 
     sys.exit(0)

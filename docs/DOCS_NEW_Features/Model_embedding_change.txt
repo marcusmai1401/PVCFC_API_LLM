@@ -1,0 +1,176 @@
+# PVCFC — README Triển khai Embedding (Paid Tier, AI Studio)
+
+*Date: 2025-09-29 · Owner: Team PVCFC · Scope: Embedding & FAISS cho RAG*
+
+Tài liệu này chuẩn hoá cách **chuyển sang model `gemini-embedding-001`** (Google AI Studio), **đặt chiều vector 1536**, và **tối ưu tốc độ** bằng batch + song song trên **Paid Tier (Tier 1)**, đồng thời giữ **RAM truy vấn ≤ 12 GB**.
+
+---
+
+## 1) Quyết định đã chốt
+
+* **Provider**: Google (AI Studio) — dùng **API key**.
+* **Model**: **`gemini-embedding-001`** (đời mới).
+* **Chiều vector (output dimensionality)**: **`1536`**.
+* **Tier**: **Paid Tier 1** (không dùng Batch API ở V1).
+* **Ingest**: vẫn OCR “khi cần”, **dedup 100% nội dung** trước embed, **embed theo chunk**.
+
+> Lưu ý: 1536D cho chất lượng cao; footprint (RAM/đĩa) **lớn hơn 768D**. Với tập hiện tại (~27k vector) hoàn toàn thoải mái. Khi quy mô lên “triệu chunk”, cân nhắc **IVF-PQ** (Phase sau).
+
+---
+
+## 2) `.env` khuyến nghị (Paid Tier, AI Studio)
+
+```ini
+# Provider & model
+EMBEDDING_PROVIDER=gemini
+EMBEDDING_MODEL=gemini-embedding-001
+
+# Chiều vector (rất quan trọng cho RAM/đĩa FAISS)
+EMBED_OUTPUT_DIM=1536
+
+# Tăng tốc (Paid Tier 1)
+EMBED_BATCH_SIZE=256            # 256–512 tuỳ độ dài trung bình của chunk
+EMBED_CONCURRENCY=8             # 8–12 nếu quota cho phép
+
+# Hạn mức (điền theo console dự án; nếu chưa rõ, giữ giá trị "mồi" và để code tự throttle)
+EMBED_TPM_CAP=1000000           # ví dụ Tier 1
+EMBED_RPM_CAP=3000              # ví dụ Tier 1
+EMBED_MAX_TOKENS_PER_REQ=20000  # cắt micro-batch theo ngưỡng này
+
+# Nhiệm vụ embedding (để Google tối ưu hoá)
+EMBED_TASK=RETRIEVAL_DOCUMENT   # embed tài liệu; truy vấn dùng RETRIEVAL_QUERY
+
+# Khoá AI Studio (bắt buộc phải là giá trị thật, không để khoảng trắng)
+GEMINI_API_KEY=AIza...
+```
+
+> Code gọi API cần **truyền** `output_dimensionality=EMBED_OUTPUT_DIM` và `task_type=EMBED_TASK` (theo Python client). Nếu chưa có, thêm 1–2 dòng trong service embed.
+
+---
+
+## 3) Quy trình chạy (V1)
+
+### 3.1. Ingest (OCR khi cần, dedup, chunk)
+
+* Quét đệ quy `D:\Data_Raw` (PDF), **OCR chỉ khi không có text vector** (`eng+vie`),
+* **Dedup 100% nội dung** bằng `content_hash` (chỉ **đại diện** được chunk/index),
+* Chunk theo ký tự (1000/200).
+
+```powershell
+python tools\ingest.py `
+  --source-dir "D:\Data_Raw" `
+  --output-dir "artifacts\ingestion" `
+  --enable-ocr `
+  --ocr-lang "eng+vie" `
+  --chunk-size 1000 `
+  --chunk-overlap 200 `
+  --dedup-content
+```
+
+### 3.2. BM25
+
+```powershell
+python tools\build_bm25_index.py `
+  --chunks-jsonl "artifacts\ingestion\chunks\chunks.jsonl" `
+  --index-dir   "artifacts\index\bm25"
+```
+
+### 3.3. FAISS (Gemini · Paid · song song)
+
+* Dựa trên `.env` ở mục 2; tool **giữ nguyên CLI hiện tại** và sẽ tự đọc corpus từ BM25 artifacts (resolve chunk-level từ `--bm25-dir`).
+
+```powershell
+python tools\build_faiss_local.py `
+  --bm25-dir "artifacts\index\bm25" `
+  --faiss-dir "artifacts\index\faiss"
+```
+
+---
+
+## 4) Tối ưu tốc độ (Paid Tier)
+
+1. **Micro-batch đúng cỡ**
+
+   * Gộp nhiều chunk vào **một request** sao cho **tokens/request ≤ EMBED_MAX_TOKENS_PER_REQ** (mặc định 20k).
+   * Với chunk 1000 ký tự, ước lượng ~250 token/chunk → batch 256 ≈ 64k token → **giảm batch** hoặc để code “tự cắt” theo `EMBED_MAX_TOKENS_PER_REQ`.
+
+2. **Song song có giới hạn (concurrency)**
+
+   * Dùng **semaphore** để giới hạn số request đồng thời (8–12 trên Tier 1 thường ổn).
+   * Khi gặp **429**, **exponential backoff** + tạm hạ concurrency.
+
+3. **Throttle theo quota**
+
+   * `concurrency_effective = min(RPM_limit, floor(TPM_limit / tokens_per_request))`.
+   * Chưa rõ quota thực tế? Bắt đầu với **batch=256, concurrency=8**, quan sát log (429?), rồi điều chỉnh.
+
+4. **Giảm khối lượng phải embed**
+
+   * **Dedup nội dung 100%** trước embed.
+   * Bật **cache** embeddings theo `content_hash` để skip lần sau.
+
+---
+
+## 5) RAM & chỉ mục
+
+* **Kích thước chỉ mục (xấp xỉ)**: nếu dùng Flat + float32, size ≈ `N_vector × 1536 × 4` byte (chưa tính overhead).
+* **V1**: với ~vài chục nghìn vector, RAM truy vấn & đĩa **rất dư**.
+* **Khi tăng quy mô** (triệu vector): chuyển **IVF-PQ** (Phase sau) + **Hybrid (BM25 ∪ Vector) + Rerank** để giữ chính xác trong **RAM ≤ 12 GB**.
+
+---
+
+## 6) Acceptance Criteria
+
+* Build FAISS hoàn tất **không lỗi 429 kéo dài** (có backoff & tự điều tiết).
+* **RAM truy vấn ≤ 12 GB** với pipeline hiện tại.
+* Kết quả truy vấn giữ/nhích chất lượng (citation đúng trang; đáp án ổn định).
+* Dedup nội dung 100% hoạt động (chỉ đại diện được index).
+
+---
+
+## 7) Troubleshooting
+
+* **429 / throttling**: hạ `EMBED_CONCURRENCY` hoặc `EMBED_BATCH_SIZE`; kiểm tra quota trong AI Studio; bật backoff.
+* **RAM build/query cao**: hạ tạm `EMBED_OUTPUT_DIM` (nếu cần), giảm `k_vec/k_bm25` khi truy vấn; cân nhắc IVF-PQ ở Phase sau.
+* **Kết quả kém** nếu embed document-level: chuyển sang **chunk-level**; đảm bảo **dedup** trước embed.
+
+---
+
+## 8) Gợi ý cập nhật code (nếu chưa có)
+
+* **Alias model**: chấp nhận alias → model chuẩn cho client:
+
+```python
+MODEL_ALIASES = {
+  "gemini-embedding-001": "models/embedding-001",
+  "embedding-001":       "models/embedding-001",
+  "text-embedding-004":  "models/text-embedding-004",
+}
+model_resolved = MODEL_ALIASES.get(EMBEDDING_MODEL, EMBEDDING_MODEL)
+```
+
+* **Đọc `.env`**: `EMBED_OUTPUT_DIM`, `EMBED_BATCH_SIZE`, `EMBED_CONCURRENCY`, `EMBED_TPM_CAP`, `EMBED_RPM_CAP`, `EMBED_MAX_TOKENS_PER_REQ`, `EMBED_TASK`.
+* **Gọi API**: truyền `output_dimensionality=EMBED_OUTPUT_DIM`, `task_type=EMBED_TASK`; assert chiều trả về == `EMBED_OUTPUT_DIM`.
+* **Song song**: implement **async + semaphore**, **micro-batch** theo `EMBED_MAX_TOKENS_PER_REQ`, **backoff 429/5xx**, throttle theo `EMBED_RPM_CAP`/`EMBED_TPM_CAP`.
+* **Cache** theo `content_hash` (SQLite tại `artifacts/ingestion/cache/embeddings.sqlite`).
+* **Dedup**: chỉ **đại diện** mới đi vào chunks/BM25/FAISS.
+
+---
+
+## 9) Checklist triển khai nhanh
+
+* [ ] Đổi `.env` theo mục 2 (điền **GEMINI_API_KEY** thật).
+* [ ] Xác nhận service embed **đọc & truyền** `output_dimensionality=1536`, `taskType=RETRIEVAL_DOCUMENT`.
+* [ ] Chạy **ingest** (dedup + chunk), sau đó **BM25**, rồi **FAISS**.
+* [ ] Theo dõi log 429 → điều chỉnh `EMBED_BATCH_SIZE`/`EMBED_CONCURRENCY`.
+* [ ] Smoke test truy vấn; kiểm tra RAM < 12 GB.
+
+---
+
+### Phụ lục A — Công thức ước lượng nhanh
+
+* **Tokens ~** `ceil(len(text) / 4)` (tiếng Anh kỹ thuật).
+* **Kích thước index (Flat, float32)** ≈ `N × dim × 4` byte.
+* **Concurrency hiệu dụng** ≈ `min(RPM, floor(TPM / tokens_per_request))`.
+
+---

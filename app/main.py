@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
+from app.api.endpoints import pdf_renderer
 from app.api.routers import ask, health, locate, report
 from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
@@ -44,6 +45,25 @@ async def lifespan(app: FastAPI):
             manager = get_index_manager(settings)
             app.state.retriever = manager.get_retriever()
             app.state.settings = settings
+
+            # Load doc_id_map if available
+            import json
+            from pathlib import Path
+
+            doc_id_map_path = Path("artifacts/ingestion/doc_id_map.json")
+            if doc_id_map_path.exists():
+                try:
+                    with open(doc_id_map_path, "r", encoding="utf-8") as f:
+                        app.state.doc_id_map = json.load(f)
+                    logger.info(
+                        f"Loaded doc_id_map with {len(app.state.doc_id_map)} entries"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to load doc_id_map: {e}")
+                    app.state.doc_id_map = {}
+            else:
+                logger.info("No doc_id_map.json found, citations will use doc_id only")
+                app.state.doc_id_map = {}
         else:
             logger.warning(f"Indices not fully loaded: {result}")
     except Exception as e:
@@ -109,6 +129,9 @@ def create_app() -> FastAPI:
     app.include_router(ask.router, tags=["Query"])
     app.include_router(locate.router, tags=["Location"])
     app.include_router(report.router, tags=["Reports"])
+
+    # PDF rendering endpoints
+    app.include_router(pdf_renderer.router, tags=["PDF"])
 
     # Metrics endpoint (Prometheus format)
     @app.get("/metrics", tags=["Monitoring"], response_class=PlainTextResponse)

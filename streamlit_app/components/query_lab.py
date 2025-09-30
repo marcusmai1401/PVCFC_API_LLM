@@ -176,7 +176,18 @@ def render(vision_mode=False):
 
     For Phase 1 completion, delegate to the enhanced version
     """
-    # Import and use the enhanced version for full Phase 1 functionality
+    # Import and use the improved version with enhanced citations
+    try:
+        from streamlit_app.components.query_lab_improved import (
+            render as improved_render,
+        )
+
+        improved_render(vision_mode=vision_mode)
+        return
+    except ImportError:
+        pass
+
+    # Try the enhanced version as fallback
     try:
         from streamlit_app.components.query_lab_enhanced import (
             render as enhanced_render,

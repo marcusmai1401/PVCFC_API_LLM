@@ -3,6 +3,9 @@ LLM Constants and Model Definitions
 Contains lists of supported models for each provider
 """
 
+# Vision model constant (Gemini 2.5 Pro multimodal)
+VISION_MODEL = "models/gemini-2.5-pro"
+
 # OpenAI Models
 OPENAI_CHAT_MODELS = [
     # GPT-4o series (latest multimodal)
@@ -113,11 +116,11 @@ RECOMMENDED_MODELS = {
     "development": {
         "light": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-2.5-flash",
         },
         "heavy": {
             "openai": "gpt-4o",
-            "gemini": "gemini-1.5-pro",
+            "gemini": "gemini-2.5-pro",
         },
         "embedding": {
             "openai": "text-embedding-3-small",
@@ -127,11 +130,11 @@ RECOMMENDED_MODELS = {
     "production": {
         "light": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-2.5-flash",
         },
         "heavy": {
             "openai": "gpt-4o",
-            "gemini": "gemini-1.5-pro",
+            "gemini": "gemini-2.5-pro",
         },
         "embedding": {
             "openai": "text-embedding-3-large",
@@ -141,11 +144,11 @@ RECOMMENDED_MODELS = {
     "cost_optimized": {
         "light": {
             "openai": "gpt-3.5-turbo",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-2.5-flash",
         },
         "heavy": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-2.5-pro",
         },
         "embedding": {
             "openai": "text-embedding-3-small",
@@ -155,11 +158,11 @@ RECOMMENDED_MODELS = {
     "quality_optimized": {
         "light": {
             "openai": "gpt-4o",
-            "gemini": "gemini-1.5-pro",
+            "gemini": "gemini-2.5-flash",
         },
         "heavy": {
             "openai": "o1-preview",
-            "gemini": "gemini-1.5-pro-002",
+            "gemini": "gemini-2.5-pro",
         },
         "embedding": {
             "openai": "text-embedding-3-large",

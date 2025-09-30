@@ -1,6 +1,5 @@
 # Kế hoạch Build UI Tối ưu hoá — PVCFC RAG Debug/Performance Frontend
 
-Owner: PVCFC Engineering
 Date: 2025-09-16
 Status: Bản nháp để review
 Tài liệu thiết kế liên quan:

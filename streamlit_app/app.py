@@ -193,39 +193,10 @@ def main():
 
         st.markdown("---")
 
-        # System status
-        st.markdown("### 📟 System Status")
-        try:
-            # Check if RAG core components can be imported
-            from app.rag.generator import ResponseGenerator
-            from app.rag.query_transform import QueryTransformer
-            from app.rag.reranker import Reranker
-            from app.rag.retriever import HybridRetriever
+        # System status (API-driven)
+        from streamlit_app.components.system_status import render_compact_status
 
-            _ = (QueryTransformer, HybridRetriever, Reranker, ResponseGenerator)
-            st.success("✅ RAG Components Ready")
-        except Exception as e:
-            st.error(f"❌ RAG Components Error: {str(e)}")
-
-        # Optional: index readiness check (if FastAPI app has loaded indices)
-        try:
-            from app.deps.indices import get_index_manager
-
-            manager = get_index_manager()
-            retriever = manager.get_retriever()
-            if retriever is not None:
-                st.success("✅ Indices Loaded")
-            else:
-                st.warning("⚠️ Indices not loaded")
-        except Exception as e:
-            st.info(f"ℹ️ Index status unavailable: {str(e)}")
-
-        try:
-            from app.evaluation.batch_runner import BatchEvaluationRunner
-
-            st.success("✅ Evaluation System Ready")
-        except Exception as e:
-            st.error(f"❌ Evaluation System Error: {str(e)}")
+        render_compact_status(st.session_state.api_base_url)
 
     # Main content area - route to appropriate component based on selected page
     if page == "🏠 Home":

@@ -11,6 +11,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
+# Import page utilities for consistent page handling
+try:
+    from app.utils.page_utils import normalize_page_metadata
+except ImportError:
+    # Fallback if page_utils not available
+    def normalize_page_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Basic fallback for metadata normalization"""
+        if metadata is None:
+            metadata = {}
+        if "page" not in metadata:
+            # Try to extract from common fields
+            metadata["page"] = metadata.get("page_start", 1)
+        return metadata
+
 
 @dataclass
 class TextChunk:
@@ -101,6 +115,16 @@ class TextChunker:
         for i, (chunk_text, start_char, end_char) in enumerate(chunks):
             chunk_id = self._generate_chunk_id(doc_id, i, chunk_text)
 
+            # Ensure metadata has page field
+            chunk_metadata = metadata.copy()
+
+            # If page_nums provided and page not in metadata, add it
+            if page_nums and "page" not in chunk_metadata:
+                chunk_metadata["page"] = page_nums[0]
+
+            # Normalize metadata to ensure page field exists
+            chunk_metadata = normalize_page_metadata(chunk_metadata)
+
             text_chunk = TextChunk(
                 chunk_id=chunk_id,
                 doc_id=doc_id,
@@ -111,7 +135,7 @@ class TextChunker:
                 start_char=start_char,
                 end_char=end_char,
                 page_nums=page_nums,
-                metadata=metadata.copy(),
+                metadata=chunk_metadata,
             )
 
             text_chunks.append(text_chunk)

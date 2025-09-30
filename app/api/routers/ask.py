@@ -76,10 +76,9 @@ async def ask_question(
         # Configure reranker: avoid cross-encoder for non-English to prevent NaN scores and empty results
         from app.rag.reranker import RerankConfig
 
+        # Determine rerank top_k based on degrade mode (will be calculated after retrieval)
+        # For now, use settings.top_rerank as initial value
         rerank_method = "cross_encoder" if request.language == "en" else "score"
-        reranker = Reranker(
-            config=RerankConfig(method=rerank_method, top_k=request.max_context)
-        )
 
         # Configure generator based on execution mode
         if request.execution_mode == "production":
@@ -89,8 +88,21 @@ async def ask_question(
         else:  # heavy_only
             generator_tier = "heavy"
 
+        # Calculate effective vision flag: settings AND request
+        # Vision is enabled only if BOTH settings allow it AND request doesn't disable it
+        effective_vision_enabled = settings.vision_page_selector_enabled and (
+            request.enable_vision_generation
+            if hasattr(request, "enable_vision_generation")
+            else True
+        )
+
         generator_config = GeneratorConfig(
-            llm_tier=generator_tier, language=request.language
+            llm_tier=generator_tier,
+            language=request.language,
+            confidence_mode=request.confidence_mode
+            if hasattr(request, "confidence_mode") and request.confidence_mode
+            else "legacy",
+            enable_vision_generation=effective_vision_enabled,
         )
         generator = ResponseGenerator(config=generator_config)
         cove = ChainOfVerification(settings=settings)
@@ -104,46 +116,102 @@ async def ask_question(
 
         logger.debug(f"[{trace_id}] Query transformed in {transform_time:.0f}ms")
 
-        # Step 2: Hybrid Retrieval using search()
-        retrieve_start = time.time()
-        retrieval_results = retriever.search(transformed_query)
-        retrieve_time = (time.time() - retrieve_start) * 1000
+        # Step 2: Hybrid Retrieval using search() (with cache)
+        # Try cache first
+        from app.core.cache_manager import get_retrieval_cache
 
-        logger.debug(
-            f"[{trace_id}] Retrieved {len(retrieval_results)} results in {retrieve_time:.0f}ms"
+        cache = get_retrieval_cache()
+        cache_key_data = (
+            transformed_query.normalized,
+            request.filters.dict() if request.filters else None,
+            request.max_context,
         )
 
-        # Step 3: Reranking (sync)
-        rerank_start = time.time()
-        reranked_results = reranker.rerank(
-            query=request.query, results=retrieval_results
-        )
+        cached_results = cache.get(*cache_key_data)
+        cache_hit = cached_results is not None
 
-        # Safety fallback: if cross-encoder produced zero results, retry with score-based reranker
-        if (
-            len(reranked_results) == 0
-            and len(retrieval_results) > 0
-            and reranker.config.method == "cross_encoder"
-        ):
-            logger.warning(
-                f"[{trace_id}] Cross-encoder reranking returned 0 results; falling back to score-based rerank"
+        if cache_hit:
+            # Cache HIT - skip retrieval and rerank
+            logger.info(f"[{trace_id}] Cache HIT - skipping retrieval & rerank")
+            reranked_results = cached_results
+            retrieve_time = 0
+            rerank_time = 0
+            # Still need to check degrade mode from cached results
+            retrieval_results = cached_results  # For degrade check
+        else:
+            # Cache MISS - perform normal retrieval
+            retrieve_start = time.time()
+            retrieval_results = retriever.search(transformed_query)
+            retrieve_time = (time.time() - retrieve_start) * 1000
+
+            logger.debug(
+                f"[{trace_id}] Retrieved {len(retrieval_results)} results in {retrieve_time:.0f}ms"
             )
-            try:
-                from app.rag.reranker import RerankConfig as _RerankConfig
 
-                _fallback_reranker = Reranker(
-                    config=_RerankConfig(method="score", top_k=request.max_context)
-                )
-                reranked_results = _fallback_reranker.rerank(
-                    query=request.query, results=retrieval_results
-                )
-            except Exception as _:
-                # Keep as empty; downstream will handle
-                pass
+        # Check for degrade mode from retrieval results
+        degrade_mode = any(
+            result.metadata.get("degrade_mode", False) if result.metadata else False
+            for result in retrieval_results
+        )
+        degrade_reason = None
+        if degrade_mode:
+            for result in retrieval_results:
+                if result.metadata and result.metadata.get("degrade_mode"):
+                    degrade_reason = result.metadata.get("degrade_reason")
+                    break
+            logger.warning(
+                f"[{trace_id}] Operating in degrade mode: {degrade_reason[:100] if degrade_reason else 'unknown'}"
+            )
 
-        # Apply max_context limit
-        reranked_results = reranked_results[: request.max_context]
-        rerank_time = (time.time() - rerank_start) * 1000
+        # Step 3: Reranking (sync) - skip if cache hit
+        if not cache_hit:
+            # Determine rerank top_k based on degrade mode
+            rerank_top_k = (
+                settings.rerank_top_n_when_degrade
+                if degrade_mode
+                else settings.top_rerank
+            )
+
+            # Create reranker with appropriate top_k
+            reranker = Reranker(
+                config=RerankConfig(method=rerank_method, top_k=rerank_top_k)
+            )
+            rerank_start = time.time()
+            reranked_results = reranker.rerank(
+                query=request.query, results=retrieval_results
+            )
+
+            # Safety fallback: if cross-encoder produced zero results, retry with score-based reranker
+            if (
+                len(reranked_results) == 0
+                and len(retrieval_results) > 0
+                and reranker.config.method == "cross_encoder"
+            ):
+                logger.warning(
+                    f"[{trace_id}] Cross-encoder reranking returned 0 results; falling back to score-based rerank"
+                )
+                try:
+                    from app.rag.reranker import RerankConfig as _RerankConfig
+
+                    _fallback_reranker = Reranker(
+                        config=_RerankConfig(method="score", top_k=request.max_context)
+                    )
+                    reranked_results = _fallback_reranker.rerank(
+                        query=request.query, results=retrieval_results
+                    )
+                except Exception as _:
+                    # Keep as empty; downstream will handle
+                    pass
+
+            # Apply max_context limit
+            reranked_results = reranked_results[: request.max_context]
+            rerank_time = (time.time() - rerank_start) * 1000
+
+            # Cache the reranked results for future requests
+            cache.set(*cache_key_data, results=reranked_results)
+            logger.info(
+                f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results"
+            )
 
         logger.debug(
             f"[{trace_id}] Reranked to {len(reranked_results)} results in {rerank_time:.0f}ms"
@@ -226,12 +294,21 @@ async def ask_question(
                 except (ValueError, TypeError):
                     confidence = None
 
+            # Try to include pdf_path if available
+            kwargs = {}
+            try:
+                if hasattr(citation, "pdf_path") and citation.pdf_path:
+                    kwargs["pdf_path"] = citation.pdf_path
+            except Exception:
+                pass
+
             citations_list.append(
                 Citation(
                     doc_id=citation.doc_id,
                     page=page_num,
                     bbox=None,  # Add bbox if available in citation
                     confidence=confidence,
+                    **kwargs,
                 )
             )
 
@@ -252,6 +329,19 @@ async def ask_question(
                         except (ValueError, TypeError):
                             confidence = None
 
+                    # Enrich pdf_path if available from app state mapping
+                    pdf_path_value = None
+                    try:
+                        if hasattr(http_request.app.state, "doc_id_map"):
+                            _map = http_request.app.state.doc_id_map
+                            _docid = r.doc_id or (
+                                r.metadata.get("doc_id") if r.metadata else None
+                            )
+                            if _docid and _docid in _map:
+                                pdf_path_value = _map[_docid]
+                    except Exception:
+                        pass
+
                     citations_list.append(
                         Citation(
                             doc_id=r.doc_id
@@ -259,6 +349,7 @@ async def ask_question(
                             page=page_num,
                             bbox=None,
                             confidence=confidence,
+                            pdf_path=pdf_path_value,
                         )
                     )
                 except Exception:
@@ -266,6 +357,7 @@ async def ask_question(
                     page_num = (
                         r.page if hasattr(r, "page") and r.page is not None else 1
                     )
+                    # No enrichment available in this branch
                     citations_list.append(
                         Citation(
                             doc_id=r.doc_id
@@ -341,26 +433,65 @@ Provide a direct, helpful answer in 1-2 sentences:"""
                 warnings.append("No relevant documents found")
 
         # Build response
+        # Determine current k values (may be different if in degrade mode)
+        # For bm25_k_current: use actual retriever config or degrade value
+        bm25_k_current = (
+            settings.bm25_k_when_degrade
+            if degrade_mode
+            else (retriever.config.k_bm25 if hasattr(retriever, "config") else 50)
+        )
+        # For top_rerank_current: use actual reranker config if available
+        top_rerank_current = rerank_top_k if not cache_hit else settings.top_rerank
+
+        # Prepare meta dict with comprehensive Phase 2 fields
+        meta_dict = {
+            # Base fields
+            "latency_ms": round(total_latency),
+            "breakdown": {
+                "transform_ms": round(transform_time),
+                "retrieve_ms": round(retrieve_time),
+                "rerank_ms": round(rerank_time),
+                "generate_ms": round(generate_time),
+            },
+            "k": request.max_context,
+            "execution_mode": request.execution_mode,
+            "trace_id": trace_id,
+            # Model information
+            "model_generation": generated_answer.metadata.get(
+                "model", settings.llm_model_heavy
+            )
+            if isinstance(generated_answer.metadata, dict)
+            else settings.llm_model_heavy,
+            "model_query_transform": settings.llm_model_light or "gemini-2.5-flash",
+            "embed_model": settings.embedding_model or "gemini-embedding-001",
+            # Degrade mode information
+            "degrade_mode": degrade_mode,
+            "degrade_reason": degrade_reason if degrade_mode else None,
+            # Current k values (adjusted for degrade mode)
+            "bm25_k_current": bm25_k_current,
+            "top_rerank_current": top_rerank_current,
+            # Feature flags (reflect effective runtime values)
+            "vision_page_selector_enabled": effective_vision_enabled,
+            "text_range_scan_enabled": settings.text_range_scan_enabled,
+            # Cache
+            "cache_hit": cache_hit,
+        }
+
+        # Backward compatibility: add "model" alias for "model_generation"
+        meta_dict["model"] = meta_dict["model_generation"]
+
+        # Include vision generation metadata if present
+        if isinstance(generated_answer.metadata, dict):
+            vision_meta = generated_answer.metadata.get("vision_generation")
+            if vision_meta is not None:
+                meta_dict["vision_generation"] = vision_meta
+
         return AskResponse(
             answer=final_answer,
             citations=citations_list,
             context_used=[result.chunk_id for result in reranked_results],
             confidence=generated_answer.confidence,
-            meta={
-                "latency_ms": round(total_latency),
-                "breakdown": {
-                    "transform_ms": round(transform_time),
-                    "retrieve_ms": round(retrieve_time),
-                    "rerank_ms": round(rerank_time),
-                    "generate_ms": round(generate_time),
-                },
-                "model": generated_answer.metadata.get(
-                    "model", settings.llm_model_heavy
-                ),
-                "k": request.max_context,
-                "execution_mode": request.execution_mode,
-                "trace_id": trace_id,
-            },
+            meta=meta_dict,
             warnings=warnings if warnings else None,
         )
 

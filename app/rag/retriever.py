@@ -14,8 +14,28 @@ from loguru import logger
 
 from app.rag.indexers.bm25_indexer import BM25Indexer
 from app.rag.indexers.faiss_indexer import VectorIndexer
+from app.rag.page_range_expander import PageRangeConfig, PageRangeExpander
 from app.rag.query_transform import QueryFilters, TransformedQuery
 from app.services.embedding_enhanced import EmbeddingService
+
+# Import page utilities for consistent page handling
+try:
+    from app.utils.page_utils import extract_page_number, normalize_page_metadata
+except ImportError:
+    # Fallback if page_utils not available
+    def extract_page_number(metadata: Dict[str, Any]) -> int:
+        """Basic fallback for page extraction"""
+        if isinstance(metadata, dict):
+            return metadata.get("page", metadata.get("page_start", 1))
+        return 1
+
+    def normalize_page_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Basic fallback for metadata normalization"""
+        if metadata is None:
+            metadata = {}
+        if "page" not in metadata:
+            metadata["page"] = extract_page_number(metadata)
+        return metadata
 
 
 @dataclass
@@ -59,6 +79,11 @@ class HybridSearchConfig:
     expand_parent: bool = True  # Whether to expand to parent context
     parent_tokens: int = 1200  # Max tokens for parent expansion
     sentence_window: int = 2  # Sentences to include around hit
+    # Page-range expansion config
+    enable_page_range_expansion: bool = True  # Enable page-range expansion
+    max_pages_to_scan: int = 5  # Maximum pages to include in expansion
+    min_cluster_score: float = 0.1  # Minimum total score for a cluster
+    page_gap_tolerance: int = 1  # Max gap between pages to consider consecutive
 
 
 class HybridRetriever:
@@ -104,9 +129,24 @@ class HybridRetriever:
         # Cache for parent documents
         self.parent_cache = {}
 
+        # Initialize page range expander
+        self.page_expander = PageRangeExpander(
+            PageRangeConfig(
+                max_pages_to_scan=self.config.max_pages_to_scan,
+                min_cluster_score=self.config.min_cluster_score,
+                gap_tolerance=self.config.page_gap_tolerance,
+                enable_expansion=self.config.enable_page_range_expansion,
+            )
+        )
+
+        # Provide a chunk/page loader to expander so it can load full page content
+        self._doc_id_map_cache = None  # Lazy-loaded mapping doc_id -> pdf_path
+        self.page_expander.chunk_loader = self._load_page_content_impl
+
         logger.info(
             f"HybridRetriever initialized. BM25: {bm25_index_dir is not None}, "
-            f"FAISS: {faiss_index_dir is not None}"
+            f"FAISS: {faiss_index_dir is not None}, "
+            f"Page-range expansion: {self.config.enable_page_range_expansion}"
         )
 
     def load_bm25_index(self, index_dir: str):
@@ -157,8 +197,21 @@ class HybridRetriever:
 
         # Collect results from both sources
         all_results = []
+        faiss_failed = False
+        degrade_reason = None
 
-        # BM25 search
+        # Load degrade settings from config
+        try:
+            from app.core.config import settings
+
+            allow_fallback = settings.retrieval_allow_bm25_only_fallback
+            bm25_k_degrade = settings.bm25_k_when_degrade
+        except Exception:
+            # Fallback to defaults if settings not available
+            allow_fallback = True
+            bm25_k_degrade = 80
+
+        # BM25 search (always attempt)
         if self.bm25_indexer:
             bm25_results = self._search_bm25(
                 query=transformed_query.normalized,
@@ -168,18 +221,54 @@ class HybridRetriever:
             all_results.extend(bm25_results)
             logger.info(f"BM25 returned {len(bm25_results)} results")
 
-        # FAISS search
+        # FAISS search (with degrade fallback)
         if self.faiss_indexer and self.embedding_service:
-            faiss_results = self._search_faiss(
-                query=transformed_query.normalized,
-                hyde_queries=transformed_query.hyde_queries
-                if config.use_hyde
-                else None,
-                filters=transformed_query.filters,
-                top_k=config.k_faiss,
-            )
-            all_results.extend(faiss_results)
-            logger.info(f"FAISS returned {len(faiss_results)} results")
+            try:
+                faiss_results = self._search_faiss(
+                    query=transformed_query.normalized,
+                    hyde_queries=transformed_query.hyde_queries
+                    if config.use_hyde
+                    else None,
+                    filters=transformed_query.filters,
+                    top_k=config.k_faiss,
+                )
+                all_results.extend(faiss_results)
+                logger.info(f"FAISS returned {len(faiss_results)} results")
+            except Exception as e:
+                faiss_failed = True
+                degrade_reason = str(e)
+                logger.error(f"FAISS search failed: {e}")
+
+                if allow_fallback:
+                    # Degrade mode: increase BM25 k to compensate
+                    logger.warning(
+                        f"Entering degrade mode: FAISS failed ({degrade_reason[:100]}), "
+                        f"falling back to BM25-only with k={bm25_k_degrade}"
+                    )
+
+                    try:
+                        # Re-fetch BM25 with higher k to compensate for missing FAISS
+                        all_results = []  # Clear previous BM25 results
+                        bm25_degrade_results = self._search_bm25(
+                            query=transformed_query.normalized,
+                            filters=transformed_query.filters,
+                            top_k=bm25_k_degrade,
+                        )
+                        all_results.extend(bm25_degrade_results)
+                        logger.info(
+                            f"BM25 degrade mode returned {len(bm25_degrade_results)} results "
+                            f"(k={bm25_k_degrade})"
+                        )
+                    except Exception as e2:
+                        logger.error(f"BM25 fallback also failed: {e2}")
+                        # If BM25 fallback also fails, propagate original error
+                        raise RuntimeError(
+                            f"Both FAISS and BM25 fallback failed: {e}, {e2}"
+                        )
+                else:
+                    # Fallback not allowed, propagate FAISS error
+                    logger.error("FAISS failed and fallback disabled")
+                    raise
 
         # Apply RRF fusion
         fused_results = self._reciprocal_rank_fusion(
@@ -188,8 +277,30 @@ class HybridRetriever:
 
         logger.info(f"RRF fusion produced {len(fused_results)} results")
 
-        # Expand parent context if enabled
-        if config.expand_parent:
+        # Attach degrade metadata if FAISS failed
+        if faiss_failed:
+            for result in fused_results:
+                if result.metadata is None:
+                    result.metadata = {}
+                result.metadata["degrade_mode"] = True
+                result.metadata["degrade_reason"] = degrade_reason
+            logger.info("Degrade metadata attached to all results")
+
+        # Apply page-range expansion if enabled (before parent expansion)
+        if config.enable_page_range_expansion:
+            fused_results = self.page_expander.expand_results(
+                fused_results, max_results=config.top_rrf
+            )
+            logger.info("Page-range expansion completed")
+
+            # Upgrade results to full page text where possible
+            try:
+                fused_results = self._upgrade_results_with_full_pages(fused_results)
+            except Exception as e:
+                logger.warning(f"Failed to upgrade results with full pages: {e}")
+
+        # Expand parent context if enabled (now optional with page-range)
+        elif config.expand_parent:
             fused_results = self._expand_parent_context(
                 fused_results,
                 max_tokens=config.parent_tokens,
@@ -226,16 +337,19 @@ class HybridRetriever:
             if filters and not self._passes_filters(hit.get("metadata", {}), filters):
                 continue
 
+            # Normalize metadata to ensure page field exists
+            metadata = normalize_page_metadata(hit.get("metadata", {}))
+
             result = RetrievalResult(
                 chunk_id=hit.get("chunk_id", f"bm25_{len(results)}"),
                 text=hit["text"],
                 score=hit["score"],
                 source="bm25",
-                metadata=hit.get("metadata", {}),
-                doc_id=hit.get("metadata", {}).get("doc_id"),
-                page=hit.get("metadata", {}).get("page"),
-                bbox=hit.get("metadata", {}).get("bbox"),
-                parent_id=hit.get("metadata", {}).get("parent_id"),
+                metadata=metadata,
+                doc_id=metadata.get("doc_id"),
+                page=metadata.get("page"),  # Now guaranteed to exist
+                bbox=metadata.get("bbox"),
+                parent_id=metadata.get("parent_id"),
             )
             results.append(result)
 
@@ -322,20 +436,127 @@ class HybridRetriever:
             if filters and not self._passes_filters(doc.metadata, filters):
                 continue
 
+            # Normalize metadata to ensure page field exists
+            metadata = normalize_page_metadata(doc.metadata)
+
             result = RetrievalResult(
-                chunk_id=doc.metadata.get("chunk_id", f"faiss_{idx}"),
+                chunk_id=metadata.get("chunk_id", f"faiss_{idx}"),
                 text=doc.text,
                 score=float(score),
                 source="faiss",
-                metadata=doc.metadata,
-                doc_id=doc.metadata.get("doc_id"),
-                page=doc.metadata.get("page"),
-                bbox=doc.metadata.get("bbox"),
-                parent_id=doc.metadata.get("parent_id"),
+                metadata=metadata,
+                doc_id=metadata.get("doc_id"),
+                page=metadata.get("page"),  # Now guaranteed to exist
+                bbox=metadata.get("bbox"),
+                parent_id=metadata.get("parent_id"),
             )
             results.append(result)
 
         return results
+
+    def _load_page_content_impl(
+        self, doc_id: str, page: int, score: float
+    ) -> Optional[RetrievalResult]:
+        """Load full text for a given document page and wrap as RetrievalResult"""
+        try:
+            pdf_path = self._get_pdf_path_for_doc(doc_id)
+            if not pdf_path:
+                return None
+            # Lazy import to avoid overhead on module import
+            import re
+            from pathlib import Path
+
+            import fitz  # PyMuPDF
+
+            p = Path(pdf_path)
+            if not p.exists():
+                return None
+
+            doc = fitz.open(str(p))
+            if page < 1 or page > len(doc):
+                doc.close()
+                return None
+            page_obj = doc[page - 1]
+            raw_text = page_obj.get_text()
+            doc.close()
+
+            # Clean text
+            lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+            text = re.sub(r"\s+", " ", "\n".join(lines)).strip()
+            if not text:
+                return None
+
+            metadata = {
+                "doc_id": doc_id,
+                "page": page,
+                "pdf_path": str(p),
+                "full_page": True,
+            }
+            return RetrievalResult(
+                chunk_id=f"page_{doc_id}_{page}",
+                text=text,
+                score=float(score),
+                source="page_expanded",
+                metadata=metadata,
+                doc_id=doc_id,
+                page=page,
+                bbox=None,
+                parent_id=None,
+            )
+        except Exception as e:
+            logger.debug(f"_load_page_content_impl error for {doc_id} p{page}: {e}")
+            return None
+
+    def _get_pdf_path_for_doc(self, doc_id: str) -> Optional[str]:
+        """Resolve PDF file path from doc_id via artifacts/ingestion/doc_id_map.json (cached)"""
+        if self._doc_id_map_cache is None:
+            try:
+                import json
+                from pathlib import Path
+
+                path = Path("artifacts/ingestion/doc_id_map.json")
+                if path.exists():
+                    with open(path, "r", encoding="utf-8") as f:
+                        self._doc_id_map_cache = json.load(f)
+                else:
+                    self._doc_id_map_cache = {}
+            except Exception:
+                self._doc_id_map_cache = {}
+        return self._doc_id_map_cache.get(doc_id)
+
+    def _upgrade_results_with_full_pages(
+        self, results: List[RetrievalResult]
+    ) -> List[RetrievalResult]:
+        """Replace result.text with full page text where available for top unique pages.
+        Limits number of pages to scan to avoid excessive cost.
+        """
+        if not results:
+            return results
+
+        upgraded = []
+        seen = set()
+        # Limit to at most 2x configured max_pages_to_scan pages
+        max_pages = max(1, self.config.max_pages_to_scan * 2)
+        count = 0
+
+        for r in results:
+            key = (r.doc_id, r.page)
+            if r.doc_id and r.page and key not in seen and count < max_pages:
+                full = self._load_page_content_impl(r.doc_id, r.page, r.score)
+                if full and len(full.text) > max(len(r.text), 200):
+                    # Replace contents but keep original score/source boosted slightly
+                    r.text = full.text
+                    r.source = f"{r.source}+page_full"
+                    if r.metadata is None:
+                        r.metadata = {}
+                    r.metadata.update(
+                        {"pdf_path": full.metadata.get("pdf_path"), "full_page": True}
+                    )
+                seen.add(key)
+                count += 1
+            upgraded.append(r)
+
+        return upgraded
 
     def _reciprocal_rank_fusion(
         self, results: List[RetrievalResult], k: int = 60, top_n: int = 60
@@ -542,6 +763,19 @@ def create_hybrid_retriever(
     Returns:
         Configured HybridRetriever instance
     """
+    # If no config provided, create one with settings from environment
+    if config is None:
+        try:
+            from app.core.config import settings
+
+            # Create config that respects ENV settings
+            config = HybridSearchConfig(
+                enable_page_range_expansion=settings.text_range_scan_enabled
+            )
+        except Exception:
+            # Fallback to default config if settings not available
+            config = HybridSearchConfig()
+
     retriever = HybridRetriever(
         bm25_index_dir=bm25_dir, faiss_index_dir=faiss_dir, config=config
     )
