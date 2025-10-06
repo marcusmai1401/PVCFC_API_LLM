@@ -1,0 +1,278 @@
+{
+  "timestamp": "2025-10-07T01:44:53.888348",
+  "test_data_dir": "C:\\Users\\Admin\\Desktop\\Code - API_LLM_PVCFC\\test_docs",
+  "test_output_dir": "C:\\Users\\Admin\\Desktop\\Code - API_LLM_PVCFC\\artifacts\\test_offline_build",
+  "summary": {
+    "passed": 9,
+    "failed": 0,
+    "pending": 0,
+    "total": 9
+  },
+  "results": {
+    "step1_scan": {
+      "status": "PASS",
+      "details": {
+        "total_pdfs_found": 7,
+        "unicode_paths": 0,
+        "long_paths": 0
+      },
+      "findings": [
+        {
+          "check": "rglob_functional",
+          "status": "PASS",
+          "value": 7
+        },
+        {
+          "check": "long_paths",
+          "status": "PASS"
+        }
+      ]
+    },
+    "step2_detect": {
+      "status": "PASS",
+      "details": {
+        "detected_formats": [
+          {
+            "file": "Equipment_Datasheet_KT06101.pdf",
+            "format": "vector",
+            "pages": 1,
+            "chars": 57
+          },
+          {
+            "file": "MOC_2024_001.pdf",
+            "format": "vector",
+            "pages": 1,
+            "chars": 48
+          },
+          {
+            "file": "Operation_Manual_V2.pdf",
+            "format": "vector",
+            "pages": 1,
+            "chars": 48
+          }
+        ]
+      },
+      "findings": [
+        {
+          "check": "ocr_threshold",
+          "status": "INFO",
+          "value": 40,
+          "note": "Pages with < 40 chars trigger OCR"
+        },
+        {
+          "check": "source_format_logic",
+          "status": "PASS",
+          "note": "Correct 3-way classification: vector/scan/mixed"
+        }
+      ]
+    },
+    "step3_parse_ocr": {
+      "status": "PASS",
+      "details": {
+        "ocr_available": true
+      },
+      "findings": [
+        {
+          "check": "ocr_availability",
+          "status": "PASS",
+          "value": true
+        },
+        {
+          "check": "ocr_dpi",
+          "status": "INFO",
+          "value": "2x zoom",
+          "note": "2x zoom matrix (approx 144 DPI from 72 base)",
+          "recommendation": "Consider adaptive DPI 3x-4x for low-res scans"
+        },
+        {
+          "check": "ocr_confidence",
+          "status": "PASS",
+          "value": "30%",
+          "note": "Reasonable threshold for technical docs"
+        },
+        {
+          "check": "multilingual_ocr",
+          "status": "PASS",
+          "value": "vie+eng supported",
+          "note": "PaddleOCR supports Vietnamese + English"
+        },
+        {
+          "check": "ocr_cache",
+          "status": "PASS",
+          "note": "Cache by (pdf_path, page_num) exists"
+        },
+        {
+          "check": "error_handling",
+          "status": "NEEDS_TEST",
+          "note": "Need to test with corrupt/password PDFs"
+        }
+      ]
+    },
+    "step4_normalize": {
+      "status": "PASS",
+      "details": {},
+      "findings": [
+        {
+          "check": "normalization_steps",
+          "status": "PASS",
+          "steps": [
+            "Unicode NFKC normalization",
+            "Lowercase conversion",
+            "Line-ending hyphen removal",
+            "Whitespace collapse",
+            "Trim whitespace"
+          ]
+        },
+        {
+          "check": "unit_preservation",
+          "status": "PASS",
+          "note": "Units (°, %, bar) preserved in normalization"
+        },
+        {
+          "check": "markdown_converter",
+          "status": "PASS",
+          "note": "Converter initialized successfully"
+        }
+      ]
+    },
+    "step5_chunking": {
+      "status": "PASS",
+      "details": {
+        "max_chunk_size": 1000,
+        "chunk_overlap": 200,
+        "test_chunks_created": 2
+      },
+      "findings": [
+        {
+          "check": "chunk_size",
+          "status": "PASS",
+          "value": 1000
+        },
+        {
+          "check": "chunk_overlap",
+          "status": "PASS",
+          "value": 200
+        },
+        {
+          "check": "chunk_metadata",
+          "status": "PASS",
+          "fields": [
+            "chunk_id",
+            "doc_id",
+            "page_start",
+            "page_end",
+            "char_count"
+          ]
+        },
+        {
+          "check": "chunk_id_unique",
+          "status": "PASS"
+        }
+      ]
+    },
+    "step6_artifacts": {
+      "status": "PASS",
+      "details": {},
+      "findings": [
+        {
+          "check": "expected_artifacts",
+          "status": "INFO",
+          "files": [
+            "chunks/chunks.jsonl",
+            "doc_id_map.json",
+            "quarantine.jsonl",
+            "manifests/corpus_manifest.jsonl",
+            "manifests/checksums_manifest.jsonl"
+          ]
+        },
+        {
+          "check": "concurrency_safety",
+          "status": "PASS",
+          "note": "Uses locks for dedup_lock, quarantine_lock"
+        }
+      ]
+    },
+    "step6b_dedup": {
+      "status": "PASS",
+      "details": {
+        "content_dedup_status": "DISABLED"
+      },
+      "findings": [
+        {
+          "check": "content_dedup_disabled",
+          "status": "PASS",
+          "note": "Content deduplication is correctly disabled"
+        },
+        {
+          "check": "file_hash_dedup",
+          "status": "WARNING",
+          "issue": "File hash dedup may not be implemented",
+          "recommendation": "Add file_hash check to skip exact file duplicates"
+        },
+        {
+          "check": "dedup_behavior_test",
+          "status": "NEEDS_TEST",
+          "note": "Need to run test with: 1 original + 1 exact copy + 1 near-duplicate (95%)"
+        }
+      ]
+    },
+    "step7_indexing": {
+      "status": "PASS",
+      "details": {},
+      "findings": [
+        {
+          "check": "bm25_builder_exists",
+          "status": "PASS",
+          "path": "C:\\Users\\Admin\\Desktop\\Code - API_LLM_PVCFC\\tools\\build_bm25_index.py"
+        },
+        {
+          "check": "faiss_builder_exists",
+          "status": "PASS",
+          "path": "C:\\Users\\Admin\\Desktop\\Code - API_LLM_PVCFC\\tools\\build_faiss_local.py"
+        },
+        {
+          "check": "embedding_dimension",
+          "status": "NEEDS_TEST",
+          "note": "Need to verify dimension matches EMBEDDING_MODEL from .env"
+        },
+        {
+          "check": "embedding_cache",
+          "status": "NEEDS_TEST",
+          "note": "Need to verify SQLite cache at artifacts/cache/"
+        },
+        {
+          "check": "bm25_faiss_alignment",
+          "status": "NEEDS_TEST",
+          "note": "Need to verify doc_id and page alignment between BM25 and FAISS"
+        }
+      ]
+    },
+    "integration": {
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "stdout_lines": 0,
+        "total_chunks": 7,
+        "doc_id_map_entries": 7
+      },
+      "findings": [
+        {
+          "check": "ingestion_success",
+          "status": "PASS",
+          "note": "Ingestion completed without errors"
+        },
+        {
+          "check": "chunks_created",
+          "status": "PASS",
+          "count": 7
+        },
+        {
+          "check": "doc_id_map_created",
+          "status": "PASS",
+          "entries": 7
+        }
+      ]
+    }
+  },
+  "metrics": {}
+}

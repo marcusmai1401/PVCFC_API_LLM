@@ -355,8 +355,26 @@ class PDFProcessor:
                 logger.warning("PaddleOCR not available")
                 return None
 
-            # Render page to image
-            mat = fitz.Matrix(2, 2)  # 2x zoom for better OCR
+            # Render page to image with adaptive DPI
+            # Adjust zoom based on page dimensions for better OCR accuracy
+            page_width = page.rect.width
+            page_height = page.rect.height
+            
+            # Determine zoom factor based on page size
+            if page_width < 600 or page_height < 800:
+                # Small or low-resolution pages → higher zoom for better OCR
+                zoom = 3  # ~216 DPI
+                logger.debug(
+                    f"Using 3x zoom for small page ({page_width:.0f}x{page_height:.0f} pts)"
+                )
+            elif page_width > 1200 or page_height > 1600:
+                # Large high-quality pages → standard zoom is sufficient
+                zoom = 2  # ~144 DPI
+            else:
+                # Medium pages → slightly higher zoom
+                zoom = 2.5  # ~180 DPI
+            
+            mat = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat)
 
             # Convert to PIL Image

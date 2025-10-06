@@ -125,12 +125,14 @@ class IngestionPipeline:
         # Deduplication tracking
         self.content_hash_map = {}  # content_hash -> representative doc
         self.duplicate_groups = {}  # content_hash -> list of duplicates
+        self.file_hash_seen = set()  # Track file hashes to skip exact duplicates
 
         # Track processing stats
         self.stats = {
             "total_pdfs": 0,
             "processed": 0,
             "failed": 0,
+            "duplicates_skipped": 0,  # Exact file duplicates (100% identical)
             "ocr_count": 0,
             "duplicates_collapsed": 0,
             "quarantine_count": 0,
@@ -236,11 +238,20 @@ class IngestionPipeline:
                             self.stats["vector_pages"] += counts.get("vector_pages", 0)
                             if counts.get("used_ocr", False):
                                 self.stats["ocr_count"] += 1
+                            
+                            # Track chunk size distribution for analytics
+                            if "chunk_sizes" not in self.stats:
+                                self.stats["chunk_sizes"] = []
+                            if "chunk_sizes" in counts:
+                                self.stats["chunk_sizes"].extend(counts["chunk_sizes"])
 
                             logger.info(
                                 f"[{self.stats['processed']}/{self.stats['total_pdfs']}] "
                                 f"Processed: {pdf_path.name}"
                             )
+                        elif result["status"] == "skipped":
+                            # Already counted in duplicates_skipped
+                            logger.debug(f"Skipped: {pdf_path.name} - {result.get('reason', 'unknown')}")
                         elif result["status"] == "duplicate":
                             self.stats["duplicates_collapsed"] += 1
                             logger.info(f"Skipped duplicate: {pdf_path.name}")
@@ -279,10 +290,22 @@ class IngestionPipeline:
         logger.info(f"Total PDFs: {self.stats['total_pdfs']}")
         logger.info(f"Processed: {self.stats['processed']}")
         logger.info(f"Failed: {self.stats['failed']}")
+        logger.info(f"Duplicates skipped (exact files): {self.stats['duplicates_skipped']}")
         logger.info(f"Duplicates collapsed: {self.stats['duplicates_collapsed']}")
         logger.info(f"Quarantined: {self.stats['quarantine_count']}")
         logger.info(f"Used OCR: {self.stats['ocr_count']}")
         logger.info(f"Total chunks: {self.stats['total_chunks']}")
+        
+        # Chunk size analytics
+        if "chunk_sizes" in self.stats and self.stats["chunk_sizes"]:
+            chunk_sizes = self.stats["chunk_sizes"]
+            avg_size = sum(chunk_sizes) / len(chunk_sizes)
+            min_size = min(chunk_sizes)
+            max_size = max(chunk_sizes)
+            logger.info(
+                f"Chunk sizes: min={min_size}, max={max_size}, avg={avg_size:.0f}"
+            )
+        
         logger.info(f"Duration: {duration:.2f} seconds")
         if self.stats["processed"] > 0:
             logger.info(
@@ -391,6 +414,19 @@ class IngestionPipeline:
             file_hash = self._calculate_file_hash(pdf_path)
             file_size = pdf_path.stat().st_size
             mtime = pdf_path.stat().st_mtime
+
+            # ===== FILE HASH DEDUPLICATION =====
+            # Skip exact file duplicates (100% identical files)
+            with self._dedup_lock:
+                if file_hash in self.file_hash_seen:
+                    # This is an exact duplicate file
+                    self.stats["duplicates_skipped"] += 1
+                    logger.info(f"Skipping exact duplicate (file_hash): {pdf_path.name}")
+                    return {"status": "skipped", "reason": "exact_file_duplicate"}
+                
+                # Mark this file_hash as seen
+                self.file_hash_seen.add(file_hash)
+            # ===== END FILE HASH DEDUPLICATION =====
 
             # Try to extract text first
             pdf_doc = None
@@ -532,6 +568,7 @@ class IngestionPipeline:
                 "scanned_pages": scanned_count,
                 "vector_pages": vector_count,
                 "used_ocr": used_ocr,
+                "chunk_sizes": [chunk.get("char_count", 0) for chunk in chunks],  # For analytics
             }
 
             return {

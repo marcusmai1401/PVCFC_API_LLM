@@ -1,0 +1,81 @@
+[
+  {
+    "id": "q001",
+    "query_vi": "Áp suất vận hành tối đa là bao nhiêu?",
+    "query_en": "What is the maximum operating pressure?",
+    "expected_doc_type": ["datasheet", "manual"],
+    "expected_keywords": ["pressure", "áp suất", "bar", "psi"],
+    "category": "technical_spec"
+  },
+  {
+    "id": "q002",
+    "query_vi": "Nhiệt độ vận hành cho phép?",
+    "query_en": "What is the allowable operating temperature?",
+    "expected_doc_type": ["datasheet", "manual"],
+    "expected_keywords": ["temperature", "nhiệt độ", "°C", "°F"],
+    "category": "technical_spec"
+  },
+  {
+    "id": "q003",
+    "query_vi": "Quy trình bảo trì định kỳ?",
+    "query_en": "What is the periodic maintenance procedure?",
+    "expected_doc_type": ["maintenance", "manual"],
+    "expected_keywords": ["maintenance", "bảo trì", "procedure", "quy trình"],
+    "category": "procedure"
+  },
+  {
+    "id": "q004_no_context",
+    "query_vi": "Giá cổ phiếu Tesla hôm nay?",
+    "query_en": "What is Tesla stock price today?",
+    "expected_result": "no_context",
+    "category": "no_context",
+    "note": "Should refuse or say no information available"
+  },
+  {
+    "id": "q005_no_context",
+    "query_vi": "Công thức nấu phở?",
+    "query_en": "How to cook pho?",
+    "expected_result": "no_context",
+    "category": "no_context"
+  },
+  {
+    "id": "q006_table",
+    "query_vi": "Bảng thông số kỹ thuật của KT06101?",
+    "query_en": "Technical specifications table for KT06101?",
+    "expected_doc_type": ["datasheet"],
+    "category": "table",
+    "vision_preferred": true,
+    "note": "Should benefit from vision if table present"
+  },
+  {
+    "id": "q007_drawing",
+    "query_vi": "Sơ đồ P&ID của hệ thống 04-FE-2046?",
+    "query_en": "P&ID diagram for system 04-FE-2046?",
+    "expected_doc_type": ["pid", "drawing"],
+    "category": "drawing",
+    "vision_preferred": true
+  },
+  {
+    "id": "q008_unicode",
+    "query_vi": "Đặc điểm kỹ thuật: áp suất 150°C, tốc độ 95%, hiệu suất cao",
+    "query_en": "Technical features: pressure 150°C, rate 95%, high efficiency",
+    "category": "unicode_units",
+    "note": "Test unicode and unit preservation"
+  },
+  {
+    "id": "q009_long",
+    "query_vi": "Tôi cần biết chi tiết về quy trình vận hành và bảo trì định kỳ cho thiết bị kompresor KT06101 bao gồm các bước kiểm tra, thay thế linh kiện, và các thông số cần giám sát trong quá trình vận hành hàng ngày",
+    "query_en": "I need detailed information about the operation and maintenance procedures for compressor KT06101 including inspection steps, component replacement, and parameters to monitor during daily operations",
+    "category": "long_query",
+    "note": "Test handling of long queries"
+  },
+  {
+    "id": "q010_multi_equipment",
+    "query_vi": "So sánh thông số KT06101 và KT06102?",
+    "query_en": "Compare specifications of KT06101 and KT06102?",
+    "expected_doc_count": "multiple",
+    "category": "multi_document",
+    "note": "Should retrieve from multiple documents"
+  }
+]
+
