@@ -440,38 +440,44 @@ class IngestionPipeline:
                 self._add_to_quarantine(pdf_path, "ocr_failed", "No text extracted")
                 return {"status": "quarantine", "reason": "ocr_failed"}
 
-            # Calculate content hash
+            # Calculate content hash (for tracking only, not for deduplication)
             content_hash = self._calculate_content_hash(full_text)
 
-            # Check for duplicates
+            # ===== CONTENT DEDUPLICATION DISABLED =====
+            # Only file_hash deduplication is active (exact file duplicates)
+            # Files with similar content (95-99% match) will be kept
+            # This allows multiple versions of documents to coexist
             with self._dedup_lock:
-                if content_hash in self.content_hash_map:
-                    # This is a duplicate
-                    if content_hash not in self.duplicate_groups:
-                        self.duplicate_groups[content_hash] = []
+                # COMMENTED OUT: Content-based deduplication
+                # if content_hash in self.content_hash_map:
+                #     # This is a duplicate
+                #     if content_hash not in self.duplicate_groups:
+                #         self.duplicate_groups[content_hash] = []
+                #
+                #     duplicate_info = {
+                #         "file_path": str(pdf_path),
+                #         "file_hash": file_hash,
+                #         "file_size": file_size,
+                #         "mtime": mtime,
+                #         "source_format": pdf_doc.source_format,
+                #     }
+                #     self.duplicate_groups[content_hash].append(duplicate_info)
+                #
+                #     return {"status": "duplicate"}
+                # else:
+                #     # First occurrence of this content
 
-                    duplicate_info = {
-                        "file_path": str(pdf_path),
-                        "file_hash": file_hash,
-                        "file_size": file_size,
-                        "mtime": mtime,
-                        "source_format": pdf_doc.source_format,
-                    }
-                    self.duplicate_groups[content_hash].append(duplicate_info)
-
-                    return {"status": "duplicate"}
-                else:
-                    # First occurrence of this content
-                    representative_info = {
-                        "file_path": str(pdf_path),
-                        "file_hash": file_hash,
-                        "file_size": file_size,
-                        "mtime": mtime,
-                        "source_format": pdf_doc.source_format,
-                        "pdf_doc": pdf_doc,
-                        "content_hash": content_hash,
-                    }
-                    self.content_hash_map[content_hash] = representative_info
+                # Always process as unique content (only file_hash dedup remains active)
+                representative_info = {
+                    "file_path": str(pdf_path),
+                    "file_hash": file_hash,
+                    "file_size": file_size,
+                    "mtime": mtime,
+                    "source_format": pdf_doc.source_format,
+                    "pdf_doc": pdf_doc,
+                    "content_hash": content_hash,
+                }
+                self.content_hash_map[content_hash] = representative_info
 
             # Process the representative document
             # Generate doc_id
