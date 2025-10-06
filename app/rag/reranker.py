@@ -125,8 +125,25 @@ class Reranker:
             # Default: simple score-based reranking
             reranked = self._score_based_rerank(query, results)
 
-        # Apply score threshold
-        reranked = [r for r in reranked if r.score >= self.config.score_threshold]
+        # Apply score threshold (but ensure minimum results)
+        MIN_RESULTS = 3  # Always keep at least 3 results for downstream processing
+        filtered = [r for r in reranked if r.score >= self.config.score_threshold]
+
+        # Safety: If threshold filtering removed too many results, keep top MIN_RESULTS
+        if len(filtered) < MIN_RESULTS and len(reranked) >= MIN_RESULTS:
+            logger.warning(
+                f"Score threshold {self.config.score_threshold} filtered to {len(filtered)} results. "
+                f"Keeping top {MIN_RESULTS} regardless of threshold."
+            )
+            filtered = reranked[:MIN_RESULTS]
+        elif len(filtered) == 0 and len(reranked) > 0:
+            # Extreme case: all filtered out, keep at least 1
+            logger.warning(
+                f"All results filtered by threshold. Keeping top result with score {reranked[0].score:.4f}"
+            )
+            filtered = reranked[:1]
+
+        reranked = filtered
 
         # Apply top-k
         reranked = reranked[: self.config.top_k]

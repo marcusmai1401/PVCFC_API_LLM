@@ -162,7 +162,7 @@ class ChainOfVerification:
         self,
         claims: List[VerificationClaim],
         retriever: Any,  # HybridRetriever instance
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.4,  # Lowered from 0.5 to reduce false warnings
     ) -> List[CoVeCheckpoint]:
         """
         Verify claims against the retrieval index.
@@ -234,7 +234,8 @@ class ChainOfVerification:
         self,
         original_answer: str,
         checkpoints: List[CoVeCheckpoint],
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.4,  # Lowered from 0.5 to reduce false warnings
+        global_confidence: float = 1.0,  # Overall answer confidence from generation
     ) -> Tuple[str, List[str]]:
         """
         Adjust answer based on verification results.
@@ -243,6 +244,7 @@ class ChainOfVerification:
             original_answer: Original generated answer
             checkpoints: Verification checkpoints
             confidence_threshold: Minimum confidence for claims
+            global_confidence: Overall answer confidence from generation (0.0-1.0)
 
         Returns:
             Tuple of (adjusted_answer, warnings)
@@ -257,22 +259,46 @@ class ChainOfVerification:
             if not cp.evidence_found or cp.confidence < confidence_threshold
         ]
 
-        if unverified_claims:
-            # Add warning about unverified claims
-            warning_msg = f"Lưu ý: {len(unverified_claims)}/{len(checkpoints)} thông tin chưa được xác thực đầy đủ từ tài liệu."
-            warnings.append(warning_msg)
+        # Smart warning logic: Only warn if BOTH verification AND global confidence suggest issues
+        # This prevents false warnings when answer is generated from vision/high-quality sources
+        if (
+            unverified_claims and global_confidence < 0.85
+        ):  # Only warn if global confidence is not high
+            # Build detailed warning with confidence scores
+            low_conf_count = len(
+                [cp for cp in unverified_claims if cp.confidence < 0.2]
+            )
+            med_conf_count = len(
+                [
+                    cp
+                    for cp in unverified_claims
+                    if 0.2 <= cp.confidence < confidence_threshold
+                ]
+            )
 
-            # For critical unverified claims, add inline caveats
-            for cp in unverified_claims:
-                if cp.confidence < 0.3:  # Very low confidence
-                    # Try to add caveat to the claim in the answer
-                    if cp.claim in adjusted_answer:
-                        adjusted_answer = adjusted_answer.replace(
-                            cp.claim, f"{cp.claim} (cần xác nhận thêm)"
+            # Severity-based warnings
+            if low_conf_count > 0 and global_confidence < 0.7:
+                # High severity: Low verification + Low global confidence
+                warning_msg = f"⚠️ Verification: {len(unverified_claims)}/{len(checkpoints)} claims have lower confidence (verification < {confidence_threshold:.1f}, answer confidence: {global_confidence:.0%})"
+                warnings.append(warning_msg)
+
+                # Add specific details for very low confidence claims (only top 2 to avoid spam)
+                shown = 0
+                for cp in unverified_claims:
+                    if cp.confidence < 0.2 and shown < 2:  # Very low confidence
+                        warnings.append(
+                            f"   • Low verification ({cp.confidence:.2f}): '{cp.claim[:60]}...'"
                         )
-                    warnings.append(
-                        f"Thông tin '{cp.claim[:50]}...' cần được xác nhận thêm."
-                    )
+                        shown += 1
+            elif (
+                med_conf_count > 0 and len(checkpoints) > 2 and global_confidence < 0.75
+            ):
+                # Medium severity: Moderate verification + Medium global confidence
+                avg_verif_conf = sum(cp.confidence for cp in unverified_claims) / len(
+                    unverified_claims
+                )
+                warning_msg = f"ℹ️ Note: Some claims need additional verification (avg verification: {avg_verif_conf:.2f}, answer confidence: {global_confidence:.0%})"
+                warnings.append(warning_msg)
 
         # Check overall verification rate
         verification_rate = (
@@ -281,11 +307,27 @@ class ChainOfVerification:
             else 1.0
         )
 
-        if verification_rate < 0.5:
-            # Low verification rate - add strong disclaimer
-            disclaimer = "\n\n⚠️ **Lưu ý quan trọng**: Phần lớn thông tin trong câu trả lời này chưa được xác thực đầy đủ từ tài liệu nguồn. Vui lòng kiểm tra lại với tài liệu gốc."
+        # Only warn if verification rate is critically low AND global confidence is not high
+        # This prevents false alarms when answer comes from high-quality sources (e.g., vision)
+        if verification_rate < 0.2 and global_confidence < 0.8:
+            # Calculate average confidence for context
+            avg_confidence = (
+                sum(cp.confidence for cp in checkpoints) / len(checkpoints)
+                if checkpoints
+                else 0.0
+            )
+
+            # Add detailed warning with metrics (only if global confidence suggests real issues)
+            disclaimer = (
+                f"\n\n⚠️ **Verification Notice**: "
+                f"This answer has limited verification coverage ({verification_rate:.0%} verified, avg: {avg_confidence:.2f}, confidence: {global_confidence:.0%}). "
+                f"Please cross-reference with source documents for critical information."
+            )
             adjusted_answer += disclaimer
-            warnings.append("Tỷ lệ xác thực thấp - cần kiểm tra tài liệu gốc")
+            warnings.append(
+                f"Low verification rate ({verification_rate:.0%}, global confidence: {global_confidence:.0%}) - "
+                f"{len(checkpoints)} claims checked, {len([cp for cp in checkpoints if cp.evidence_found])} verified"
+            )
 
         return adjusted_answer, warnings
 
@@ -294,7 +336,8 @@ class ChainOfVerification:
         answer: str,
         retriever: Any,
         max_claims: int = 5,
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.4,  # Lowered from 0.5
+        global_confidence: float = 1.0,  # Overall answer confidence from generation
     ) -> Dict[str, Any]:
         """
         Run full CoVe pipeline on an answer.
@@ -304,6 +347,7 @@ class ChainOfVerification:
             retriever: Retriever instance for evidence search
             max_claims: Maximum claims to extract and verify
             confidence_threshold: Minimum confidence threshold
+            global_confidence: Overall answer confidence from generation (0.0-1.0)
 
         Returns:
             Verification results with adjusted answer and metadata
@@ -326,9 +370,12 @@ class ChainOfVerification:
                 claims, retriever, confidence_threshold=confidence_threshold
             )
 
-            # Adjust answer based on verification
+            # Adjust answer based on verification (pass global_confidence for smart warning logic)
             adjusted_answer, warnings = await self.adjust_answer(
-                answer, checkpoints, confidence_threshold=confidence_threshold
+                answer,
+                checkpoints,
+                confidence_threshold=confidence_threshold,
+                global_confidence=global_confidence,
             )
 
             # Calculate metrics

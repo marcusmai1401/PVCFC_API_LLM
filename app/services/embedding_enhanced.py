@@ -363,6 +363,34 @@ class UniversalEmbeddingService:
         # All retries exhausted
         return None
 
+    def _run_async_in_thread(self, coro):
+        """
+        Run an async coroutine in a new event loop on a separate thread.
+        This avoids 'asyncio.run() cannot be called from a running event loop' error.
+
+        Args:
+            coro: Coroutine to run
+
+        Returns:
+            Result from the coroutine
+        """
+        import concurrent.futures
+        import threading
+
+        def run_in_new_loop():
+            """Run coroutine in a new event loop."""
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+
+        # Execute in thread pool to avoid blocking
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            return future.result()
+
     def _embed_texts_gemini(self, texts: List[str]) -> np.ndarray:
         """Embed texts using Gemini API with async concurrency and micro-batching."""
         try:
@@ -389,7 +417,10 @@ class UniversalEmbeddingService:
                     all_texts_to_embed.append(text)
 
             # Run async embedding with concurrency control
-            embeddings_dict = asyncio.run(self._embed_texts_async(all_texts_to_embed))
+            # Use helper to avoid "asyncio.run() cannot be called from a running event loop"
+            embeddings_dict = self._run_async_in_thread(
+                self._embed_texts_async(all_texts_to_embed)
+            )
 
             # Collect embeddings in order, handling failures
             for text in all_texts_to_embed:

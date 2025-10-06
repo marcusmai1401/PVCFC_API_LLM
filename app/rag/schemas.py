@@ -134,6 +134,16 @@ class AskResponse(BaseModel):
     warnings: Optional[List[str]] = Field(
         default=None, description="Any warnings or degraded mode indicators"
     )
+    # Debug fields for UI
+    retrieval_details: Optional[Dict[str, Any]] = Field(
+        default=None, description="Detailed retrieval results (BM25 + FAISS)"
+    )
+    reranking_details: Optional[Dict[str, Any]] = Field(
+        default=None, description="Detailed reranking information"
+    )
+    generation_details: Optional[Dict[str, Any]] = Field(
+        default=None, description="Detailed generation metadata"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

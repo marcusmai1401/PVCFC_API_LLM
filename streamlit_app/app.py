@@ -74,9 +74,9 @@ def initialize_session_state():
     if "api_base_url" not in st.session_state:
         st.session_state.api_base_url = "http://127.0.0.1:8000"
     if "enable_vision" not in st.session_state:
-        st.session_state.enable_vision = False
+        st.session_state.enable_vision = True  # Enable by default
     if "enable_embedding" not in st.session_state:
-        st.session_state.enable_embedding = False
+        st.session_state.enable_embedding = True  # Enable by default
     if "enable_verbose_logging" not in st.session_state:
         st.session_state.enable_verbose_logging = False
     if "show_debug_console_mini" not in st.session_state:

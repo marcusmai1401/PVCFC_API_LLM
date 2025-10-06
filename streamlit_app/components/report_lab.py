@@ -40,7 +40,10 @@ def render():
         # Template selection
         st.write("Template")
         template_source = st.radio(
-            "Template Source", ["Built-in", "Upload", "Custom"], horizontal=True
+            "Template Source",
+            ["Built-in", "Upload", "Custom"],
+            horizontal=True,
+            key="report_template_source",
         )
 
         if template_source == "Built-in":
@@ -55,11 +58,16 @@ def render():
 
         # Format options
         output_format = st.radio(
-            "Output Format", ["Markdown", "HTML", "Word (Phase 2)"], horizontal=True
+            "Output Format",
+            ["Markdown", "HTML", "Word (Phase 2)"],
+            horizontal=True,
+            key="report_output_format",
         )
 
         # Language
-        language = st.radio("Language", ["vi", "en"], horizontal=True)
+        language = st.radio(
+            "Language", ["vi", "en"], horizontal=True, key="report_language"
+        )
 
         # Generate button
         if st.button("📝 Generate Report", type="primary", use_container_width=True):

@@ -11,6 +11,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
+# Import table extractor for formatting
+try:
+    from app.ingestion.table_extractor import TableExtractor
+except ImportError:
+    TableExtractor = None
+
 # Import page utilities for consistent page handling
 try:
     from app.utils.page_utils import normalize_page_metadata
@@ -24,6 +30,40 @@ except ImportError:
             # Try to extract from common fields
             metadata["page"] = metadata.get("page_start", 1)
         return metadata
+
+
+def extract_page_from_content(text: str) -> Optional[int]:
+    """
+    Extract page number from content markers like <!-- Page 15 -->
+
+    This is a CRITICAL function to fix page metadata bug.
+    Many chunks have <!-- Page X --> markers in their text but metadata.page is wrong.
+
+    Args:
+        text: Chunk text that may contain page markers
+
+    Returns:
+        Page number if found, None otherwise
+    """
+    if not text:
+        return None
+
+    # Look for <!-- Page X --> marker (most common format)
+    match = re.search(r"<!--\s*Page\s+(\d+)\s*-->", text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # Look for [Page X] format
+    match = re.search(r"\[\s*Page\s+(\d+)\s*\]", text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # Look for "Page X" at start of text
+    match = re.search(r"^\s*Page\s+(\d+)\s*[:\-]?", text, re.IGNORECASE | re.MULTILINE)
+    if match:
+        return int(match.group(1))
+
+    return None
 
 
 @dataclass
@@ -118,8 +158,14 @@ class TextChunker:
             # Ensure metadata has page field
             chunk_metadata = metadata.copy()
 
-            # If page_nums provided and page not in metadata, add it
-            if page_nums and "page" not in chunk_metadata:
+            # CRITICAL FIX: Extract page number from chunk content first
+            # This fixes the bug where metadata.page is wrong but content has <!-- Page X -->
+            content_page = extract_page_from_content(chunk_text)
+            if content_page is not None:
+                chunk_metadata["page"] = content_page
+                logger.debug(f"Extracted page {content_page} from chunk content")
+            # Fallback: If page_nums provided and page not in metadata, add it
+            elif page_nums and "page" not in chunk_metadata:
                 chunk_metadata["page"] = page_nums[0]
 
             # Normalize metadata to ensure page field exists
@@ -372,6 +418,9 @@ class TextChunker:
         doc_id = doc_id or document.get("file_name", "unknown")
         all_chunks = []
 
+        # Initialize table extractor for formatting (if available)
+        table_extractor = TableExtractor() if TableExtractor else None
+
         # Get document metadata
         doc_metadata = {
             "title": document.get("title"),
@@ -385,13 +434,24 @@ class TextChunker:
         for page in pages:
             page_num = page.get("page_num", 0)
             page_text = page.get("text", "")
+            page_tables = page.get("tables", [])
+
+            # Integrate tables into page text if present
+            if page_tables and table_extractor:
+                page_text = self._integrate_tables_into_text(
+                    page_text, page_tables, table_extractor
+                )
 
             if page_text:
                 # Chunk the page text
                 page_chunks = self.chunk_text(
                     text=page_text,
                     doc_id=doc_id,
-                    metadata={**doc_metadata, "page": page_num},
+                    metadata={
+                        **doc_metadata,
+                        "page": page_num,
+                        "has_tables": bool(page_tables),
+                    },
                     page_nums=[page_num],
                 )
 
@@ -403,6 +463,59 @@ class TextChunker:
 
         logger.info(f"Created {len(all_chunks)} chunks from document {doc_id}")
         return all_chunks
+
+    def _integrate_tables_into_text(
+        self, page_text: str, page_tables: List[Dict], table_extractor
+    ) -> str:
+        """
+        Integrate formatted tables into page text
+
+        Args:
+            page_text: Original page text
+            page_tables: List of table dictionaries from page
+            table_extractor: TableExtractor instance for formatting
+
+        Returns:
+            Text with tables integrated in Markdown format
+        """
+        if not page_tables or not table_extractor:
+            return page_text
+
+        try:
+            # Reconstruct TableData objects from dicts
+            from app.ingestion.table_extractor import TableData
+
+            formatted_tables = []
+            for table_dict in page_tables:
+                # Reconstruct TableData from dict
+                table_data = TableData(
+                    page_num=table_dict.get("page_num", 0),
+                    table_index=table_dict.get("table_index", 0),
+                    bbox=tuple(table_dict.get("bbox", (0, 0, 0, 0))),
+                    row_count=table_dict.get("row_count", 0),
+                    col_count=table_dict.get("col_count", 0),
+                    cells=table_dict.get("cells", []),
+                    markdown=table_dict.get("markdown", ""),
+                    confidence=table_dict.get("confidence", 0.0),
+                )
+
+                # Format table for chunk inclusion
+                formatted = table_extractor.format_table_for_chunk(table_data)
+                formatted_tables.append(formatted)
+
+            # Append tables to end of page text
+            if formatted_tables:
+                # Add separator
+                page_text += "\n\n" + "=" * 80 + "\n"
+                page_text += "\n".join(formatted_tables)
+                logger.debug(
+                    f"Integrated {len(formatted_tables)} table(s) into page text"
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to integrate tables into text: {e}")
+
+        return page_text
 
     def save_chunks(self, chunks: List[TextChunk], output_file: Path):
         """Save chunks to JSON file"""

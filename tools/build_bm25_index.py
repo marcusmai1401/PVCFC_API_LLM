@@ -161,6 +161,89 @@ def load_chunks_from_jsonl(jsonl_file: Path) -> List[Dict]:
     return chunks
 
 
+def load_table_index(table_index_file: Path) -> List[Dict]:
+    """Load table index from JSON file"""
+    if not table_index_file.exists():
+        logger.warning(f"Table index not found: {table_index_file}")
+        return []
+
+    logger.info(f"Loading table index from: {table_index_file}")
+
+    try:
+        with open(table_index_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        tables = data.get("tables", [])
+        logger.info(f"Loaded {len(tables)} tables from index")
+
+        # Count tables with torque data
+        torque_tables = sum(1 for t in tables if t.get("has_torque_data", False))
+        logger.info(f"  - {torque_tables} tables contain torque data")
+
+        return tables
+
+    except Exception as e:
+        logger.error(f"Failed to load table index: {e}")
+        return []
+
+
+def augment_chunks_with_table_data(
+    chunks: List[Dict], table_index: List[Dict]
+) -> List[Dict]:
+    """
+    Augment chunks with table-specific boosting metadata.
+
+    For chunks that contain tables, add:
+    - has_table flag
+    - table_keywords for boosting
+    - has_torque_data flag
+    """
+    logger.info("Augmenting chunks with table metadata...")
+
+    # Build chunk_id to table mapping
+    chunk_to_tables = {}
+    for table in table_index:
+        chunk_id = table.get("chunk_id")
+        if chunk_id:
+            if chunk_id not in chunk_to_tables:
+                chunk_to_tables[chunk_id] = []
+            chunk_to_tables[chunk_id].append(table)
+
+    # Augment chunks
+    augmented_count = 0
+    for chunk in chunks:
+        chunk_id = chunk.get("chunk_id")
+        if chunk_id in chunk_to_tables:
+            tables = chunk_to_tables[chunk_id]
+
+            # Mark as having tables
+            chunk["has_table"] = True
+            chunk["table_count"] = len(tables)
+
+            # Aggregate keywords from all tables in chunk
+            all_keywords = set()
+            has_torque = False
+            for table in tables:
+                keywords = table.get("keywords", [])
+                all_keywords.update(keywords)
+                if table.get("has_torque_data", False):
+                    has_torque = True
+
+            chunk["table_keywords"] = list(all_keywords)
+            chunk["has_torque_data"] = has_torque
+
+            # Boost text with keywords for BM25
+            # Repeat important keywords to increase their weight
+            if all_keywords:
+                boost_text = " ".join(list(all_keywords) * 2)  # Repeat 2x for boost
+                chunk["text"] = f"{chunk['text']}\n\n[TABLE_KEYWORDS: {boost_text}]"
+
+            augmented_count += 1
+
+    logger.info(f"Augmented {augmented_count} chunks with table metadata")
+    return chunks
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build BM25 index from documents")
     parser.add_argument(
@@ -198,6 +281,19 @@ def main():
         help="Path to chunks JSONL file (alternative to processing PDFs)",
     )
 
+    parser.add_argument(
+        "--table-index",
+        type=Path,
+        help="Path to table_index.json file for table-aware indexing",
+    )
+
+    parser.add_argument(
+        "--enable-table-boost",
+        action="store_true",
+        default=True,
+        help="Enable table keyword boosting in BM25 (default: True)",
+    )
+
     args = parser.parse_args()
 
     logger.info("=" * 80)
@@ -228,6 +324,26 @@ def main():
             sys.exit(1)
 
         chunk_dicts = process_pdfs(args.input_dir, args.chunks_dir, args.enable_ocr)
+
+    # Load table index if available
+    table_index = []
+    if args.table_index:
+        table_index = load_table_index(args.table_index)
+    else:
+        # Try to auto-detect table_index.json in standard location
+        if args.chunks_jsonl:
+            # Assume table_index.json is in same directory as chunks.jsonl
+            auto_table_index = args.chunks_jsonl.parent / "table_index.json"
+            if auto_table_index.exists():
+                logger.info(f"Auto-detected table index: {auto_table_index}")
+                table_index = load_table_index(auto_table_index)
+
+    # Augment chunks with table metadata if available and enabled
+    if table_index and args.enable_table_boost:
+        chunk_dicts = augment_chunks_with_table_data(chunk_dicts, table_index)
+        logger.info("Table-aware BM25 indexing enabled")
+    else:
+        logger.info("Standard BM25 indexing (no table boost)")
 
     # Build BM25 index
     build_bm25_index(chunk_dicts, args.index_dir)

@@ -678,34 +678,54 @@ def render(vision_mode=False):
                     st.info("No citations found")
 
             with tab6:
-                # Vision Verify Tab
-                if st.session_state.get("enable_vision_verify", False):
-                    st.markdown("### 👁️ Vision Verification")
+                # Vision Verify Tab - Check if vision was actually used in generation
+                generation_details = results.get("generation_details", {})
+                vision_enabled = generation_details.get("vision_enabled", False)
+                vision_meta = meta.get("vision_generation", {})
 
-                    vision_info = meta.get("vision_verify", {})
-                    if vision_info:
+                if vision_meta or vision_enabled:
+                    st.markdown("### 👁️ Vision Generation Used")
+
+                    # Show vision generation metadata
+                    if vision_meta:
                         col_v1, col_v2, col_v3 = st.columns(3)
                         with col_v1:
-                            pages_checked = vision_info.get("pages_checked", 0)
-                            st.metric("Pages Checked", pages_checked)
+                            pages_used = len(vision_meta.get("pages_used", []))
+                            st.metric("PDF Pages Used", pages_used)
                         with col_v2:
-                            claims_verified = vision_info.get("claims_verified", 0)
-                            st.metric("Claims Verified", claims_verified)
+                            pages_failed = len(vision_meta.get("pages_failed", []))
+                            st.metric("Pages Failed", pages_failed)
                         with col_v3:
-                            verification_rate = vision_info.get("verification_rate", 0)
-                            st.metric("Verification Rate", f"{verification_rate:.1%}")
+                            success_rate = (
+                                (pages_used / (pages_used + pages_failed) * 100)
+                                if (pages_used + pages_failed) > 0
+                                else 0
+                            )
+                            st.metric("Success Rate", f"{success_rate:.1f}%")
 
-                        corrections = vision_info.get("corrections", [])
-                        if corrections:
-                            st.markdown("**Corrections Applied:**")
-                            for corr in corrections:
-                                st.write(f"- {corr}")
+                        # Show page details
+                        pages_info = vision_meta.get("pages_used", [])
+                        if pages_info:
+                            st.markdown("**PDF Pages Processed:**")
+                            for page_info in pages_info:
+                                page_num = page_info.get("page", "N/A")
+                                doc_id = page_info.get("doc_id", "Unknown")
+                                st.write(f"- Page {page_num} from {doc_id[:50]}...")
                     else:
-                        st.info("No vision verification data available")
+                        st.info(
+                            "✅ Vision generation was enabled but no detailed metadata available"
+                        )
                 else:
-                    st.warning(
-                        "Vision Verification is disabled. Enable in sidebar settings."
-                    )
+                    # Check if vision is enabled in settings
+                    if st.session_state.get("enable_vision", False):
+                        st.info(
+                            "👁️ Vision is enabled in settings, but was not used for this query.\n"
+                            "This could mean the answer was generated from text only."
+                        )
+                    else:
+                        st.warning(
+                            "Vision features are disabled. Enable 'Vision Features' in sidebar settings to use vision generation."
+                        )
 
             with tab7:
                 # Metrics Tab
@@ -772,11 +792,15 @@ def render(vision_mode=False):
                 st.caption("Click citations to open PDF viewer (Phase 2)")
 
             with tab6:
-                if st.session_state.get("enable_vision_verify", False):
-                    st.info("👁️ Vision verification results will show here")
-                    st.caption("Claims checked and corrections applied")
+                if st.session_state.get("enable_vision", False):
+                    st.info(
+                        "👁️ Vision generation info will show here after running a query"
+                    )
+                    st.caption("PDF pages used, success rate, and page details")
                 else:
-                    st.warning("Vision Verification is disabled. Enable in sidebar.")
+                    st.warning(
+                        "Vision features disabled. Enable 'Vision Features' in sidebar."
+                    )
 
             with tab7:
                 st.info("📈 Performance metrics will be displayed here")

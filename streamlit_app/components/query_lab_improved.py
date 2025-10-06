@@ -334,19 +334,27 @@ def format_citations_enhanced(citations: List[Dict]) -> pd.DataFrame:
 
     formatted = []
     for i, cit in enumerate(citations, 1):
-        # Get both score and confidence
-        score = cit.get("score", 0)
-        confidence = cit.get(
-            "confidence", cit.get("relevance_score", 0)
-        )  # fallback to relevance_score
+        # Get score (optional field from API)
+        score_value = cit.get("score")
+        if score_value is not None:
+            score_display = f"{score_value:.3f}"
+        else:
+            score_display = "N/A"
+
+        # Get confidence (priority field)
+        confidence = cit.get("confidence", cit.get("relevance_score", None))
+        if isinstance(confidence, (int, float)):
+            confidence_display = f"{float(confidence):.3f}"
+        else:
+            confidence_display = "N/A"
 
         formatted.append(
             {
                 "#": i,
                 "Document": cit.get("doc_id", "Unknown"),
                 "Page": cit.get("page", "N/A"),
-                "Score": f"{score:.3f}",
-                "Confidence": f"{confidence:.3f}",
+                "Score": score_display,
+                "Confidence": confidence_display,
                 "Has BBox": "✓" if cit.get("bbox") else "✗",
                 "Text Preview": (cit.get("text", "")[:100] + "...")
                 if cit.get("text")
@@ -492,6 +500,69 @@ def render_citations_with_viewer(citations: List[Dict], api_base_url: str, logge
                     )
                     del st.session_state[f"show_pdf_{idx}"]
                     st.rerun()
+
+
+def normalize_api_response(results: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize API response to unified UI-friendly structure.
+
+    Transforms top-level retrieval_details, reranking_details, generation_details
+    into a consistent ui dict for easier rendering.
+
+    Args:
+        results: Raw API response
+
+    Returns:
+        Normalized dict with ui['retrieval'], ui['rerank'], ui['generation'], ui['vision']
+    """
+    ui = {}
+
+    # 1) Retrieval details
+    retrieval_details = results.get("retrieval_details") or {}
+    ui["retrieval"] = {
+        "bm25": retrieval_details.get("bm25", []),
+        "faiss": retrieval_details.get("faiss", []),
+        "total_retrieved": retrieval_details.get("total_retrieved", 0),
+        "from_cache": retrieval_details.get("from_cache", False),
+    }
+
+    # 2) Rerank details
+    reranking_details = results.get("reranking_details") or {}
+    ui["rerank"] = {
+        "method": reranking_details.get("method", "unknown"),
+        "results": reranking_details.get("results", []),
+        "input_count": reranking_details.get("input_count", 0),
+        "output_count": reranking_details.get("output_count", 0),
+        "from_cache": reranking_details.get("from_cache", False),
+    }
+
+    # 3) Generation details
+    meta = results.get("meta", {})
+    generation_details = results.get("generation_details") or {}
+    breakdown = meta.get("breakdown", {})
+
+    ui["generation"] = {
+        "model": generation_details.get("model")
+        or meta.get("model_generation", "Unknown"),
+        "latency_ms": breakdown.get("generate_ms", 0),
+        "total_tokens": generation_details.get("total_tokens", 0),
+        "estimated_cost": generation_details.get("estimated_cost", 0.0),
+        "prompt_info": generation_details.get("prompt_info", {}),
+        "tier": generation_details.get("tier", "unknown"),
+        "language": generation_details.get("language", "unknown"),
+        "confidence": generation_details.get("confidence", 0.0),
+    }
+
+    # 4) Vision details
+    vision_meta = meta.get("vision_generation", {})
+    vision_enabled = generation_details.get("vision_enabled", False)
+
+    ui["vision"] = {
+        "enabled": bool(vision_meta) or bool(vision_enabled),
+        "pages_used": vision_meta.get("pages_used", []),
+        "pages_failed": vision_meta.get("pages_failed", []),
+    }
+
+    return ui
 
 
 def render(vision_mode=False):
@@ -773,6 +844,11 @@ def render(vision_mode=False):
         if st.session_state.query_results:
             results = st.session_state.query_results
 
+            # Normalize API response for consistent UI rendering
+            ui = normalize_api_response(results)
+            # Keep meta available for metrics and timeline tabs
+            meta = results.get("meta", {})
+
             # Result tabs with actual data
             tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
                 [
@@ -838,76 +914,75 @@ def render(vision_mode=False):
                 # Retrieval Tab
                 st.markdown("### 🔍 Retrieval Results")
 
-                meta = results.get("meta", {})
-                retrieval_info = meta.get("retrieval", {})
+                retrieval_info = ui["retrieval"]
 
                 col_r1, col_r2, col_r3 = st.columns(3)
                 with col_r1:
                     st.markdown("**BM25 Results**")
-                    bm25_results = retrieval_info.get("bm25_results", [])
+                    bm25_results = retrieval_info.get("bm25", [])
                     st.write(f"Found {len(bm25_results)} documents")
                     if bm25_results:
                         for i, doc in enumerate(bm25_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                            st.caption(
+                                f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
+                            )
 
                 with col_r2:
                     st.markdown("**FAISS Results**")
-                    faiss_results = retrieval_info.get("faiss_results", [])
+                    faiss_results = retrieval_info.get("faiss", [])
                     st.write(f"Found {len(faiss_results)} documents")
                     if faiss_results:
                         for i, doc in enumerate(faiss_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                            st.caption(
+                                f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
+                            )
 
                 with col_r3:
-                    st.markdown("**RRF Fused Results**")
-                    fused_results = retrieval_info.get("fused_results", [])
-                    st.write(f"Fused to {len(fused_results)} documents")
-                    if fused_results:
-                        for i, doc in enumerate(fused_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                    st.markdown("**Total Retrieved**")
+                    total = retrieval_info.get("total_retrieved", 0)
+                    from_cache = retrieval_info.get("from_cache", False)
+                    st.metric("Documents", total)
+                    if from_cache:
+                        st.caption("✓ From cache")
 
             with tab3:
                 # Rerank Tab
                 st.markdown("### 📊 Reranking Details")
 
-                rerank_info = meta.get("rerank", {})
+                rerank_info = ui["rerank"]
 
-                col_rr1, col_rr2 = st.columns(2)
+                col_rr1, col_rr2, col_rr3 = st.columns(3)
                 with col_rr1:
-                    st.markdown("**Before Reranking**")
-                    before = rerank_info.get("before", [])
-                    st.write(f"Input: {len(before)} documents")
-                    if before:
-                        df_before = pd.DataFrame(before[:10])
-                        if not df_before.empty:
-                            st.dataframe(
-                                df_before[["doc_id", "score"]]
-                                if "doc_id" in df_before.columns
-                                else df_before,
-                                height=200,
-                            )
-
+                    input_count = rerank_info.get("input_count", 0)
+                    st.metric("Input", f"{input_count} docs")
                 with col_rr2:
-                    st.markdown("**After Reranking**")
-                    after = rerank_info.get("after", [])
-                    st.write(f"Output: {len(after)} documents")
+                    output_count = rerank_info.get("output_count", 0)
+                    st.metric("Output", f"{output_count} docs")
+                with col_rr3:
                     method = rerank_info.get("method", "unknown")
-                    st.caption(f"Method: {method}")
-                    if after:
-                        df_after = pd.DataFrame(after[:10])
-                        if not df_after.empty:
-                            st.dataframe(
-                                df_after[["doc_id", "score"]]
-                                if "doc_id" in df_after.columns
-                                else df_after,
-                                height=200,
-                            )
+                    st.metric("Method", method)
+
+                # Show reranked results
+                st.markdown("**Top Reranked Results:**")
+                reranked = rerank_info.get("results", [])
+                if reranked:
+                    for result in reranked[:10]:
+                        rank = result.get("rank", 0)
+                        doc_id = result.get("doc_id", "Unknown")[:50]
+                        score = result.get("score", 0)
+                        page = result.get("page", "N/A")
+                        text_preview = result.get("text", "")[:80]
+                        st.caption(f"{rank}. {doc_id} (p.{page}) - Score: {score:.4f}")
+                        if text_preview:
+                            st.text(f"   {text_preview}...")
+                else:
+                    st.info("No reranking results available")
 
             with tab4:
                 # Generation Tab
                 st.markdown("### 🤖 Generation Details")
 
-                gen_info = meta.get("generation", {})
+                gen_info = ui["generation"]
 
                 col_g1, col_g2, col_g3, col_g4 = st.columns(4)
                 with col_g1:
@@ -918,15 +993,27 @@ def render(vision_mode=False):
                     st.metric("Latency", f"{latency:.0f}ms")
                 with col_g3:
                     tokens = gen_info.get("total_tokens", 0)
-                    st.metric("Total Tokens", tokens)
+                    st.metric("Total Tokens", tokens if tokens > 0 else "N/A")
                 with col_g4:
                     cost = gen_info.get("estimated_cost", 0)
-                    st.metric("Est. Cost", f"${cost:.4f}")
+                    st.metric("Est. Cost", f"${cost:.4f}" if cost > 0 else "N/A")
+
+                # Additional generation info
+                col_g5, col_g6 = st.columns(2)
+                with col_g5:
+                    tier = gen_info.get("tier", "unknown")
+                    st.caption(f"**Tier:** {tier}")
+                with col_g6:
+                    language = gen_info.get("language", "unknown")
+                    st.caption(f"**Language:** {language}")
 
                 # Prompt snapshot (redacted)
                 st.markdown("**Prompt Structure**")
                 prompt_info = gen_info.get("prompt_info", {})
-                st.json(prompt_info)
+                if prompt_info:
+                    st.json(prompt_info)
+                else:
+                    st.info("Prompt info not available")
 
             with tab5:
                 # Enhanced Citations Tab
@@ -945,34 +1032,60 @@ def render(vision_mode=False):
                     st.info("No citations found")
 
             with tab6:
-                # Vision Verify Tab
-                if st.session_state.get("enable_vision_verify", False):
-                    st.markdown("### 👁️ Vision Verification")
+                # Vision Verify Tab - Check if vision was actually used in generation
+                vision_info = ui["vision"]
 
-                    vision_info = meta.get("vision_verify", {})
-                    if vision_info:
+                if vision_info.get("enabled", False):
+                    st.markdown("### 👁️ Vision Generation Used")
+
+                    pages_used = vision_info.get("pages_used", [])
+                    pages_failed = vision_info.get("pages_failed", [])
+
+                    if pages_used or pages_failed:
                         col_v1, col_v2, col_v3 = st.columns(3)
                         with col_v1:
-                            pages_checked = vision_info.get("pages_checked", 0)
-                            st.metric("Pages Checked", pages_checked)
+                            st.metric("PDF Pages Used", len(pages_used))
                         with col_v2:
-                            claims_verified = vision_info.get("claims_verified", 0)
-                            st.metric("Claims Verified", claims_verified)
+                            st.metric("Pages Failed", len(pages_failed))
                         with col_v3:
-                            verification_rate = vision_info.get("verification_rate", 0)
-                            st.metric("Verification Rate", f"{verification_rate:.1%}")
+                            total_pages = len(pages_used) + len(pages_failed)
+                            success_rate = (
+                                (len(pages_used) / total_pages * 100)
+                                if total_pages > 0
+                                else 0
+                            )
+                            st.metric("Success Rate", f"{success_rate:.1f}%")
 
-                        corrections = vision_info.get("corrections", [])
-                        if corrections:
-                            st.markdown("**Corrections Applied:**")
-                            for corr in corrections:
-                                st.write(f"- {corr}")
+                        # Show page details
+                        if pages_used:
+                            st.markdown("**PDF Pages Processed:**")
+                            for page_info in pages_used:
+                                page_num = page_info.get("page", "N/A")
+                                pdf_path = page_info.get("pdf_path", "Unknown")
+                                # Extract filename from path
+                                import os
+
+                                filename = (
+                                    os.path.basename(pdf_path)
+                                    if pdf_path != "Unknown"
+                                    else "Unknown"
+                                )
+                                st.write(f"- Page {page_num} from {filename[:60]}...")
                     else:
-                        st.info("No vision verification data available")
+                        st.info(
+                            "✅ Vision generation was enabled but no detailed metadata available"
+                        )
                 else:
-                    st.warning(
-                        "Vision Verification is disabled. Enable in sidebar settings."
-                    )
+                    # Check if vision is enabled in settings
+                    if st.session_state.get("enable_vision", False):
+                        st.info(
+                            "👁️ Vision is enabled in settings, but was not used for this query.\n"
+                            "This could mean the answer was generated from text only."
+                        )
+                    else:
+                        st.warning(
+                            "Vision features are disabled. Enable 'Vision Features' in sidebar settings to use vision generation."
+                        )
 
             with tab7:
                 # Metrics Tab

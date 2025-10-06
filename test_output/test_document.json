@@ -1,0 +1,65 @@
+{
+  "file_path": "test_docs\\test_table_sample.pdf",
+  "file_name": "test_table_sample.pdf",
+  "title": "",
+  "author": "",
+  "subject": "",
+  "keywords": "",
+  "creator": "",
+  "producer": "",
+  "creation_date": null,
+  "modification_date": null,
+  "num_pages": 1,
+  "total_chars": 228,
+  "total_words": 39,
+  "pages": [
+    {
+      "page_num": 1,
+      "text": "Test Document with Table This is a test document to verify table extraction. Below is a table with torque specifications: Size Torque (Nm) Type M36 1200 Bolt M42 1650 Bolt M48 2150 Bolt Table 1: Anchor bolt torque specifications",
+      "char_count": 228,
+      "word_count": 39,
+      "line_count": 1,
+      "tables": [
+        {
+          "page_num": 1,
+          "table_index": 0,
+          "bbox": [
+            50.0,
+            160.0,
+            410.0,
+            280.0
+          ],
+          "row_count": 4,
+          "col_count": 3,
+          "cells": [
+            [
+              "Size",
+              "Torque (Nm)",
+              "Type"
+            ],
+            [
+              "M36",
+              "1200",
+              "Bolt"
+            ],
+            [
+              "M42",
+              "1650",
+              "Bolt"
+            ],
+            [
+              "M48",
+              "2150",
+              "Bolt"
+            ]
+          ],
+          "markdown": "| Size | Torque (Nm) | Type |\n| --- | --- | --- |\n| M36 | 1200 | Bolt |\n| M42 | 1650 | Bolt |\n| M48 | 2150 | Bolt |",
+          "confidence": 1.0
+        }
+      ],
+      "images": null
+    }
+  ],
+  "processing_timestamp": "2025-10-01T16:42:25.666056",
+  "source_format": "vector"
+}

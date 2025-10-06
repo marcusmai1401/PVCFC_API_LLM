@@ -17,7 +17,7 @@ The system is now functional and ready for use.
 ### Indices
 - **BM25 Index**: ✅ Loaded (570 documents)
 - **FAISS Index**: ✅ Loaded (2 documents)
-- **Embedding Model**: text-embedding-004 (Gemini) or local (if configured)
+- **Embedding Model**: gemini-embedding-001 (768D, released Aug 2024)
 
 ### Endpoints Tested
 - `/healthz`: ✅ Working

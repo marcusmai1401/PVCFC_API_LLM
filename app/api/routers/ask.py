@@ -181,6 +181,13 @@ async def ask_question(
                 query=request.query, results=retrieval_results
             )
 
+            # DIAGNOSTIC: Log rerank results
+            logger.info(
+                f"[DIAGNOSTIC] Rerank input: {len(retrieval_results)} results, "
+                f"method={rerank_method}, top_k={rerank_top_k}"
+            )
+            logger.info(f"[DIAGNOSTIC] Rerank output: {len(reranked_results)} results")
+
             # Safety fallback: if cross-encoder produced zero results, retry with score-based reranker
             if (
                 len(reranked_results) == 0
@@ -199,6 +206,9 @@ async def ask_question(
                     reranked_results = _fallback_reranker.rerank(
                         query=request.query, results=retrieval_results
                     )
+                    logger.info(
+                        f"[DIAGNOSTIC] Fallback rerank output: {len(reranked_results)} results"
+                    )
                 except Exception as _:
                     # Keep as empty; downstream will handle
                     pass
@@ -208,7 +218,12 @@ async def ask_question(
             rerank_time = (time.time() - rerank_start) * 1000
 
             # Cache the reranked results for future requests
-            cache.set(*cache_key_data, results=reranked_results)
+            cache.set(
+                cache_key_data[0],  # query (normalized)
+                reranked_results,  # results to cache
+                cache_key_data[1],  # filters (dict or None)
+                cache_key_data[2],  # k (max_context)
+            )
             logger.info(
                 f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results"
             )
@@ -233,8 +248,12 @@ async def ask_question(
 
         if request.execution_mode != "light_only":  # Skip CoVe in light mode
             cove_start = time.time()
+            # Pass global_confidence from generation to CoVe for smart warning logic
             verification_result = await cove.run_verification(
-                answer=final_answer, retriever=retriever, max_claims=3
+                answer=final_answer,
+                retriever=retriever,
+                max_claims=3,
+                global_confidence=generated_answer.confidence,  # Pass generation confidence
             )
             cove_time = (time.time() - cove_start) * 1000
 
@@ -242,7 +261,10 @@ async def ask_question(
             final_answer = verification_result["adjusted_answer"]
             warnings = verification_result.get("warnings", [])
 
-            logger.debug(f"[{trace_id}] CoVe verification in {cove_time:.0f}ms")
+            logger.debug(
+                f"[{trace_id}] CoVe verification in {cove_time:.0f}ms "
+                f"(global_conf={generated_answer.confidence:.2f}, verification_rate={verification_result.get('verification_rate', 0):.0%})"
+            )
 
         # Calculate total latency
         total_latency = (time.time() - start_time) * 1000
@@ -302,11 +324,19 @@ async def ask_question(
             except Exception:
                 pass
 
+            # Extract bbox if available
+            bbox_data = None
+            try:
+                if hasattr(citation, "bbox") and citation.bbox:
+                    bbox_data = citation.bbox
+            except Exception:
+                pass
+
             citations_list.append(
                 Citation(
                     doc_id=citation.doc_id,
                     page=page_num,
-                    bbox=None,  # Add bbox if available in citation
+                    bbox=bbox_data,
                     confidence=confidence,
                     **kwargs,
                 )
@@ -338,7 +368,13 @@ async def ask_question(
                                 r.metadata.get("doc_id") if r.metadata else None
                             )
                             if _docid and _docid in _map:
-                                pdf_path_value = _map[_docid]
+                                # Extract pdf_path from doc_info dict
+                                doc_info = _map[_docid]
+                                if isinstance(doc_info, dict):
+                                    pdf_path_value = doc_info.get("pdf_path")
+                                elif isinstance(doc_info, str):
+                                    # Legacy format: direct string path
+                                    pdf_path_value = doc_info
                     except Exception:
                         pass
 
@@ -480,11 +516,112 @@ Provide a direct, helpful answer in 1-2 sentences:"""
         # Backward compatibility: add "model" alias for "model_generation"
         meta_dict["model"] = meta_dict["model_generation"]
 
-        # Include vision generation metadata if present
+        # Include vision generation metadata if present (Phase 2 - Day 11 & 12)
         if isinstance(generated_answer.metadata, dict):
             vision_meta = generated_answer.metadata.get("vision_generation")
             if vision_meta is not None:
                 meta_dict["vision_generation"] = vision_meta
+
+                # Add vision skip metrics (Day 12)
+                strategy_meta = vision_meta.get("vision_strategy", {})
+                if strategy_meta:
+                    meta_dict["vision_skip_metrics"] = {
+                        "vision_used": vision_meta.get("pages_used") is not None
+                        and len(vision_meta.get("pages_used", [])) > 0,
+                        "vision_skipped": strategy_meta.get("should_use_vision")
+                        is False,
+                        "skip_reason": strategy_meta.get("reason"),
+                        "keywords_matched": strategy_meta.get("keywords_matched", []),
+                        "prioritize_visual": strategy_meta.get(
+                            "prioritize_visual", False
+                        ),
+                    }
+            elif effective_vision_enabled:
+                # Vision was enabled but not used (no strategy metadata)
+                meta_dict["vision_skip_metrics"] = {
+                    "vision_used": False,
+                    "vision_skipped": True,
+                    "skip_reason": "no_pages_available",
+                    "keywords_matched": [],
+                    "prioritize_visual": False,
+                }
+
+        # Build debug details for UI
+        # 1. Retrieval details (separate BM25 and FAISS results)
+        # Always populate, even on cache hit (use cached results in that case)
+        retrieval_details = None
+        if retrieval_results:  # Will have results either from retrieval or cache
+            bm25_docs = [
+                {
+                    "chunk_id": r.chunk_id,
+                    "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
+                    "score": round(r.score, 4) if r.score else 0.0,
+                    "doc_id": r.doc_id,
+                    "page": r.page,
+                }
+                for r in retrieval_results
+                if hasattr(r, "source") and r.source == "bm25"
+            ][
+                :10
+            ]  # Top 10 for UI
+            faiss_docs = [
+                {
+                    "chunk_id": r.chunk_id,
+                    "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
+                    "score": round(r.score, 4) if r.score else 0.0,
+                    "doc_id": r.doc_id,
+                    "page": r.page,
+                }
+                for r in retrieval_results
+                if hasattr(r, "source") and r.source == "faiss"
+            ][
+                :10
+            ]  # Top 10 for UI
+            retrieval_details = {
+                "bm25": bm25_docs,
+                "faiss": faiss_docs,
+                "total_retrieved": len(retrieval_results),
+                "degrade_mode": degrade_mode,
+                "from_cache": cache_hit,  # Indicate if these came from cache
+            }
+
+        # 2. Reranking details
+        # Always populate, even on cache hit (results are same, just from cache)
+        reranking_details = None
+        if reranked_results:
+            reranking_details = {
+                "method": rerank_method,
+                "input_count": len(retrieval_results) if retrieval_results else 0,
+                "output_count": len(reranked_results),
+                "top_k": top_rerank_current,
+                "from_cache": cache_hit,  # Indicate if these came from cache
+                "results": [
+                    {
+                        "rank": idx + 1,
+                        "chunk_id": r.chunk_id,
+                        "score": round(r.score, 4) if r.score else 0.0,
+                        "text": r.text[:150] + "..." if len(r.text) > 150 else r.text,
+                        "doc_id": r.doc_id,
+                        "page": r.page,
+                    }
+                    for idx, r in enumerate(reranked_results[:10])
+                ],  # Top 10 for UI
+            }
+
+        # 3. Generation details
+        generation_details = {
+            "model": meta_dict["model_generation"],
+            "tier": generator_tier,
+            "language": request.language,
+            "execution_mode": request.execution_mode,
+            "vision_enabled": effective_vision_enabled,
+            "cove_enabled": request.execution_mode != "light_only",
+            "answer_length": len(final_answer),
+            "citations_count": len(citations_list),
+            "confidence": generated_answer.confidence,
+        }
+        if isinstance(generated_answer.metadata, dict):
+            generation_details["metadata"] = generated_answer.metadata
 
         return AskResponse(
             answer=final_answer,
@@ -493,6 +630,9 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             confidence=generated_answer.confidence,
             meta=meta_dict,
             warnings=warnings if warnings else None,
+            retrieval_details=retrieval_details,
+            reranking_details=reranking_details,
+            generation_details=generation_details,
         )
 
     except ValueError as e:

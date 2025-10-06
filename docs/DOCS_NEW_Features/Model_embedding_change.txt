@@ -113,7 +113,7 @@ python tools\build_faiss_local.py `
 
 ## 5) RAM & chỉ mục
 
-* **Kích thước chỉ mục (xấp xỉ)**: nếu dùng Flat + float32, size ≈ `N_vector × 1536 × 4` byte (chưa tính overhead).
+* **Kích thước chỉ mục (xấp xỉ)**: nếu dùng Flat + float32, size ≈ `N_vector × 768 × 4` byte (chưa tính overhead).
 * **V1**: với ~vài chục nghìn vector, RAM truy vấn & đĩa **rất dư**.
 * **Khi tăng quy mô** (triệu vector): chuyển **IVF-PQ** (Phase sau) + **Hybrid (BM25 ∪ Vector) + Rerank** để giữ chính xác trong **RAM ≤ 12 GB**.
 
@@ -142,9 +142,9 @@ python tools\build_faiss_local.py `
 
 ```python
 MODEL_ALIASES = {
-  "gemini-embedding-001": "models/embedding-001",
+  "gemini-embedding-001": "models/embedding-001",  # ✅ RECOMMENDED (Aug 2024)
   "embedding-001":       "models/embedding-001",
-  "text-embedding-004":  "models/text-embedding-004",
+  "text-embedding-004":  "models/text-embedding-004",  # Older model
 }
 model_resolved = MODEL_ALIASES.get(EMBEDDING_MODEL, EMBEDDING_MODEL)
 ```
@@ -160,7 +160,7 @@ model_resolved = MODEL_ALIASES.get(EMBEDDING_MODEL, EMBEDDING_MODEL)
 ## 9) Checklist triển khai nhanh
 
 * [ ] Đổi `.env` theo mục 2 (điền **GEMINI_API_KEY** thật).
-* [ ] Xác nhận service embed **đọc & truyền** `output_dimensionality=1536`, `taskType=RETRIEVAL_DOCUMENT`.
+* [ ] Xác nhận service embed **đọc & truyền** `output_dimensionality=768`, `taskType=RETRIEVAL_DOCUMENT`.
 * [ ] Chạy **ingest** (dedup + chunk), sau đó **BM25**, rồi **FAISS**.
 * [ ] Theo dõi log 429 → điều chỉnh `EMBED_BATCH_SIZE`/`EMBED_CONCURRENCY`.
 * [ ] Smoke test truy vấn; kiểm tra RAM < 12 GB.

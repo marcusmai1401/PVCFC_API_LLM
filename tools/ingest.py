@@ -28,6 +28,8 @@ from app.ingestion.document_classifier import DocumentClassifier
 from app.ingestion.ocr_config import get_ocr_status
 from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
+from app.storage.manifest_writer import ManifestWriter
+from app.storage.version_manager import VersionManager
 
 
 class IngestionPipeline:
@@ -50,6 +52,13 @@ class IngestionPipeline:
         sentence_window_size: int = 3,
         use_llm_classifier: bool = False,
         llm_model: Optional[str] = None,
+        extract_tables: bool = True,
+        table_min_rows: int = 2,
+        table_min_cols: int = 2,
+        create_version: bool = False,
+        version_id: Optional[str] = None,
+        version_description: str = "",
+        version_tags: Optional[List[str]] = None,
     ):
         """
         Initialize ingestion pipeline
@@ -64,6 +73,10 @@ class IngestionPipeline:
             emit_jsonl: Emit JSONL outputs in addition to JSON
             chunk_size: Target chunk size
             chunk_overlap: Overlap between chunks
+            create_version: Automatically create version snapshot after ingestion
+            version_id: Version identifier (default: auto-generated from timestamp)
+            version_description: Human-readable version description
+            version_tags: Optional tags for version categorization
         """
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
@@ -77,6 +90,11 @@ class IngestionPipeline:
         self.enable_ocr = enable_ocr
         self.ocr_language = ocr_language
 
+        # Table extraction settings
+        self.extract_tables = extract_tables
+        self.table_min_rows = table_min_rows
+        self.table_min_cols = table_min_cols
+
         # Parser settings
         self.parser = parser
         self.emit_jsonl = emit_jsonl
@@ -88,6 +106,12 @@ class IngestionPipeline:
         self.sentence_window_size = sentence_window_size
         self.use_llm_classifier = use_llm_classifier
         self.llm_model = llm_model
+
+        # Versioning settings
+        self.create_version = create_version
+        self.version_id = version_id
+        self.version_description = version_description
+        self.version_tags = version_tags or []
 
         # Initialize document classifier
         self.classifier = DocumentClassifier()
@@ -146,6 +170,9 @@ class IngestionPipeline:
         logger.info(f"Output: {self.output_dir}")
         logger.info(f"Workers: {self.workers}")
         logger.info(f"OCR: {self.enable_ocr} (lang: {self.ocr_language})")
+        logger.info(
+            f"Tables: {self.extract_tables} (min: {self.table_min_rows}x{self.table_min_cols})"
+        )
         logger.info(f"Parser: {self.parser}")
         logger.info(f"Chunk strategy: {self.chunk_strategy}")
         logger.info(f"Run ID: {self.run_id}")
@@ -170,6 +197,7 @@ class IngestionPipeline:
         corpus_manifest = []
         checksums_manifest = []
         doc_id_map = {}
+        table_index = []  # Global table index for all tables across documents
 
         # Process PDFs in parallel
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
@@ -194,6 +222,10 @@ class IngestionPipeline:
                             corpus_manifest.append(corpus_entry)
                             checksums_manifest.append(checksum_entry)
                             doc_id_map[corpus_entry["doc_id"]] = str(pdf_path)
+
+                            # Collect table metadata if available
+                            if "table_metadata" in result and result["table_metadata"]:
+                                table_index.extend(result["table_metadata"])
 
                             # Update stats
                             self.stats["processed"] += 1
@@ -232,6 +264,12 @@ class IngestionPipeline:
         # Write deduplication report
         self._write_dedup_report()
 
+        # Write table index
+        self._write_table_index(table_index)
+
+        # Write ingestion manifest for versioning
+        ingestion_manifest_path = self._write_ingestion_manifest()
+
         self.stats["end_time"] = datetime.now()
         duration = (self.stats["end_time"] - self.stats["start_time"]).total_seconds()
 
@@ -251,6 +289,12 @@ class IngestionPipeline:
                 f"Throughput: {self.stats['processed']/duration:.2f} PDFs/second"
             )
         logger.info("=" * 80)
+
+        # Create version snapshot if requested
+        if self.create_version and self.stats["processed"] > 0:
+            logger.info("")
+            logger.info("Creating version snapshot...")
+            self._create_version_snapshot(ingestion_manifest_path)
 
         return self.stats
 
@@ -358,6 +402,9 @@ class IngestionPipeline:
                     enable_ocr=False,
                     ocr_language=self.ocr_language,
                     ocr_min_confidence=30.0,
+                    extract_tables=self.extract_tables,
+                    table_min_rows=self.table_min_rows,
+                    table_min_cols=self.table_min_cols,
                 )
                 pdf_doc = processor.process_pdf(pdf_path)
 
@@ -373,6 +420,9 @@ class IngestionPipeline:
                         enable_ocr=True,
                         ocr_language=self.ocr_language,
                         ocr_min_confidence=30.0,
+                        extract_tables=self.extract_tables,
+                        table_min_rows=self.table_min_rows,
+                        table_min_cols=self.table_min_cols,
                     )
                     pdf_doc = processor.process_pdf(pdf_path)
                     used_ocr = True
@@ -444,6 +494,9 @@ class IngestionPipeline:
             # Save chunks
             self._save_chunks(chunks, doc_id)
 
+            # Extract table metadata from chunks
+            table_metadata = self._extract_table_metadata_from_chunks(chunks, doc_id)
+
             # Count pages by source_format
             scanned_count = pdf_doc.num_pages if pdf_doc.source_format == "scan" else 0
             vector_count = pdf_doc.num_pages if pdf_doc.source_format == "vector" else 0
@@ -480,6 +533,7 @@ class IngestionPipeline:
                 "corpus_entry": corpus_entry,
                 "checksum_entry": checksum_entry,
                 "counts": counts,
+                "table_metadata": table_metadata,
             }
 
         except Exception as e:
@@ -576,8 +630,13 @@ class IngestionPipeline:
 
             converter = MarkdownConverter()
 
+            # Check if we have tables - if so, use simple path to preserve them
+            has_tables = any(page.tables for page in pdf_doc.pages if page.tables)
+
             use_vector = (
-                self.parser in ("auto", "pymupdf") and pdf_doc.source_format == "vector"
+                self.parser in ("auto", "pymupdf")
+                and pdf_doc.source_format == "vector"
+                and not has_tables  # Don't use VectorExtractor if we have tables
             )
 
             if use_vector:
@@ -599,15 +658,15 @@ class IngestionPipeline:
                 # Simple conversion from pdf_doc pages
                 extraction = {"file_path": pdf_doc.file_path, "pages": []}
                 for page in pdf_doc.pages:
-                    extraction["pages"].append(
-                        {
-                            "page_num": (page.page_num - 1) if page.page_num else 0,
-                            "full_text": page.text,
-                            "blocks": [
-                                {"text": page.text, "structure_type": "paragraph"}
-                            ],
-                        }
-                    )
+                    page_data = {
+                        "page_num": (page.page_num - 1) if page.page_num else 0,
+                        "full_text": page.text,
+                        "blocks": [{"text": page.text, "structure_type": "paragraph"}],
+                    }
+                    # Add tables if present
+                    if page.tables:
+                        page_data["tables"] = page.tables
+                    extraction["pages"].append(page_data)
                 md_result = converter.convert_with_structure(extraction)
                 markdown_text = md_result["markdown"]
                 structure_meta = md_result.get("structure", {})
@@ -765,6 +824,161 @@ class IngestionPipeline:
             f"Wrote deduplication report with {len(self.duplicate_groups)} groups"
         )
 
+    def _write_table_index(self, table_index: List[Dict]):
+        """Write table index file"""
+        if not table_index:
+            logger.info("No tables found in corpus, skipping table_index.json")
+            return
+
+        index_file = self.output_dir / "manifests" / "table_index.json"
+        temp_file = index_file.with_suffix(".tmp")
+
+        table_index_data = {
+            "run_id": self.run_id,
+            "timestamp": datetime.now().isoformat(),
+            "total_tables": len(table_index),
+            "tables": table_index,
+        }
+
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(table_index_data, f, indent=2, ensure_ascii=False)
+
+        temp_file.replace(index_file)
+        logger.info(f"Wrote table index with {len(table_index)} tables")
+
+    def _extract_table_metadata_from_chunks(
+        self, chunks: List[Dict], doc_id: str
+    ) -> List[Dict]:
+        """Extract table metadata from all chunks of a document"""
+        from app.ingestion.table_extractor import extract_table_metadata_from_chunk
+
+        all_table_metadata = []
+
+        for chunk in chunks:
+            try:
+                # Extract tables from this chunk
+                table_metadata_list = extract_table_metadata_from_chunk(chunk)
+                if table_metadata_list:
+                    all_table_metadata.extend(table_metadata_list)
+                    logger.debug(
+                        f"Extracted {len(table_metadata_list)} table(s) from chunk {chunk.get('chunk_id')}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract table metadata from chunk {chunk.get('chunk_id')}: {e}"
+                )
+
+        if all_table_metadata:
+            logger.info(
+                f"Extracted {len(all_table_metadata)} table(s) from document {doc_id}"
+            )
+
+        return all_table_metadata
+
+    def _write_ingestion_manifest(self) -> Path:
+        """Write ingestion manifest for versioning support"""
+        manifest_path = self.output_dir / "manifest.json"
+
+        # Calculate total tokens estimate (avg 850 tokens per 1000 chars)
+        total_tokens = int(self.stats["total_chunks"] * (self.chunk_size / 1000) * 850)
+
+        # Find chunks artifact
+        chunks_jsonl = self.output_dir / "chunks" / "chunks.jsonl"
+        artifacts = {}
+        if chunks_jsonl.exists():
+            artifacts["chunks_jsonl"] = str(
+                chunks_jsonl.relative_to(self.output_dir.parent)
+            )
+
+        # Create manifest writer
+        writer = ManifestWriter(manifest_path)
+
+        # Write manifest
+        manifest = writer.write_ingestion_manifest(
+            ingestion_id=self.run_id,
+            config={
+                "source_dir": str(self.source_dir),
+                "chunk_size": self.chunk_size,
+                "chunk_overlap": self.chunk_overlap,
+                "chunk_strategy": self.chunk_strategy,
+                "parser": self.parser,
+                "ocr_enabled": self.enable_ocr,
+                "ocr_language": self.ocr_language,
+                "extract_tables": self.extract_tables,
+                "table_min_rows": self.table_min_rows,
+                "table_min_cols": self.table_min_cols,
+            },
+            source_stats={
+                "data_dir": str(self.source_dir),
+                "total_files": self.stats["total_pdfs"],
+                "processed_files": self.stats["processed"],
+                "quarantined_files": self.stats["quarantine_count"],
+            },
+            chunk_stats={
+                "total_chunks": self.stats["total_chunks"],
+                "unique_chunks": self.stats[
+                    "total_chunks"
+                ],  # Assuming all unique for now
+                "duplicate_chunks": 0,
+                "avg_tokens_per_chunk": total_tokens
+                // max(1, self.stats["total_chunks"]),
+            },
+            embedding_stats={
+                "total_embedded": 0,  # Will be filled by embedding phase
+                "cache_hits": 0,
+                "api_calls": 0,
+                "total_cost_usd": 0.0,
+            },
+            artifacts=artifacts,
+        )
+
+        logger.info(f"Wrote ingestion manifest: {manifest_path}")
+        return manifest_path
+
+    def _create_version_snapshot(self, manifest_path: Path):
+        """Create version snapshot after successful ingestion"""
+        try:
+            # Auto-generate version ID if not provided
+            if not self.version_id:
+                self.version_id = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            # Initialize version manager
+            base_dir = (
+                self.output_dir.parent
+                if self.output_dir.name.startswith("ingestion")
+                else self.output_dir.parent.parent
+            )
+            vm = VersionManager(base_dir)
+
+            # Create version
+            version_meta = vm.create_version(
+                version_id=self.version_id,
+                ingestion_manifest_path=manifest_path,
+                index_manifest_path=None,
+                description=self.version_description
+                or f"Ingestion: {self.stats['processed']} docs, {self.stats['total_chunks']} chunks",
+                tags=self.version_tags,
+            )
+
+            logger.info("")
+            logger.info("🎉 " + "=" * 76)
+            logger.info(f"✅ VERSION SNAPSHOT CREATED: {version_meta['version_id']}")
+            logger.info("=" * 80)
+            logger.info(f"Created at: {version_meta['created_at']}")
+            logger.info(f"Total chunks: {version_meta['stats']['total_chunks']}")
+            logger.info(f"Version directory: {base_dir / 'versions' / self.version_id}")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"Failed to create version snapshot: {e}", exc_info=True)
+            logger.warning(
+                "Ingestion completed successfully, but version creation failed"
+            )
+            logger.info(f"You can manually create a version using:")
+            logger.info(
+                f"  python tools/ops/create_version.py --ingestion-dir {self.output_dir} --version-id {self.version_id or 'v1.0'}"
+            )
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -860,6 +1074,62 @@ def main():
         help="Overlap between chunks in characters (default: 200)",
     )
 
+    parser.add_argument(
+        "--extract-tables",
+        action="store_true",
+        default=True,
+        help="Enable table extraction from PDFs (default: True)",
+    )
+
+    parser.add_argument(
+        "--no-extract-tables",
+        action="store_false",
+        dest="extract_tables",
+        help="Disable table extraction",
+    )
+
+    parser.add_argument(
+        "--table-min-rows",
+        type=int,
+        default=2,
+        help="Minimum rows for valid table (default: 2)",
+    )
+
+    parser.add_argument(
+        "--table-min-cols",
+        type=int,
+        default=2,
+        help="Minimum columns for valid table (default: 2)",
+    )
+
+    parser.add_argument(
+        "--create-version",
+        action="store_true",
+        help="Automatically create version snapshot after successful ingestion",
+    )
+
+    parser.add_argument(
+        "--version-id",
+        type=str,
+        default=None,
+        help="Version identifier (default: auto-generated timestamp)",
+    )
+
+    parser.add_argument(
+        "--version-description",
+        type=str,
+        default="",
+        help="Human-readable version description",
+    )
+
+    parser.add_argument(
+        "--version-tags",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Optional tags for version categorization (e.g., production stable)",
+    )
+
     args = parser.parse_args()
 
     # Validate source directory
@@ -910,14 +1180,29 @@ def main():
         sentence_window_size=args.sentence_window_size,
         use_llm_classifier=args.use_llm_classifier,
         llm_model=args.llm_model,
+        extract_tables=args.extract_tables,
+        table_min_rows=args.table_min_rows,
+        table_min_cols=args.table_min_cols,
+        create_version=args.create_version,
+        version_id=args.version_id,
+        version_description=args.version_description,
+        version_tags=args.version_tags,
     )
 
     stats = pipeline.run()
 
     # Exit with appropriate code
-    if stats["failed"] > 0 or stats["quarantine_count"] > 0:
+    # Note: quarantined files (e.g., drawings without text) are expected and not errors
+    if stats["failed"] > 0:
+        logger.error(f"Ingestion completed with {stats['failed']} failures")
         sys.exit(1)
 
+    if stats["quarantine_count"] > 0:
+        logger.warning(
+            f"Note: {stats['quarantine_count']} files quarantined (likely drawings without text)"
+        )
+
+    logger.info("✅ Ingestion completed successfully")
     sys.exit(0)
 
 

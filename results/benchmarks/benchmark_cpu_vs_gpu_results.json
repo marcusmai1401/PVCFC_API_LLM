@@ -1,0 +1,142 @@
+{
+  "summary": {
+    "samples": 10,
+    "avg_cpu_time": 3.746,
+    "avg_gpu_time": 0.646,
+    "avg_speedup": 5.73,
+    "min_speedup": 4.15,
+    "max_speedup": 6.96
+  },
+  "details": [
+    {
+      "file": "021_3N4-2186036_Rev.1.pdf",
+      "cpu": {
+        "success": true,
+        "time": 3.7635340690612793,
+        "regions": 75
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.9073891639709473,
+        "regions": 74
+      }
+    },
+    {
+      "file": "Data Sheet for CO2 Compressor Steam Turbine.rev0E.pdf",
+      "cpu": {
+        "success": true,
+        "time": 7.7505857944488525,
+        "regions": 254
+      },
+      "gpu": {
+        "success": true,
+        "time": 1.172407865524292,
+        "regions": 254
+      }
+    },
+    {
+      "file": "039_3N4-S4276912_Rev.1.pdf",
+      "cpu": {
+        "success": true,
+        "time": 2.035090446472168,
+        "regions": 48
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.3465123176574707,
+        "regions": 48
+      }
+    },
+    {
+      "file": "035_3N4-S347424_Rev.0.pdf",
+      "cpu": {
+        "success": true,
+        "time": 1.8000342845916748,
+        "regions": 44
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.39228391647338867,
+        "regions": 44
+      }
+    },
+    {
+      "file": "033_3N4-3358078 COMP. Name Plate Drawing_Rev.0.pdf",
+      "cpu": {
+        "success": true,
+        "time": 3.946159601211548,
+        "regions": 103
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.6478769779205322,
+        "regions": 104
+      }
+    },
+    {
+      "file": "023_3N4-3359876 Legend of P & I Diagram_Rev.0.pdf",
+      "cpu": {
+        "success": true,
+        "time": 4.755812644958496,
+        "regions": 122
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.6923351287841797,
+        "regions": 123
+      }
+    },
+    {
+      "file": "021_3N4-2186036 P & I Diagram of Vibration & Temperature System_Rev.2.pdf",
+      "cpu": {
+        "success": true,
+        "time": 3.5326662063598633,
+        "regions": 59
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.5078418254852295,
+        "regions": 59
+      }
+    },
+    {
+      "file": "116_3N4-S4275354 Instrument List  _Rev.1.pdf",
+      "cpu": {
+        "success": true,
+        "time": 2.1863996982574463,
+        "regions": 53
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.48449087142944336,
+        "regions": 53
+      }
+    },
+    {
+      "file": "019_3N4-2186034_Rev.1.pdf",
+      "cpu": {
+        "success": true,
+        "time": 4.84528374671936,
+        "regions": 119
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.8059060573577881,
+        "regions": 119
+      }
+    },
+    {
+      "file": "3N4-S4287479-SPARE PART.pdf",
+      "cpu": {
+        "success": true,
+        "time": 2.845684289932251,
+        "regions": 63
+      },
+      "gpu": {
+        "success": true,
+        "time": 0.507159948348999,
+        "regions": 63
+      }
+    }
+  ]
+}

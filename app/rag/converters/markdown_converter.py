@@ -116,6 +116,14 @@ class MarkdownConverter:
                 if paragraph_texts:
                     parts.append("\n".join(paragraph_texts))
 
+        # Process tables if present
+        tables = page_data.get("tables", [])
+        if tables:
+            for table_idx, table in enumerate(tables):
+                table_md = self._table_to_markdown(table, page_num, table_idx)
+                if table_md:
+                    parts.append(table_md)
+
         return "\n\n".join(parts)
 
     def _group_blocks(self, blocks: List[Dict[str, Any]]) -> List[tuple]:
@@ -262,6 +270,39 @@ class MarkdownConverter:
         # Convert to markdown bullet
         text = re.sub(r"^[-•*]\s*", "- ", text)
         return text
+
+    def _table_to_markdown(
+        self, table: Dict[str, Any], page_num: int, table_idx: int
+    ) -> str:
+        """
+        Convert table data to Markdown with markers
+
+        Args:
+            table: Table data dictionary from TableExtractor
+            page_num: Page number (1-indexed)
+            table_idx: Table index on page
+
+        Returns:
+            Markdown formatted table with markers
+        """
+        # Get table markdown from the table data
+        table_markdown = table.get("markdown", "")
+        if not table_markdown:
+            return ""
+
+        # Extract table metadata
+        row_count = table.get("row_count", 0)
+        col_count = table.get("col_count", 0)
+        confidence = table.get("confidence", 0.0)
+
+        # Format with markers
+        parts = [
+            f"--- TABLE START (Page {page_num + 1}, Table {table_idx + 1}: {row_count}x{col_count}, confidence={confidence:.2f}) ---",
+            table_markdown,
+            "--- TABLE END ---",
+        ]
+
+        return "\n".join(parts)
 
     def convert_with_structure(
         self, extraction_result: Dict[str, Any]

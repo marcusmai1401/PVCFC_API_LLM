@@ -148,6 +148,32 @@ hyde_improvement = Histogram(
     buckets=(-0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.5),
 )
 
+# ========================================
+# Phase 2 Day 13: Bbox Detection Metrics
+# ========================================
+bbox_detection_latency_ms = Histogram(
+    "rag_bbox_detection_latency_ms",
+    "Bbox detection latency in milliseconds",
+    buckets=(10, 25, 50, 75, 100, 150, 200, 300, 500),
+)
+
+bbox_hit_rate = Gauge(
+    "rag_bbox_hit_rate",
+    "Rate of successful bbox detections (found/attempted)",
+)
+
+bbox_detections_total = Counter(
+    "rag_bbox_detections_total",
+    "Total bbox detection attempts",
+    ["status"],  # status: success, not_found, error
+)
+
+bbox_confidence_score = Histogram(
+    "rag_bbox_confidence_score",
+    "Confidence score of bbox detections",
+    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
+
 
 class MetricsCollector:
     """Utility class for collecting metrics."""
@@ -269,6 +295,35 @@ class MetricsCollector:
             hyde_enabled_counter.labels(endpoint=endpoint).inc()
         if improvement is not None:
             hyde_improvement.observe(improvement)
+
+    @staticmethod
+    def record_bbox_detection(
+        latency_ms: float,
+        found: bool,
+        confidence: float = None,
+        error: bool = False,
+    ):
+        """Record bbox detection metrics (Day 13)."""
+        # Record latency
+        bbox_detection_latency_ms.observe(latency_ms)
+
+        # Record status
+        if error:
+            bbox_detections_total.labels(status="error").inc()
+        elif found:
+            bbox_detections_total.labels(status="success").inc()
+            # Record confidence for successful detections
+            if confidence is not None:
+                bbox_confidence_score.observe(confidence)
+        else:
+            bbox_detections_total.labels(status="not_found").inc()
+
+    @staticmethod
+    def update_bbox_hit_rate(success_count: int, total_count: int):
+        """Update bbox detection hit rate (Day 13)."""
+        if total_count > 0:
+            rate = success_count / total_count
+            bbox_hit_rate.set(rate)
 
     @staticmethod
     def increment_counter(

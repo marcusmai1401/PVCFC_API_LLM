@@ -230,6 +230,9 @@ class Citation:
     text_snippet: str = ""
     relevance_score: float = 0.0
     pdf_path: Optional[str] = None  # Full path to PDF file if available
+    bbox: Optional[
+        List[float]
+    ] = None  # Bounding box [x0, y0, x1, y1] in normalized coordinates
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -245,6 +248,9 @@ class Citation:
         # Include pdf_path if available
         if self.pdf_path:
             result["pdf_path"] = self.pdf_path
+        # Include bbox if available
+        if self.bbox is not None:
+            result["bbox"] = self.bbox
         return result
 
 
@@ -308,6 +314,18 @@ class GeneratorConfig:
     verify_facts: bool = True  # Double-check facts against sources
     handle_contradictions: bool = True  # Handle conflicting information
 
+    # Structured output controls (Phase 0 - Citation Accuracy)
+    enable_structured_output: bool = False  # Use JSON mode with schema enforcement
+    enable_claims_extraction: bool = False  # Extract per-claim citations
+
+    # Citation validation controls (Phase 1 - CiteFix-lite)
+    enable_citation_validation: bool = (
+        True  # Post-validate citations with CitationValidator
+    )
+    citation_validation_level: int = 2  # 1=basic, 2=text verification
+    citation_min_confidence: float = 0.7  # Minimum confidence for valid citation
+    citation_neighbor_scan: int = 2  # ±N pages to scan for low-confidence citations
+
     # Vision generation controls
     enable_vision_generation: bool = (
         True  # Enable multimodal answer generation if pages available
@@ -318,6 +336,43 @@ class GeneratorConfig:
     pdf_image_format: str = "jpeg"  # jpeg|png
     vision_timeout_sec: int = 20  # Not strictly enforced here; for future use
     vision_retry: int = 2  # For future use
+
+    # Smart vision strategy (Phase 2 - Day 11)
+    enable_smart_vision_strategy: bool = (
+        True  # Use strategy to decide when/how to run vision
+    )
+    vision_skip_text_only: bool = True  # Skip vision when likely text-only evidence
+    vision_table_figure_keywords: Tuple[str, ...] = (
+        "table",
+        "figure",
+        "fig.",
+        "fig ",
+        "diagram",
+        "chart",
+        "graph",
+        "image",
+        "picture",
+        "photo",
+        "hình",
+        "bảng",
+        "biểu đồ",
+        "sơ đồ",
+    )
+    vision_text_only_negative_keywords: Tuple[str, ...] = (
+        # If these are absent and table/figure keywords absent, likely text-only
+        # This is used as supporting heuristic
+        "table",
+        "figure",
+        "fig.",
+        "diagram",
+        "chart",
+        "graph",
+        "image",
+        "hình",
+        "bảng",
+        "biểu đồ",
+        "sơ đồ",
+    )
 
 
 class ResponseGenerator:
@@ -372,6 +427,26 @@ class ResponseGenerator:
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
+
+    def _is_bbox_detection_enabled(self) -> bool:
+        """Check if bbox detection is enabled via feature flag (Day 13)"""
+        try:
+            import os
+
+            from app.core.config import settings
+
+            # Check env var first (highest priority)
+            env_flag = os.getenv("ENABLE_BBOX_DETECTION", "").lower()
+            if env_flag in ("true", "1", "yes"):
+                return True
+            elif env_flag in ("false", "0", "no"):
+                return False
+
+            # Fall back to settings
+            return getattr(settings, "enable_bbox_detection", True)
+        except Exception as e:
+            logger.debug(f"Error checking bbox detection flag: {e}")
+            return True  # Default to enabled
 
     def generate(
         self,
@@ -451,10 +526,36 @@ class ResponseGenerator:
             else:
                 logger.info("Vision gating: OFF (reason=config_disabled)")
 
-            # Generate answer based on intent; prefer Vision path if result exists
+            # Try structured output generation if enabled and vision didn't succeed
+            structured_answer = None
+            structured_citations: List[Citation] = []
+            if self.config.enable_structured_output and not vision_answer:
+                logger.info("Structured output: Attempting JSON mode generation")
+                try:
+                    structured_result = self._generate_structured(
+                        english_query=generation_query,
+                        original_query=original_query,
+                        context=context,
+                        doc_mapping=doc_mapping,
+                        language=response_language,
+                    )
+                    if structured_result:
+                        structured_answer, structured_citations = structured_result
+                        metadata_extra["structured_output"] = True
+                        logger.info(
+                            f"Structured output: SUCCESS ({len(structured_citations)} citations)"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Structured output failed, falling back to regex: {e}"
+                    )
+
+            # Generate answer based on intent; prefer Vision > Structured > Legacy
             if query.intent == QueryIntent.ASK:
                 if vision_answer:
                     answer, citations = vision_answer, vision_citations
+                elif structured_answer:
+                    answer, citations = structured_answer, structured_citations
                 else:
                     answer, citations = self._generate_ask_answer_bilingual(
                         generation_query,
@@ -466,6 +567,8 @@ class ResponseGenerator:
             elif query.intent == QueryIntent.EXPLAIN:
                 if vision_answer:
                     answer, citations = vision_answer, vision_citations
+                elif structured_answer:
+                    answer, citations = structured_answer, structured_citations
                 else:
                     # For simplicity, using same bilingual approach for EXPLAIN
                     answer, citations = self._generate_ask_answer_bilingual(
@@ -482,6 +585,8 @@ class ResponseGenerator:
             elif query.intent == QueryIntent.REPORT:
                 if vision_answer:
                     answer, citations = vision_answer, vision_citations
+                elif structured_answer:
+                    answer, citations = structured_answer, structured_citations
                 else:
                     # For reports, also use bilingual approach
                     answer, citations = self._generate_ask_answer_bilingual(
@@ -492,9 +597,11 @@ class ResponseGenerator:
                         response_language,
                     )
             else:
-                # Default also uses bilingual; prefer vision if available
+                # Default also uses bilingual; prefer vision > structured
                 if vision_answer:
                     answer, citations = vision_answer, vision_citations
+                elif structured_answer:
+                    answer, citations = structured_answer, structured_citations
                 else:
                     answer, citations = self._generate_ask_answer_bilingual(
                         generation_query,
@@ -523,6 +630,28 @@ class ResponseGenerator:
                 except Exception as _:
                     # Keep original empty answer; will be handled by post-processing
                     pass
+
+            # Post-validate citations with CiteFix-lite (Phase 1)
+            if citations and self.config.enable_citation_validation:
+                logger.info(f"Post-validating {len(citations)} citations")
+                try:
+                    citations, validation_results = self._post_validate_citations(
+                        citations=citations,
+                        query=query.normalized,
+                        retrieved_docs=retrieved_docs,
+                    )
+
+                    # Store validation metadata
+                    if "metadata_extra" not in locals():
+                        metadata_extra = {}
+                    metadata_extra["citation_validation"] = validation_results
+
+                    logger.info(
+                        f"Validation: {validation_results['valid_count']}/{validation_results['total_count']} valid, "
+                        f"avg_confidence={validation_results['avg_confidence']:.3f}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Citation validation failed: {e}")
 
             # Calculate confidence based on mode
             if self.config.confidence_mode == "calibrated":
@@ -1021,11 +1150,28 @@ Response:"""
                         relevance_score=doc.score,
                     )
 
-                    # Enrich with pdf_path from doc_id_map if available (lazy load)
+                    # Enrich with pdf_path from metadata (for vision results) or doc_id_map
                     try:
-                        doc_id_map = _get_doc_id_map()
-                        if doc.doc_id in doc_id_map:
-                            citation.pdf_path = doc_id_map[doc.doc_id]
+                        # First check if pdf_path is in the doc metadata (from vision)
+                        if doc.metadata and "pdf_path" in doc.metadata:
+                            pdf_path_val = doc.metadata["pdf_path"]
+                            # Ensure it's a string, not dict
+                            citation.pdf_path = (
+                                str(pdf_path_val) if pdf_path_val else None
+                            )
+                        else:
+                            # Otherwise try doc_id_map (for text retrieval)
+                            doc_id_map = _get_doc_id_map()
+                            if doc.doc_id in doc_id_map:
+                                doc_info = doc_id_map[doc.doc_id]
+                                # Handle both dict format (new) and string format (legacy)
+                                if isinstance(doc_info, dict):
+                                    pdf_path_val = doc_info.get("pdf_path")
+                                    citation.pdf_path = (
+                                        str(pdf_path_val) if pdf_path_val else None
+                                    )
+                                elif isinstance(doc_info, str):
+                                    citation.pdf_path = doc_info
                     except Exception:
                         pass
 
@@ -1045,15 +1191,36 @@ Response:"""
                     relevance_score=doc.score,
                 )
 
-                # Enrich with pdf_path from doc_id_map if available (lazy load)
+                # Enrich with pdf_path from metadata (for vision results) or doc_id_map
                 try:
-                    doc_id_map = _get_doc_id_map()
-                    if doc.doc_id in doc_id_map:
-                        citation.pdf_path = doc_id_map[doc.doc_id]
+                    # First check if pdf_path is in the doc metadata (from vision)
+                    if doc.metadata and "pdf_path" in doc.metadata:
+                        pdf_path_val = doc.metadata["pdf_path"]
+                        # Ensure it's a string, not dict
+                        citation.pdf_path = str(pdf_path_val) if pdf_path_val else None
+                    else:
+                        # Otherwise try doc_id_map (for text retrieval)
+                        doc_id_map = _get_doc_id_map()
+                        if doc.doc_id in doc_id_map:
+                            doc_info = doc_id_map[doc.doc_id]
+                            # Handle both dict format (new) and string format (legacy)
+                            if isinstance(doc_info, dict):
+                                pdf_path_val = doc_info.get("pdf_path")
+                                citation.pdf_path = (
+                                    str(pdf_path_val) if pdf_path_val else None
+                                )
+                            elif isinstance(doc_info, str):
+                                citation.pdf_path = doc_info
                 except Exception:
                     pass
 
                 citations.append(citation)
+
+        # Log extraction summary for diagnostics
+        logger.info(
+            f"Citation extraction: found {len(citations)} citations from answer "
+            f"(doc_mapping size: {len(doc_mapping) if doc_mapping else 0})"
+        )
 
         return citations
 
@@ -1070,9 +1237,32 @@ Response:"""
         Attempt multimodal generation with Gemini 2.5 Pro using page images if available.
         Returns (answer, citations, vision_meta) or None if vision cannot run.
         """
-        # 1) Build list of (pdf_path, page) to render
+        # 0) Smart strategy gate DISABLED - Vision always ON for full multimodal capability
+        # User requirement: Always use Vision to combine text + image data for maximum accuracy
+        strategy_meta = {}
+        logger.debug("Vision strategy: ALWAYS ON (smart_vision_strategy disabled)")
+
+        # 1) Build list of (pdf_path, page) to render (prioritize visuals if strategy suggests)
+        # DIAGNOSTIC: Log top retrieved_docs metadata
+        logger.info(f"[DIAGNOSTIC] Retrieved docs count: {len(retrieved_docs)}")
+        for i, doc in enumerate(retrieved_docs[:3]):
+            meta = doc.metadata or {}
+            has_pdf_path = "pdf_path" in meta
+            logger.info(
+                f"[DIAGNOSTIC] Top doc #{i+1}: doc_id={doc.doc_id[:50]}, page={doc.page}, "
+                f"page_start={meta.get('page_start')}, page_end={meta.get('page_end')}, "
+                f"has_pdf_path={has_pdf_path}, score={doc.score:.4f}"
+            )
+
         try:
-            pages_plan, pages_meta = self._build_vision_pages(retrieved_docs)
+            prioritize_visual = (
+                bool(strategy_meta.get("prioritize_visual", False))
+                if strategy_meta
+                else False
+            )
+            pages_plan, pages_meta = self._build_vision_pages(
+                retrieved_docs, prioritize_visual=prioritize_visual
+            )
         except Exception as e:
             logger.warning(f"Failed to build vision pages: {e}")
             return None
@@ -1082,7 +1272,17 @@ Response:"""
             reason = (
                 pages_meta.get("reason") if isinstance(pages_meta, dict) else "no_pages"
             )
-            logger.info(f"Vision gating: OFF (reason={reason})")
+            logger.warning(
+                f"[DIAGNOSTIC] Vision gating: OFF (reason={reason}). "
+                f"Retrieved docs: {len(retrieved_docs)}, pages_meta: {pages_meta}"
+            )
+            # Log first few docs to understand why no pages
+            for i, doc in enumerate(retrieved_docs[:3]):
+                meta = doc.metadata or {}
+                logger.warning(
+                    f"[DIAGNOSTIC] Doc #{i+1} skipped: doc_id={doc.doc_id[:50] if doc.doc_id else 'None'}, "
+                    f"has_metadata_pdf_path={'pdf_path' in meta}, in_doc_id_map={doc.doc_id in doc_id_map if doc.doc_id else False}"
+                )
             return None
 
         # 2) Render pages to images
@@ -1095,9 +1295,15 @@ Response:"""
             logger.warning(f"PDF renderer not available: {e}")
             return None
 
-        for item in pages_plan:
+        # Build vision-specific doc_mapping that maps to actual vision pages
+        vision_doc_mapping: Dict[int, RetrievalResult] = {}
+        doc_id_map = _get_doc_id_map()
+
+        for idx, item in enumerate(pages_plan, 1):
             pdf_path = item["pdf_path"]
             page = int(item["page"])  # 1-based
+            # Prefer doc_id carried in pages_plan; fallback to reverse lookup
+            carried_doc_id = item.get("doc_id") if isinstance(item, dict) else None
             try:
                 img_bytes, meta = render_page_to_image(
                     pdf_path,
@@ -1108,6 +1314,37 @@ Response:"""
                 )
                 images.append(img_bytes)
                 pages_used.append({"pdf_path": pdf_path, "page": page})
+
+                # Find doc_id for this pdf_path from doc_id_map (reverse lookup)
+                doc_id_for_path = carried_doc_id
+                if not doc_id_for_path:
+                    for did, doc_info in doc_id_map.items():
+                        # Handle both dict format (new) and string format (legacy)
+                        dpath = None
+                        if isinstance(doc_info, dict):
+                            dpath = doc_info.get("pdf_path")
+                        elif isinstance(doc_info, str):
+                            dpath = doc_info
+
+                        if dpath == pdf_path:
+                            doc_id_for_path = did
+                            break
+
+                # Create a synthetic RetrievalResult for this vision page
+                # This will be used for citation extraction
+                vision_doc_mapping[idx] = RetrievalResult(
+                    chunk_id=f"vision_{idx}",
+                    doc_id=doc_id_for_path or f"vision_page_{idx}",
+                    source="vision",
+                    page=page,
+                    text=f"Page {page} from {pdf_path}",
+                    score=1.0,
+                    metadata={
+                        "pdf_path": pdf_path,
+                        "page": page,
+                        "doc_id": doc_id_for_path,
+                    },
+                )
             except Exception as e:
                 pages_failed.append(
                     {"pdf_path": pdf_path, "page": page, "reason": str(e)[:200]}
@@ -1118,6 +1355,96 @@ Response:"""
             # Rendering failed for all pages
             logger.info("Vision gating: OFF (all page renders failed)")
             return None
+
+        # 2.5) Reorder vision_doc_mapping by relevance (Task 3 fix)
+        # Pages with query keywords/tags should be ranked higher as [Doc 1], [Doc 2]
+        # DIAGNOSTIC: Log reorder process
+        logger.info(
+            f"[DIAGNOSTIC] Starting reorder for {len(vision_doc_mapping)} vision pages"
+        )
+        try:
+            # Extract potential keywords/tags from query
+            query_tokens = set(re.findall(r"\b[\w-]+\b", english_query.lower()))
+            query_tokens.update(re.findall(r"\b[\w-]+\b", original_query.lower()))
+
+            # Score each page by relevance
+            page_scores = []
+            for idx, result in vision_doc_mapping.items():
+                score = 0.0
+                matched_via = "no_match"
+
+                # Check if this page is from a retrieved doc with high score
+                # FIXED: Match by doc_id instead of pdf_path+page (retrieved docs don't have pdf_path)
+                for doc in retrieved_docs[:20]:  # Top 20 docs
+                    result_doc_id = result.metadata.get("doc_id")
+
+                    # Try matching by doc_id (most reliable for our case)
+                    if doc.doc_id and result_doc_id and doc.doc_id == result_doc_id:
+                        # Matched by doc_id - same document
+                        score += doc.score * 10  # Boost by retrieval score
+                        matched_via = "doc_id"
+
+                        # Boost if doc text contains important tokens
+                        if doc.text:
+                            doc_text_lower = doc.text.lower()
+
+                            # Check for specific patterns (tags, numbers)
+                            # Use flexible pattern to catch variations like 04-FIC-2035 or 04/FIC/2035
+                            tag_patterns = re.findall(
+                                r"\b\d+[-/][A-Z]{2,}[-/]\d+\b", doc.text, re.IGNORECASE
+                            )
+                            if tag_patterns:
+                                for tag in tag_patterns:
+                                    if (
+                                        tag.lower() in original_query.lower()
+                                        or tag.lower() in english_query.lower()
+                                    ):
+                                        score += 50  # Strong boost for matching tags
+                                        matched_via = "tag_match"
+                                        logger.info(
+                                            f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page}"
+                                        )
+
+                            # Check for keyword overlap
+                            keyword_count = 0
+                            for token in query_tokens:
+                                if len(token) > 3 and token in doc_text_lower:
+                                    score += 1
+                                    keyword_count += 1
+
+                            if keyword_count > 5 and matched_via == "doc_id":
+                                matched_via = "doc_id+keywords"
+
+                        break
+
+                page_scores.append((idx, result, score, matched_via))
+                logger.info(
+                    f"[DIAGNOSTIC] Vision page idx={idx} (page={result.page}): score={score:.2f}, matched_via={matched_via}"
+                )
+
+            # Sort by score descending
+            page_scores.sort(key=lambda x: x[2], reverse=True)
+
+            # Rebuild vision_doc_mapping with new order
+            new_vision_doc_mapping = {}
+            for new_idx, (old_idx, result, score, matched_via) in enumerate(
+                page_scores, 1
+            ):
+                new_vision_doc_mapping[new_idx] = result
+                logger.info(
+                    f"[DIAGNOSTIC] Reordered: [Doc {new_idx}] = page {result.page} (was idx={old_idx}, score={score:.2f})"
+                )
+
+            vision_doc_mapping = new_vision_doc_mapping
+
+            logger.info(
+                f"[DIAGNOSTIC] Reorder complete. Top 3 pages: "
+                f"{[vision_doc_mapping[i].page for i in list(vision_doc_mapping.keys())[:3]]}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to reorder vision_doc_mapping: {e}. Using original order."
+            )
 
         # 3) Call Gemini 2.5 Pro multimodal
         try:
@@ -1142,15 +1469,16 @@ Response:"""
 
         # Build prompt with bilingual and strict citation rules, and include mapping info
         # Provide mapping from [Doc N] -> doc_id and list attached pages for citation accuracy
+        # Use vision_doc_mapping for prompt to match actual shown pages
         mapping_lines = []
-        for i, doc in doc_mapping.items():
+        for i, doc in vision_doc_mapping.items():
             try:
                 mapping_lines.append(f"Doc {i} -> {doc.doc_id}")
             except Exception:
                 mapping_lines.append(f"Doc {i} -> unknown")
         attached_lines = [
             f"(Doc {i}, p.{d.page if d and d.page else 'unknown'})"
-            for i, d in doc_mapping.items()
+            for i, d in vision_doc_mapping.items()
         ]
 
         if language == "vi":
@@ -1188,7 +1516,9 @@ Response:"""
             )
 
         # Assemble contents
-        parts = [types.Part.from_text(prompt_text)]
+        # Fixed: Use types.Part(text=...) instead of from_text()
+        # See: google-genai SDK 1.36.0 API changes
+        parts = [types.Part(text=prompt_text)]
         for img in images:
             mime = (
                 "image/png"
@@ -1230,13 +1560,15 @@ Response:"""
             logger.error(f"Gemini multimodal generation failed: {e}")
             return None
 
-        # Extract citations from answer
-        citations = self._extract_citations(answer_text, doc_mapping)
+        # Extract citations from answer using vision_doc_mapping
+        # This ensures citations point to the actual pages shown in vision images
+        citations = self._extract_citations(answer_text, vision_doc_mapping)
 
         vision_meta = {
             "pages_used": pages_used,
             "pages_failed": pages_failed,
             "excerpts": [],  # Optional: can parse excerpts from answer in future
+            "vision_strategy": strategy_meta,
         }
 
         # Log vision pages summary
@@ -1250,8 +1582,137 @@ Response:"""
 
         return answer_text, citations, vision_meta
 
+    def _generate_structured(
+        self,
+        english_query: str,
+        original_query: str,
+        context: str,
+        doc_mapping: Dict[int, RetrievalResult],
+        language: str,
+    ) -> Optional[Tuple[str, List[Citation]]]:
+        """
+        Generate answer using structured JSON mode (Phase 0).
+        Returns (answer, citations) or None if generation fails.
+        """
+        try:
+            from google import genai
+            from google.genai import types
+
+            from app.rag.schemas_structured import get_simple_citation_schema
+            from app.services.llm import get_api_key_for
+        except ImportError as e:
+            logger.error(f"Failed to import structured generation dependencies: {e}")
+            return None
+
+        # Build doc mapping info for LLM
+        doc_info_lines = []
+        for doc_num, result in doc_mapping.items():
+            doc_id = result.doc_id or "unknown"
+            page = result.page or "?"
+            doc_info_lines.append(f"Doc {doc_num} = {doc_id}, page {page}")
+        doc_mapping_text = "\n".join(doc_info_lines)
+
+        # Construct prompt for structured output
+        if language == "vi":
+            instruction = (
+                "Bạn là trợ lý kỹ thuật chính xác. Trả lời bằng Tiếng Việt. "
+                "Trả về JSON với trường 'answer' (câu trả lời đầy đủ) và 'citations' "
+                "(mảng các trích dẫn với doc_id, page, quote). "
+                "Mỗi thông số kỹ thuật cụ thể PHẢI có trích dẫn."
+            )
+            prompt_text = (
+                f"Câu hỏi: {original_query}\n"
+                f"(English: {english_query})\n\n"
+                f"Ngữ cảnh từ tài liệu:\n{context}\n\n"
+                f"Mapping:\n{doc_mapping_text}\n\n"
+                "Trả lời với citations:"
+            )
+        else:
+            instruction = (
+                "You are a precise technical assistant. Return JSON with 'answer' "
+                "(full answer text) and 'citations' (array of citations with doc_id, page, quote). "
+                "Every specific technical value MUST have a citation."
+            )
+            prompt_text = (
+                f"Question: {english_query}\n\n"
+                f"Context:\n{context}\n\n"
+                f"Mapping:\n{doc_mapping_text}\n\n"
+                "Answer with citations:"
+            )
+
+        # Get schema and build config
+        schema = get_simple_citation_schema()
+        cfg = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+            temperature=self.config.temperature,
+            max_output_tokens=self.config.max_answer_length,
+            system_instruction=instruction,
+        )
+
+        # Create client and generate
+        try:
+            api_key = get_api_key_for("gemini")
+            client = genai.Client(api_key=api_key)
+
+            model_name = (
+                self.config.vision_model  # Use same model as vision
+                if self.config.vision_model.startswith("models/")
+                else f"models/{self.config.vision_model}"
+            )
+
+            contents = [
+                types.Content(role="user", parts=[types.Part(text=prompt_text)])
+            ]
+
+            resp = client.models.generate_content(
+                model=model_name, contents=contents, config=cfg
+            )
+
+            # Parse JSON response
+            import json
+
+            result = json.loads(resp.text)
+
+            answer_text = result.get("answer", "")
+            raw_citations = result.get("citations", [])
+
+            # Convert to Citation objects
+            citations = []
+            for raw_cit in raw_citations:
+                doc_id = raw_cit.get("doc_id")
+                page = raw_cit.get("page")
+                if doc_id and page:
+                    # Find pdf_path from doc_id
+                    pdf_path = None
+                    doc_id_map = _get_doc_id_map()
+                    if doc_id in doc_id_map:
+                        doc_info = doc_id_map[doc_id]
+                        if isinstance(doc_info, dict):
+                            pdf_path = doc_info.get("pdf_path")
+                        elif isinstance(doc_info, str):
+                            pdf_path = doc_info
+
+                    citations.append(
+                        Citation(
+                            doc_id=doc_id,
+                            source=doc_id,  # Use doc_id as source
+                            page=int(page),
+                            text_snippet=raw_cit.get("quote", ""),
+                            relevance_score=1.0,
+                            pdf_path=pdf_path,
+                        )
+                    )
+
+            logger.info(f"Structured generation: {len(citations)} citations extracted")
+            return answer_text, citations
+
+        except Exception as e:
+            logger.error(f"Structured generation failed: {e}")
+            return None
+
     def _build_vision_pages(
-        self, retrieved_docs: List[RetrievalResult]
+        self, retrieved_docs: List[RetrievalResult], prioritize_visual: bool = False
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Build a plan of pages to render for vision based on retrieved documents.
@@ -1270,14 +1731,30 @@ Response:"""
         seen = set()
 
         # Helper to add a page if not duplicate and under limit
-        def add_page(pdf_path: str, page: int):
+        def add_page(pdf_path: str, page: int, doc_id_for_page: Optional[str] = None):
             key = (pdf_path, page)
             if key in seen:
                 return
             if len(pages) >= max_pages:
                 return
-            pages.append({"pdf_path": pdf_path, "page": page})
+            item = {"pdf_path": pdf_path, "page": page}
+            if doc_id_for_page:
+                item["doc_id"] = doc_id_for_page
+            pages.append(item)
             seen.add(key)
+
+        # Helper to check if a text likely references figures/tables
+        def looks_visual(text: str) -> bool:
+            if not text:
+                return False
+            t = text.lower()
+            for kw in self.config.vision_table_figure_keywords:
+                if kw in t:
+                    return True
+            # Heuristic: contains table-like patterns
+            if "|" in t or "\t" in t:
+                return True
+            return False
 
         # Iterate over top retrieved docs, preserving rank order
         for doc in retrieved_docs:
@@ -1286,32 +1763,135 @@ Response:"""
             doc_id = doc.doc_id or (
                 doc.metadata.get("doc_id") if doc.metadata else None
             )
-            if not doc_id or doc_id not in doc_id_map:
+
+            # Resolve pdf_path via doc_id_map first, then fallback to metadata
+            pdf_path = None
+            if doc_id and doc_id in doc_id_map:
+                doc_info = doc_id_map[doc_id]
+                if isinstance(doc_info, dict):
+                    pdf_path = doc_info.get("pdf_path")
+                elif isinstance(doc_info, str):
+                    pdf_path = doc_info
+            # Fallback: use metadata-provided pdf_path if available
+            if not pdf_path and doc.metadata and "pdf_path" in doc.metadata:
+                try:
+                    pdf_path_val = doc.metadata.get("pdf_path")
+                    pdf_path = str(pdf_path_val) if pdf_path_val else None
+                except Exception:
+                    pdf_path = None
+
+            if not pdf_path:
+                # Cannot determine a pdf_path for this doc, skip
                 continue
-            pdf_path = doc_id_map[doc_id]
             # Determine page range
             meta = doc.metadata or {}
             start = None
             end = None
             try:
-                # Check if we have explicit page range (both must be present and not None)
-                if (
-                    "page_start" in meta
-                    and meta.get("page_start") is not None
-                    and "page_end" in meta
-                    and meta.get("page_end") is not None
-                ):
-                    start = int(meta["page_start"])
-                    end = int(meta["page_end"])
-                    # Ensure start <= end
-                    if start > end:
-                        start, end = end, start
+                # NEW: Try to extract page from content first (more reliable)
+                from app.utils.page_utils import (
+                    extract_page_from_content,
+                    get_best_page_number,
+                )
+
+                # Task 5: P&ID-specific heuristics
+                # Check if doc contains tag patterns (e.g., 04-FIC-2035)
+                tag_pattern_found = False
+                if hasattr(doc, "text") and doc.text:
+                    # Look for equipment tags like XX-YYY-ZZZZ
+                    tag_matches = re.findall(r"\b\d+[-/][A-Z]{2,}[-/]\d+\b", doc.text)
+                    if tag_matches:
+                        tag_pattern_found = True
+                        logger.debug(f"Found tags in doc: {tag_matches[:3]}")
+
+                # Get the most accurate page number
+                # DIAGNOSTIC: Log center calculation logic
+                if hasattr(doc, "text") and doc.text:
+                    center = get_best_page_number(doc.text, meta)
+                    logger.info(
+                        f"[DIAGNOSTIC] get_best_page_number returned center={center} for doc_id={doc_id[:40]}"
+                    )
                 else:
-                    # Use center page with ±2 window
+                    # Fallback to metadata-based extraction
                     center = doc.page if doc.page else extract_page_number(meta)
-                    center = int(center) if center else 1
-                    start = max(1, center - 2)
-                    end = center + 2  # No need for max(start, ...) since center >= 1
+                    logger.info(
+                        f"[DIAGNOSTIC] No text, using metadata: center={center} (doc.page={doc.page})"
+                    )
+
+                    # Task 5: Smart fallback for P&ID - small-page-bias instead of middle-of-range
+                    if center == 1 and "page_end" in meta:
+                        page_start = meta.get("page_start", 1)
+                        page_end = meta.get("page_end", 1)
+                        if page_end > page_start + 5:
+                            # Check if doc_id or pdf_path suggests P&ID (check multiple patterns)
+                            pdf_path_upper = pdf_path.upper() if pdf_path else ""
+                            doc_id_upper = str(doc_id).upper() if doc_id else ""
+                            is_pid = (
+                                "P&ID" in pdf_path_upper
+                                or "P & I" in pdf_path_upper
+                                or "P_ID" in pdf_path_upper
+                            ) or (
+                                "P&ID" in doc_id_upper
+                                or "P & I" in doc_id_upper
+                                or "P_ID" in doc_id_upper
+                            )
+
+                            logger.info(
+                                f"[DIAGNOSTIC] Detected wide range [{page_start}-{page_end}], is_pid={is_pid}, "
+                                f"tag_found={tag_pattern_found}"
+                            )
+
+                            if is_pid and not tag_pattern_found:
+                                # For P&ID without explicit tags, prefer early pages (legends/headers)
+                                old_center = center
+                                center = min(
+                                    10, page_end // 4
+                                )  # Bias towards pages 1-10
+                                logger.info(
+                                    f"[DIAGNOSTIC] P&ID small-page-bias: changed center from {old_center} to {center}"
+                                )
+                            else:
+                                # Original middle-of-range logic
+                                old_center = center
+                                center = (page_start + page_end) // 2
+                                logger.info(
+                                    f"[DIAGNOSTIC] Middle-of-range: changed center from {old_center} to {center}"
+                                )
+
+                center = int(center) if center else 1
+
+                # FIXED: Override center if it's too far from start for P&ID with tag patterns in doc
+                # This handles case where get_best_page_number returns middle-of-range (e.g., 58)
+                # Force early pages when: P&ID + center too far + doc contains equipment tags + large doc
+                page_start = meta.get("page_start", 1)
+                page_end = meta.get("page_end", center)
+                # Detect P&ID: check for "P&ID", "P & I", or "P_ID" patterns (based on actual data)
+                pdf_path_upper = pdf_path.upper() if pdf_path else ""
+                doc_id_upper = str(doc_id).upper() if doc_id else ""
+                is_pid = (
+                    "P&ID" in pdf_path_upper
+                    or "P & I" in pdf_path_upper
+                    or "P_ID" in pdf_path_upper
+                ) or (
+                    "P&ID" in doc_id_upper
+                    or "P & I" in doc_id_upper
+                    or "P_ID" in doc_id_upper
+                )
+
+                # Use tag_pattern_found computed above (from doc.text, not query)
+                if is_pid and center > 20 and tag_pattern_found and page_end > 30:
+                    # P&ID + center too far + doc has tag pattern → force small-page-bias
+                    old_center = center
+                    center = min(10, page_end // 4)
+                    logger.info(
+                        f"[DIAGNOSTIC] P&ID override: center {old_center} -> {center} (doc has tag pattern, forcing early pages)"
+                    )
+
+                start = max(1, center - 2)
+                end = center + 2
+                logger.info(
+                    f"[DIAGNOSTIC] Final page window: [{start}-{end}] (center={center})"
+                )
             except Exception as e:
                 # Fallback to single page from doc.page
                 logger.debug(f"Page range extraction failed for doc {doc_id}: {e}")
@@ -1330,11 +1910,21 @@ Response:"""
             except Exception:
                 pass
 
+            # If prioritizing visuals, require the doc text to look visual
+            if prioritize_visual:
+                try:
+                    sample_text = (doc.text or "")[:400]
+                    if not looks_visual(sample_text):
+                        # Skip non-visual-looking docs when prioritizing visuals
+                        continue
+                except Exception:
+                    pass
+
             # Add pages in range
             for p in range(start, end + 1):
                 if len(pages) >= max_pages:
                     break
-                add_page(pdf_path, p)
+                add_page(pdf_path, p, doc_id_for_page=doc_id)
 
         return pages, {"selected": len(pages), "max": max_pages}
 
@@ -1440,6 +2030,302 @@ Response:"""
             confidence=0.0,
             metadata={"error": True, "error_message": error},
         )
+
+    def _post_validate_citations(
+        self,
+        citations: List[Citation],
+        query: str,
+        retrieved_docs: List[RetrievalResult],
+    ) -> Tuple[List[Citation], Dict[str, Any]]:
+        """
+        Post-validate citations using CitationValidator (CiteFix-lite)
+
+        Args:
+            citations: List of citations extracted from LLM answer
+            query: Original search query
+            retrieved_docs: Retrieved documents for context
+
+        Returns:
+            Tuple of (validated_citations, validation_summary)
+        """
+        from app.rag.citation_validator import get_citation_validator
+
+        # Initialize validator
+        validator = get_citation_validator(
+            validation_level=self.config.citation_validation_level,
+            min_confidence_threshold=self.config.citation_min_confidence,
+            neighbor_scan_range=self.config.citation_neighbor_scan,
+        )
+
+        validated_citations = []
+        validation_results = {
+            "total_count": len(citations),
+            "valid_count": 0,
+            "invalid_count": 0,
+            "corrected_count": 0,
+            "avg_confidence": 0.0,
+            "details": [],
+        }
+
+        total_confidence = 0.0
+
+        for idx, citation in enumerate(citations):
+            try:
+                # Get page text (use snippet if available, otherwise try to load from page)
+                page_text = citation.text_snippet or ""
+
+                # If no text in citation, try to find from retrieved docs
+                if not page_text:
+                    for doc in retrieved_docs:
+                        if doc.doc_id == citation.doc_id and doc.page == citation.page:
+                            page_text = doc.text or ""
+                            break
+
+                # Validate citation
+                validation_result = validator.validate(
+                    doc_id=citation.doc_id,
+                    page=citation.page or 1,
+                    page_text=page_text,
+                    snippets=None,  # Can add snippet validation if needed
+                    query=query,
+                )
+
+                # Track validation details
+                detail = {
+                    "citation_index": idx,
+                    "doc_id": citation.doc_id,
+                    "page": citation.page,
+                    "is_valid": validation_result.is_valid,
+                    "confidence": validation_result.confidence,
+                    "errors": [e.to_dict() for e in validation_result.errors],
+                }
+
+                # Check for neighbor page correction
+                if validation_result.metadata.get("neighbor_match"):
+                    neighbor = validation_result.metadata["neighbor_match"]
+                    detail["corrected_page"] = neighbor["page"]
+                    detail["correction_confidence"] = neighbor["confidence"]
+
+                    # Update citation with corrected page
+                    citation.page = neighbor["page"]
+                    validation_results["corrected_count"] += 1
+
+                    logger.info(
+                        f"Citation corrected: {citation.doc_id} p.{citation.page} -> p.{neighbor['page']} "
+                        f"(confidence: {neighbor['confidence']:.3f})"
+                    )
+
+                # Update citation confidence (use validator's confidence if higher)
+                if validation_result.confidence > citation.relevance_score:
+                    citation.relevance_score = validation_result.confidence
+
+                # Phase 2 - Day 12-13: Add bbox detection for validated citations
+                # Check feature flag first
+                if (
+                    citation.pdf_path
+                    and citation.text_snippet
+                    and self._is_bbox_detection_enabled()
+                ):
+                    import time
+
+                    from app.core.metrics import MetricsCollector
+
+                    bbox_start = time.time()
+                    bbox_found = False
+                    bbox_confidence = 0.0
+                    bbox_error = False
+
+                    try:
+                        from app.core.config import settings
+                        from tools.pdf_renderer import find_bbox_by_quote
+
+                        # Improved quote selection (Day 13)
+                        # Try full snippet first, then truncated if too long
+                        quote_candidates = [
+                            citation.text_snippet,  # Full snippet
+                            citation.text_snippet[:200],  # First 200 chars
+                            citation.text_snippet[:100],  # First 100 chars (fallback)
+                        ]
+
+                        # Use first non-empty candidate
+                        quote_text = next(
+                            (q for q in quote_candidates if len(q.strip()) >= 10),
+                            citation.text_snippet[:100],
+                        )
+
+                        # Get fuzzy threshold from settings
+                        fuzzy_threshold = getattr(
+                            settings, "bbox_detection_fuzzy_threshold", 0.8
+                        )
+
+                        logger.debug(
+                            f"Bbox detection for {citation.doc_id} p.{citation.page}: "
+                            f"quote_len={len(quote_text)}, threshold={fuzzy_threshold}"
+                        )
+
+                        bbox_result = find_bbox_by_quote(
+                            pdf_path=citation.pdf_path,
+                            page_num=citation.page or 1,
+                            quote_text=quote_text,
+                            match_type="fuzzy",
+                            fuzzy_threshold=fuzzy_threshold,
+                        )
+
+                        if bbox_result and bbox_result.get("found"):
+                            bbox_found = True
+                            bbox_confidence = bbox_result.get("confidence", 0.0)
+                            citation.bbox = bbox_result.get("bbox")
+                            detail["bbox_found"] = True
+                            detail["bbox_confidence"] = bbox_confidence
+                            detail["bbox_quote_length"] = len(quote_text)
+
+                            logger.debug(
+                                f"✓ Bbox detected: {citation.doc_id} p.{citation.page} "
+                                f"confidence={bbox_confidence:.2f}, bbox={citation.bbox}"
+                            )
+                        else:
+                            detail["bbox_found"] = False
+                            logger.debug(
+                                f"✗ Bbox not found: {citation.doc_id} p.{citation.page} "
+                                f"(quote_len={len(quote_text)})"
+                            )
+
+                    except Exception as e:
+                        bbox_error = True
+                        logger.debug(f"Bbox detection error for citation {idx}: {e}")
+                        detail["bbox_error"] = str(e)[:100]
+
+                    finally:
+                        # Record metrics (Day 13)
+                        bbox_latency_ms = (time.time() - bbox_start) * 1000
+                        try:
+                            MetricsCollector.record_bbox_detection(
+                                latency_ms=bbox_latency_ms,
+                                found=bbox_found,
+                                confidence=bbox_confidence if bbox_found else None,
+                                error=bbox_error,
+                            )
+                        except Exception:
+                            pass  # Don't fail validation if metrics fail
+
+                validation_results["details"].append(detail)
+                total_confidence += validation_result.confidence
+
+                if validation_result.is_valid:
+                    validation_results["valid_count"] += 1
+                    validated_citations.append(citation)
+                else:
+                    validation_results["invalid_count"] += 1
+                    # Keep citation but mark as low confidence
+                    citation.relevance_score = min(citation.relevance_score, 0.5)
+                    validated_citations.append(citation)
+
+                    logger.warning(
+                        f"Citation validation failed: {citation.doc_id} p.{citation.page} "
+                        f"(confidence: {validation_result.confidence:.3f}, errors: {len(validation_result.errors)})"
+                    )
+
+            except Exception as e:
+                logger.error(f"Failed to validate citation {idx}: {e}")
+                # Keep original citation on error
+                validated_citations.append(citation)
+                validation_results["details"].append(
+                    {
+                        "citation_index": idx,
+                        "error": str(e),
+                    }
+                )
+
+        # Calculate average confidence
+        if validation_results["total_count"] > 0:
+            validation_results["avg_confidence"] = (
+                total_confidence / validation_results["total_count"]
+            )
+
+        # Task 7: Enhanced logging summary
+        logger.info(
+            f"Post-validation summary: {validation_results['total_count']} citations processed, "
+            f"{validation_results['valid_count']} valid, {validation_results['corrected_count']} corrected, "
+            f"avg_confidence={validation_results['avg_confidence']:.3f}"
+        )
+
+        return validated_citations, validation_results
+
+    def _smart_vision_strategy(
+        self,
+        english_query: str,
+        retrieved_docs: List[RetrievalResult],
+        language: str = "en",
+    ) -> Dict[str, Any]:
+        """
+        Decide whether to use vision and how to prioritize pages (Phase 2 - Day 11).
+
+        Heuristics:
+        - If query suggests visuals (table/figure keywords) -> use vision
+        - Else if retrieved_docs top texts suggest visuals -> use vision
+        - Else -> skip vision if configured to skip for text-only
+
+        Returns a dict:
+        {
+            should_use_vision: bool,
+            reason: str,
+            prioritize_visual: bool,  # if True, filter to visual-like pages
+            keywords_matched: List[str],
+        }
+        """
+        # If vision disabled globally, skip
+        if not self.config.enable_vision_generation:
+            return {"should_use_vision": False, "reason": "vision_disabled"}
+
+        # Normalize
+        q = (english_query or "").lower()
+        matched_keywords = [
+            kw for kw in self.config.vision_table_figure_keywords if kw in q
+        ]
+        looks_visual_query = len(matched_keywords) > 0
+
+        # Inspect top retrieved docs for visual cues
+        looks_visual_docs = False
+        doc_keywords = set()
+        for doc in (retrieved_docs or [])[:5]:
+            try:
+                t = (doc.text or "")[:600].lower()
+                for kw in self.config.vision_table_figure_keywords:
+                    if kw in t:
+                        looks_visual_docs = True
+                        doc_keywords.add(kw)
+                # Heuristic: table-like content
+                if ("|" in t) or ("\t" in t):
+                    looks_visual_docs = True
+                    doc_keywords.add("table-like")
+            except Exception:
+                continue
+
+        # Decision
+        if looks_visual_query or looks_visual_docs:
+            return {
+                "should_use_vision": True,
+                "reason": "visual_keywords",
+                "prioritize_visual": True,
+                "keywords_matched": list(set(matched_keywords) | doc_keywords),
+            }
+
+        # Otherwise text-only likely
+        if self.config.vision_skip_text_only:
+            return {
+                "should_use_vision": False,
+                "reason": "text_only",
+                "prioritize_visual": False,
+                "keywords_matched": [],
+            }
+
+        # Default: allow vision but without prioritization
+        return {
+            "should_use_vision": True,
+            "reason": "default_allow",
+            "prioritize_visual": False,
+            "keywords_matched": [],
+        }
 
     def generate_streaming(
         self, query: TransformedQuery, retrieved_docs: List[RetrievalResult]

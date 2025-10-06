@@ -15,14 +15,27 @@ from typing import Any, Dict, List, Optional, Tuple
 import fitz  # PyMuPDF
 from loguru import logger
 
-# Import OCR configuration
+# Import table extraction
 try:
-    from .ocr_config import OCR_AVAILABLE, get_ocr_status, setup_tesseract_path
+    from .table_extractor import TableData, TableExtractor
+except ImportError:
+    TableExtractor = None
+    TableData = None
+    logger.warning("TableExtractor not available. Table extraction disabled.")
+
+# Import PaddleOCR configuration (replaces Tesseract)
+try:
+    from .paddle_ocr_config import (
+        OCR_AVAILABLE,
+        get_ocr_status,
+        get_paddleocr_instance,
+        initialize_paddleocr,
+    )
 
     if OCR_AVAILABLE:
         import io
 
-        import pytesseract
+        import numpy as np
         from PIL import Image
 except ImportError:
     OCR_AVAILABLE = False
@@ -30,7 +43,10 @@ except ImportError:
     def get_ocr_status():
         return {"ocr_enabled": False}
 
-    logger.warning("OCR dependencies not available. OCR support disabled.")
+    def get_paddleocr_instance():
+        return None
+
+    logger.warning("PaddleOCR dependencies not available. OCR support disabled.")
 
 
 @dataclass
@@ -93,6 +109,8 @@ class PDFProcessor:
         ocr_language: str = "eng",
         ocr_cache_dir: Optional[Path] = None,
         ocr_min_confidence: float = 30.0,
+        table_min_rows: int = 2,
+        table_min_cols: int = 2,
     ):
         """
         Initialize PDF processor
@@ -105,6 +123,8 @@ class PDFProcessor:
             ocr_language: Language for OCR (default: 'eng')
             ocr_cache_dir: Directory to cache OCR results
             ocr_min_confidence: Minimum OCR confidence to accept text
+            table_min_rows: Minimum rows for valid table (default: 2)
+            table_min_cols: Minimum columns for valid table (default: 2)
         """
         self.extract_tables = extract_tables
         self.extract_images = extract_images
@@ -112,6 +132,21 @@ class PDFProcessor:
         self.enable_ocr = enable_ocr and OCR_AVAILABLE
         self.ocr_language = ocr_language
         self.ocr_min_confidence = ocr_min_confidence
+
+        # Initialize table extractor if enabled
+        self.table_extractor = None
+        if self.extract_tables and TableExtractor is not None:
+            self.table_extractor = TableExtractor(
+                min_rows=table_min_rows,
+                min_cols=table_min_cols,
+            )
+            logger.info(
+                f"Table extraction enabled: min_rows={table_min_rows}, min_cols={table_min_cols}"
+            )
+        elif self.extract_tables and TableExtractor is None:
+            logger.warning(
+                "Table extraction requested but TableExtractor not available"
+            )
 
         # Setup OCR cache directory
         if ocr_cache_dir:
@@ -271,7 +306,7 @@ class PDFProcessor:
         # Extract tables if requested
         tables = None
         if self.extract_tables:
-            tables = self._extract_tables(page)
+            tables = self._extract_tables(page, page_num)
 
         # Extract images if requested
         images = None
@@ -309,11 +344,17 @@ class PDFProcessor:
         return text.strip()
 
     def _perform_ocr(self, page) -> Optional[str]:
-        """Perform OCR on a PDF page"""
+        """Perform OCR on a PDF page using PaddleOCR"""
         if not self.enable_ocr:
             return None
 
         try:
+            # Get PaddleOCR instance
+            ocr_engine = get_paddleocr_instance()
+            if ocr_engine is None:
+                logger.warning("PaddleOCR not available")
+                return None
+
             # Render page to image
             mat = fitz.Matrix(2, 2)  # 2x zoom for better OCR
             pix = page.get_pixmap(matrix=mat)
@@ -322,21 +363,28 @@ class PDFProcessor:
             img_data = pix.pil_tobytes(format="PNG")
             image = Image.open(io.BytesIO(img_data))
 
-            # Perform OCR
-            logger.debug(f"Performing OCR on page {page.number + 1}")
-            ocr_data = pytesseract.image_to_data(
-                image, lang=self.ocr_language, output_type=pytesseract.Output.DICT
-            )
+            # Convert PIL Image to numpy array for PaddleOCR
+            img_array = np.array(image)
 
-            # Extract text with confidence filtering
+            # Perform OCR with PaddleOCR
+            logger.debug(f"Performing PaddleOCR on page {page.number + 1}")
+            result = ocr_engine.ocr(img_array, cls=True)
+
+            # Extract text from PaddleOCR results
+            # PaddleOCR returns: [[[box], (text, confidence)], ...]
             text_parts = []
-            for i, conf in enumerate(ocr_data["conf"]):
-                if float(conf) > self.ocr_min_confidence:
-                    text = ocr_data["text"][i]
-                    if text and text.strip():
-                        text_parts.append(text)
+            if result and result[0]:
+                for line in result[0]:
+                    if line and len(line) >= 2:
+                        text, confidence = line[1][0], line[1][1]
+                        # Filter by confidence threshold
+                        if confidence >= (
+                            self.ocr_min_confidence / 100.0
+                        ):  # Convert % to 0-1 scale
+                            if text and text.strip():
+                                text_parts.append(text)
 
-            # Join text parts
+            # Join text parts with spaces
             ocr_text = " ".join(text_parts)
 
             # Post-process OCR text
@@ -345,7 +393,8 @@ class PDFProcessor:
             return ocr_text if ocr_text else None
 
         except Exception as e:
-            logger.warning(f"OCR failed: {e}")
+            logger.warning(f"PaddleOCR failed: {e}")
+            logger.exception(e)
             return None
 
     def _post_process_ocr_text(self, text: str) -> str:
@@ -414,11 +463,28 @@ class PDFProcessor:
         except Exception as e:
             logger.warning(f"Failed to cache OCR result: {e}")
 
-    def _extract_tables(self, page) -> List[Dict]:
-        """Extract table data from page (placeholder)"""
-        # This would require more sophisticated table extraction
-        # For now, return empty list
-        return []
+    def _extract_tables(self, page, page_num: int) -> List[Dict]:
+        """Extract table data from page using TableExtractor"""
+        if not self.table_extractor:
+            return []
+
+        try:
+            # Extract tables using TableExtractor
+            table_data_list = self.table_extractor.extract_tables_from_page(
+                page, page_num
+            )
+
+            # Convert TableData objects to dictionaries
+            tables = [table.to_dict() for table in table_data_list]
+
+            if tables:
+                logger.debug(f"Extracted {len(tables)} table(s) from page {page_num}")
+
+            return tables if tables else []
+
+        except Exception as e:
+            logger.warning(f"Failed to extract tables from page {page_num}: {e}")
+            return []
 
     def _extract_images(self, page) -> List[Dict]:
         """Extract image metadata from page"""

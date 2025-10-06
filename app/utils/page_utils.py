@@ -322,6 +322,81 @@ def calculate_page_coverage(
 from collections import defaultdict
 
 
+def extract_page_from_content(text: str) -> Optional[int]:
+    """
+    Extract page number from markdown content page markers.
+    Looks for patterns like <!-- Page 15 --> in the text.
+
+    This is more reliable than metadata for chunks that span multiple pages
+    or have incorrect metadata.page values.
+
+    Args:
+        text: Chunk text content (markdown)
+
+    Returns:
+        Page number if found, None otherwise
+    """
+    import re
+
+    # Look for <!-- Page N --> markers
+    page_markers = re.findall(r"<!-- Page (\d+) -->", text)
+
+    if page_markers:
+        # Return the first page marker found (usually the most relevant)
+        try:
+            return int(page_markers[0])
+        except (ValueError, TypeError):
+            pass
+
+    # Also try TABLE START markers that include page info
+    # Example: --- TABLE START (Page 15, Table 1: 4x9, confidence=1.00) ---
+    table_markers = re.findall(r"TABLE START \(Page (\d+)", text)
+    if table_markers:
+        try:
+            return int(table_markers[0])
+        except (ValueError, TypeError):
+            pass
+
+    return None
+
+
+def get_best_page_number(text: str, metadata: Dict[str, Any]) -> int:
+    """
+    Get the most accurate page number by prioritizing content over metadata.
+
+    Priority:
+    1. Page marker from content (<!-- Page N -->)
+    2. Page from metadata (with fallback strategies)
+    3. Middle of page_start/page_end range
+    4. Default to 1
+
+    Args:
+        text: Chunk text content
+        metadata: Chunk metadata
+
+    Returns:
+        Best estimated page number (1-based)
+    """
+    # Try content first (most reliable)
+    page_from_content = extract_page_from_content(text)
+    if page_from_content:
+        return page_from_content
+
+    # Try metadata page field
+    page_from_meta = extract_page_number(metadata)
+
+    # If metadata.page seems wrong (=1 but page_end is much larger),
+    # use middle of range instead
+    if metadata and page_from_meta == 1:
+        page_start = metadata.get("page_start", 1)
+        page_end = metadata.get("page_end", 1)
+        if page_end > page_start + 5:  # Range is suspiciously large
+            # Use middle of range
+            return (page_start + page_end) // 2
+
+    return page_from_meta
+
+
 def get_page(metadata: Dict[str, Any]) -> int:
     """
     Simple wrapper for extract_page_number for backward compatibility.

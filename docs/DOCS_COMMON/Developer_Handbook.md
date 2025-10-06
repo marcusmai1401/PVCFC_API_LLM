@@ -20,7 +20,7 @@ Tài liệu này tổng hợp, cô đọng và hướng dẫn thực thi dành c
   LLM_MODEL_HEAVY=gemini-2.5-pro
   GEMINI_API_KEY=...           # bắt buộc cho Phase 2
   EMBEDDING_PROVIDER=gemini    # Phase 2
-  EMBEDDING_MODEL=text-embedding-004
+  EMBEDDING_MODEL=gemini-embedding-001  # 768D, Aug 2024 release
   ```
 
 ---
@@ -162,7 +162,7 @@ python tools/build_faiss_local.py --input data/processed --output artifacts/inde
 
 ### 2.5 Cấu hình LLM & Embeddings
 - LLM: `app/services/llm.py` + `app/services/llm_client.py` (Gemini new SDK `google-genai`)
-- Embeddings: `app/services/embedding_enhanced.py` (`google-generativeai` `text-embedding-004`)
+- Embeddings: `app/services/embedding_enhanced.py` (`google-generativeai` `gemini-embedding-001`, 768D)
 
 ### 2.6 Middleware & Controls
 - RateLimit: `app/core/rate_limit.py` (Token bucket 60 rpm, burst 20)
@@ -214,7 +214,7 @@ curl -X GET http://localhost:8000/index-stats
 ---
 
 ## 3. Quy trình dev tiêu chuẩn
-1) Cập nhật `.env` theo provider (Gemini/OpenAI) và embeddings (Gemini `text-embedding-004`).
+1) Cập nhật `.env` theo provider (Gemini/OpenAI) và embeddings (Gemini `gemini-embedding-001`).
 2) Build indices (BM25/FAISS).
 3) Chạy server: `python -m app.main`.
 4) Kiểm thử endpoints: `/ask`, `/locate`, `/report`.

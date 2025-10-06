@@ -35,6 +35,9 @@ catch {
 }
 Write-Host ""
 
-# Start Streamlit (debug UI with enhanced tools)
+# Start Streamlit (production UI)
 Write-Host "Starting Streamlit UI..." -ForegroundColor Green
-streamlit run "streamlit_app/app_debug.py" --server.port 8502 --server.headless false
+Write-Host "  Using production app: streamlit_app/app.py" -ForegroundColor Cyan
+Write-Host "  (For debug UI, use: streamlit run streamlit_app/app_debug.py)" -ForegroundColor Gray
+Write-Host ""
+streamlit run "streamlit_app/app.py" --server.port 8502 --server.headless false

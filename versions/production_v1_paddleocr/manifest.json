@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "ingestion_id": "2025-10-02T16:33:20",
+  "created_at": "2025-10-02T09:35:18.073009Z",
+  "config": {
+    "source_dir": "D:\\Data_Raw",
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "chunk_strategy": "hierarchical",
+    "parser": "auto",
+    "ocr_enabled": true,
+    "ocr_language": "eng",
+    "extract_tables": true,
+    "table_min_rows": 2,
+    "table_min_cols": 2
+  },
+  "source": {
+    "data_dir": "D:\\Data_Raw",
+    "total_files": 150,
+    "processed_files": 76,
+    "quarantined_files": 73
+  },
+  "chunks": {
+    "total_chunks": 4695,
+    "unique_chunks": 4695,
+    "duplicate_chunks": 0,
+    "avg_tokens_per_chunk": 850
+  },
+  "embeddings": {
+    "total_embedded": 0,
+    "cache_hits": 0,
+    "api_calls": 0,
+    "total_cost_usd": 0.0
+  },
+  "artifacts": {
+    "chunks_jsonl": "staging\\chunks\\chunks.jsonl"
+  },
+  "lineage": {
+    "parent_version": null,
+    "incremental": false
+  }
+}

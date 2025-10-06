@@ -37,6 +37,11 @@ SUPPORTED_FORMATS = {"png", "jpeg", "jpg", "webp"}
 # In-memory cache for frequently accessed images
 memory_cache = TTLCache(maxsize=MAX_MEMORY_CACHE_SIZE, ttl=CACHE_TTL_HOURS * 3600)
 
+# BBox cache configuration
+MAX_BBOX_CACHE_SIZE = 500  # Maximum number of bbox results in cache
+BBOX_CACHE_TTL_HOURS = 12  # Shorter TTL for bbox cache
+bbox_cache = TTLCache(maxsize=MAX_BBOX_CACHE_SIZE, ttl=BBOX_CACHE_TTL_HOURS * 3600)
+
 
 class PDFRenderer:
     """Main PDF rendering class with caching support."""
@@ -367,6 +372,410 @@ class PDFRenderer:
 
         return thumb_data, metadata
 
+    def find_bbox_by_quote(
+        self,
+        pdf_path: str,
+        page_num: int,
+        quote: str,
+        fuzzy: bool = True,
+        use_cache: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Find bounding box(es) for a text quote on a PDF page.
+
+        Args:
+            pdf_path: Path to PDF file
+            page_num: Page number (1-indexed)
+            quote: Text quote to search for
+            fuzzy: If True, use fuzzy matching (case-insensitive, whitespace normalized)
+            use_cache: Whether to use bbox cache
+
+        Returns:
+            List of bounding box dicts with keys:
+            - bbox: (x0, y0, x1, y1) coordinates
+            - text: matched text
+            - confidence: match confidence (0.0-1.0)
+            - page_width: page width for normalization
+            - page_height: page height for normalization
+        """
+        # Check cache first
+        if use_cache:
+            cache_key = self._get_bbox_cache_key(pdf_path, page_num, quote, fuzzy)
+            if cache_key in bbox_cache:
+                logger.debug(f"BBox cache hit: {cache_key[:32]}...")
+                return bbox_cache[cache_key]
+
+        # Validate PDF
+        is_valid, error_msg = self.validate_pdf_path(pdf_path)
+        if not is_valid:
+            raise ValueError(error_msg)
+
+        results = []
+
+        try:
+            with fitz.open(pdf_path) as doc:
+                if page_num < 1 or page_num > doc.page_count:
+                    raise ValueError(
+                        f"Page {page_num} out of range. PDF has {doc.page_count} pages"
+                    )
+
+                page = doc[page_num - 1]
+                page_width = page.rect.width
+                page_height = page.rect.height
+
+                # Normalize quote for matching
+                quote_normalized = (
+                    self._normalize_text_for_bbox(quote) if fuzzy else quote
+                )
+
+                # Method 1: Try exact search first (PyMuPDF's search_for)
+                if not fuzzy:
+                    # Exact search
+                    text_instances = page.search_for(quote)
+                    for rect in text_instances:
+                        results.append(
+                            {
+                                "bbox": (rect.x0, rect.y0, rect.x1, rect.y1),
+                                "text": quote,
+                                "confidence": 1.0,
+                                "page_width": page_width,
+                                "page_height": page_height,
+                                "method": "exact",
+                            }
+                        )
+                else:
+                    # Fuzzy search: extract all text with positions and match
+                    text_dict = page.get_text("dict")
+                    matches = self._fuzzy_text_search(
+                        text_dict, quote_normalized, page_width, page_height
+                    )
+                    results.extend(matches)
+
+                # Cache results
+                if use_cache:
+                    bbox_cache[cache_key] = results
+
+                logger.info(
+                    f"Found {len(results)} bbox(es) for quote '{quote[:50]}...' "
+                    f"on page {page_num} of {pdf_path}"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to find bbox: {e}")
+            raise
+
+        return results
+
+    def _get_bbox_cache_key(
+        self, pdf_path: str, page_num: int, quote: str, fuzzy: bool
+    ) -> str:
+        """Generate cache key for bbox search."""
+        path = Path(pdf_path)
+        pdf_hash = self._get_pdf_hash(path)
+        quote_hash = hashlib.md5(quote.encode()).hexdigest()[:16]
+        fuzzy_flag = "fuzzy" if fuzzy else "exact"
+        return f"{pdf_hash}_{page_num}_{quote_hash}_{fuzzy_flag}"
+
+    def _normalize_text_for_bbox(self, text: str) -> str:
+        """Normalize text for fuzzy bbox matching."""
+        import re
+
+        # Lowercase
+        text = text.lower()
+        # Normalize whitespace
+        text = re.sub(r"\s+", " ", text)
+        # Remove punctuation (but keep important ones)
+        text = re.sub(r"[^\w\s.,;:!?-]", "", text)
+        return text.strip()
+
+    def _fuzzy_text_search(
+        self,
+        text_dict: Dict,
+        quote_normalized: str,
+        page_width: float,
+        page_height: float,
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform fuzzy text search in page text dictionary.
+
+        Args:
+            text_dict: PyMuPDF text dictionary
+            quote_normalized: Normalized search quote
+            page_width: Page width
+            page_height: Page height
+
+        Returns:
+            List of bbox matches
+        """
+        from difflib import SequenceMatcher
+
+        matches = []
+        quote_words = quote_normalized.split()
+
+        if not quote_words:
+            return matches
+
+        # Extract all text blocks with positions
+        text_blocks = []
+        for block in text_dict.get("blocks", []):
+            if block.get("type") == 0:  # Text block
+                for line in block.get("lines", []):
+                    line_text_parts = []
+                    line_bbox = None
+
+                    for span in line.get("spans", []):
+                        span_text = span.get("text", "")
+                        span_bbox = span.get("bbox", (0, 0, 0, 0))
+
+                        if span_text.strip():
+                            line_text_parts.append(span_text)
+
+                            # Expand line bbox
+                            if line_bbox is None:
+                                line_bbox = list(span_bbox)
+                            else:
+                                line_bbox[0] = min(line_bbox[0], span_bbox[0])  # x0
+                                line_bbox[1] = min(line_bbox[1], span_bbox[1])  # y0
+                                line_bbox[2] = max(line_bbox[2], span_bbox[2])  # x1
+                                line_bbox[3] = max(line_bbox[3], span_bbox[3])  # y1
+
+                    if line_text_parts and line_bbox:
+                        line_text = " ".join(line_text_parts)
+                        text_blocks.append(
+                            {
+                                "text": line_text,
+                                "bbox": tuple(line_bbox),
+                            }
+                        )
+
+        # Search for quote in text blocks
+        for i, block in enumerate(text_blocks):
+            block_text_norm = self._normalize_text_for_bbox(block["text"])
+
+            # Check if quote is in this block
+            if quote_normalized in block_text_norm:
+                # Exact substring match
+                matches.append(
+                    {
+                        "bbox": block["bbox"],
+                        "text": block["text"],
+                        "confidence": 1.0,
+                        "page_width": page_width,
+                        "page_height": page_height,
+                        "method": "fuzzy_exact",
+                    }
+                )
+            else:
+                # Try fuzzy matching with SequenceMatcher
+                similarity = SequenceMatcher(
+                    None, quote_normalized, block_text_norm
+                ).ratio()
+
+                if similarity > 0.8:  # High similarity threshold
+                    matches.append(
+                        {
+                            "bbox": block["bbox"],
+                            "text": block["text"],
+                            "confidence": similarity,
+                            "page_width": page_width,
+                            "page_height": page_height,
+                            "method": "fuzzy_similar",
+                        }
+                    )
+
+                # Also try matching across multiple consecutive blocks
+                if i < len(text_blocks) - 1:
+                    multi_block_text = " ".join(
+                        self._normalize_text_for_bbox(text_blocks[j]["text"])
+                        for j in range(i, min(i + 3, len(text_blocks)))
+                    )
+
+                    if quote_normalized in multi_block_text:
+                        # Merge bboxes of consecutive blocks
+                        merged_bbox = self._merge_bboxes(
+                            [
+                                text_blocks[j]["bbox"]
+                                for j in range(i, min(i + 3, len(text_blocks)))
+                            ]
+                        )
+                        matches.append(
+                            {
+                                "bbox": merged_bbox,
+                                "text": " ".join(
+                                    text_blocks[j]["text"]
+                                    for j in range(i, min(i + 3, len(text_blocks)))
+                                ),
+                                "confidence": 0.95,
+                                "page_width": page_width,
+                                "page_height": page_height,
+                                "method": "fuzzy_multi_block",
+                            }
+                        )
+
+        # Sort by confidence (descending)
+        matches.sort(key=lambda x: x["confidence"], reverse=True)
+
+        # Remove duplicates (keep highest confidence)
+        unique_matches = []
+        seen_bboxes = set()
+        for match in matches:
+            bbox_tuple = match["bbox"]
+            if bbox_tuple not in seen_bboxes:
+                seen_bboxes.add(bbox_tuple)
+                unique_matches.append(match)
+
+        return unique_matches
+
+    def _merge_bboxes(
+        self, bboxes: List[Tuple[float, float, float, float]]
+    ) -> Tuple[float, float, float, float]:
+        """Merge multiple bboxes into one."""
+        if not bboxes:
+            return (0, 0, 0, 0)
+
+        x0 = min(bbox[0] for bbox in bboxes)
+        y0 = min(bbox[1] for bbox in bboxes)
+        x1 = max(bbox[2] for bbox in bboxes)
+        y1 = max(bbox[3] for bbox in bboxes)
+
+        return (x0, y0, x1, y1)
+
+    def extract_text_with_bbox(
+        self,
+        pdf_path: str,
+        page_num: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract all text from page with bounding boxes.
+
+        Args:
+            pdf_path: Path to PDF file
+            page_num: Page number (1-indexed)
+
+        Returns:
+            List of text blocks with bbox info:
+            - text: text content
+            - bbox: (x0, y0, x1, y1) coordinates
+            - page_width: page width
+            - page_height: page height
+        """
+        is_valid, error_msg = self.validate_pdf_path(pdf_path)
+        if not is_valid:
+            raise ValueError(error_msg)
+
+        results = []
+
+        try:
+            with fitz.open(pdf_path) as doc:
+                if page_num < 1 or page_num > doc.page_count:
+                    raise ValueError(
+                        f"Page {page_num} out of range. PDF has {doc.page_count} pages"
+                    )
+
+                page = doc[page_num - 1]
+                page_width = page.rect.width
+                page_height = page.rect.height
+
+                # Get text with details
+                text_dict = page.get_text("dict")
+
+                for block in text_dict.get("blocks", []):
+                    if block.get("type") == 0:  # Text block
+                        for line in block.get("lines", []):
+                            for span in line.get("spans", []):
+                                text = span.get("text", "")
+                                bbox = span.get("bbox", (0, 0, 0, 0))
+
+                                if text.strip():
+                                    results.append(
+                                        {
+                                            "text": text,
+                                            "bbox": bbox,
+                                            "page_width": page_width,
+                                            "page_height": page_height,
+                                            "font": span.get("font", ""),
+                                            "size": span.get("size", 0),
+                                        }
+                                    )
+
+                logger.info(
+                    f"Extracted {len(results)} text blocks from page {page_num} of {pdf_path}"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to extract text with bbox: {e}")
+            raise
+
+        return results
+
+    def normalize_bbox(
+        self,
+        bbox: Tuple[float, float, float, float],
+        page_width: float,
+        page_height: float,
+    ) -> Tuple[float, float, float, float]:
+        """
+        Normalize bbox coordinates to 0-1 range.
+
+        Args:
+            bbox: (x0, y0, x1, y1) absolute coordinates
+            page_width: Page width
+            page_height: Page height
+
+        Returns:
+            Normalized bbox (x0, y0, x1, y1) in 0-1 range
+        """
+        x0, y0, x1, y1 = bbox
+
+        if page_width <= 0 or page_height <= 0:
+            return (0, 0, 0, 0)
+
+        return (
+            x0 / page_width,
+            y0 / page_height,
+            x1 / page_width,
+            y1 / page_height,
+        )
+
+    def denormalize_bbox(
+        self,
+        normalized_bbox: Tuple[float, float, float, float],
+        page_width: float,
+        page_height: float,
+    ) -> Tuple[float, float, float, float]:
+        """
+        Denormalize bbox coordinates from 0-1 range to absolute.
+
+        Args:
+            normalized_bbox: (x0, y0, x1, y1) in 0-1 range
+            page_width: Page width
+            page_height: Page height
+
+        Returns:
+            Absolute bbox (x0, y0, x1, y1)
+        """
+        x0, y0, x1, y1 = normalized_bbox
+
+        return (
+            x0 * page_width,
+            y0 * page_height,
+            x1 * page_width,
+            y1 * page_height,
+        )
+
+    def clear_bbox_cache(self):
+        """Clear bbox cache."""
+        bbox_cache.clear()
+        logger.info("BBox cache cleared")
+
+    def get_bbox_cache_stats(self) -> Dict[str, Any]:
+        """Get bbox cache statistics."""
+        return {
+            "bbox_cache_size": len(bbox_cache),
+            "bbox_cache_max_size": MAX_BBOX_CACHE_SIZE,
+            "bbox_cache_ttl_hours": BBOX_CACHE_TTL_HOURS,
+        }
+
     def clear_cache(self, pdf_path: Optional[str] = None):
         """
         Clear cache for specific PDF or all cache.
@@ -483,6 +892,56 @@ def get_cache_stats() -> Dict[str, Any]:
     """Convenience function to get cache statistics."""
     renderer = get_default_renderer()
     return renderer.get_cache_stats()
+
+
+def find_bbox_by_quote(
+    pdf_path: str,
+    page_num: int,
+    quote: str,
+    fuzzy: bool = True,
+    use_cache: bool = True,
+) -> List[Dict[str, Any]]:
+    """Convenience function to find bbox for text quote."""
+    renderer = get_default_renderer()
+    return renderer.find_bbox_by_quote(pdf_path, page_num, quote, fuzzy, use_cache)
+
+
+def extract_text_with_bbox(pdf_path: str, page_num: int) -> List[Dict[str, Any]]:
+    """Convenience function to extract text with bboxes."""
+    renderer = get_default_renderer()
+    return renderer.extract_text_with_bbox(pdf_path, page_num)
+
+
+def normalize_bbox(
+    bbox: Tuple[float, float, float, float],
+    page_width: float,
+    page_height: float,
+) -> Tuple[float, float, float, float]:
+    """Convenience function to normalize bbox."""
+    renderer = get_default_renderer()
+    return renderer.normalize_bbox(bbox, page_width, page_height)
+
+
+def denormalize_bbox(
+    normalized_bbox: Tuple[float, float, float, float],
+    page_width: float,
+    page_height: float,
+) -> Tuple[float, float, float, float]:
+    """Convenience function to denormalize bbox."""
+    renderer = get_default_renderer()
+    return renderer.denormalize_bbox(normalized_bbox, page_width, page_height)
+
+
+def clear_bbox_cache():
+    """Convenience function to clear bbox cache."""
+    renderer = get_default_renderer()
+    renderer.clear_bbox_cache()
+
+
+def get_bbox_cache_stats() -> Dict[str, Any]:
+    """Convenience function to get bbox cache statistics."""
+    renderer = get_default_renderer()
+    return renderer.get_bbox_cache_stats()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,64 @@
+fix(rag): Resolve vision citation page mismatches and post-validation crashes
+
+Refs: Build_plan_README/designs/RCA_Vision_Citation_Mismatch_2025-10-04.md
+
+## Problem Summary
+Vision generation was producing correct answers but incorrect page citations due to:
+1. Post-validation crashes from doc_id_map type mismatch (dict vs string)
+2. Doc mapping ordered by page number instead of relevance
+3. P&ID page selection biased toward middle-of-range when metadata is vague
+
+## Changes Made
+
+### 1. Fix Post-Validation Crash (High Priority)
+**Files**: `app/rag/generator.py` (lines 1121-1177), `app/rag/citation_validator.py` (lines 514-531)
+- Ensure `citation.pdf_path` is always string type, not dict
+- Add type checking: extract `pdf_path` from dict if needed with `doc_info.get('pdf_path')`
+- Wrap assignments with `str()` to guarantee string type
+- Add try/except guardrails for missing/invalid paths
+- **Result**: Eliminates "expected str, bytes or os.PathLike object, not dict" errors
+
+### 2. Improve Vision Doc Mapping by Relevance (Medium Priority)
+**Files**: `app/rag/generator.py` (lines 1300-1351, in `_try_vision_generation`)
+- Extract query tokens and equipment tags (e.g., `04-FIC-2035`)
+- Score each vision page by:
+  * Retrieval score from `retrieved_docs`
+  * Tag pattern matching (+50 boost)
+  * Keyword overlap with query
+- Sort pages by score descending and rebuild `vision_doc_mapping`
+- **Result**: Pages with important signals now ranked as [Doc 1], [Doc 2], improving LLM citation accuracy
+
+### 3. Optimize P&ID Page Selection (Medium Priority)
+**Files**: `app/rag/generator.py` (lines 1687-1725, in `_build_vision_pages`)
+- Add tag detection: check if doc text contains equipment tag patterns
+- Add P&ID identification: check if `pdf_path` or `doc_id` contains "P&ID"
+- Implement "small-page-bias": for P&ID docs without explicit tags and vague metadata,
+  use `center = min(10, page_end // 4)` instead of middle-of-range
+- **Result**: Query 3 (P&ID tag 04-FIC-2035) selects pages near 5 instead of 56-66
+
+### 4. Enhanced Logging (Support Priority)
+**Files**: `app/rag/generator.py` (lines 2066-2071, in `_post_validate_citations`)
+- Add summary log: "Post-validation summary: N citations processed, M valid, K corrected, avg_confidence=X"
+- Existing correction logs preserved: "Citation corrected: {doc_id} p.X -> p.Y (confidence: Z)"
+- **Result**: Better observability of citation correction quality
+
+## Testing
+Test script created: `scripts/test_scripts/test_post_validation_fix.py`
+- Query 1: Expected page 45 (NPSH system requirements)
+- Query 2: Expected pages 8 or 18 (gear oil pressure specifications)
+- Query 3: Expected page 5 (P&ID tag 04-FIC-2035 location)
+
+Run with:
+```powershell
+python scripts/test_scripts/test_post_validation_fix.py
+```
+
+## Impact
+- ✅ No more post-validation crashes
+- ✅ Citations now point to relevant pages containing query tags/keywords
+- ✅ P&ID page selection prioritizes content-based signals over positional heuristics
+- ✅ Enhanced logging for debugging citation corrections
+
+## Related Files
+- RCA Document: `Build_plan_README/designs/RCA_Vision_Citation_Mismatch_2025-10-04.md`
+- Test Script: `scripts/test_scripts/test_post_validation_fix.py`

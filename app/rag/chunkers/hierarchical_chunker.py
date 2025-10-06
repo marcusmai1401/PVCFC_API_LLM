@@ -3,11 +3,46 @@ Hierarchical Chunker
 Split documents into hierarchical chunks based on structure
 """
 import hashlib
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import tiktoken
 from loguru import logger
+
+
+def extract_page_from_content(text: str) -> Optional[int]:
+    """
+    Extract page number from content markers like <!-- Page 15 -->
+
+    This is a CRITICAL function to fix page metadata bug.
+    Many chunks have <!-- Page X --> markers in their text but metadata.page is wrong.
+
+    Args:
+        text: Chunk text that may contain page markers
+
+    Returns:
+        Page number if found, None otherwise
+    """
+    if not text:
+        return None
+
+    # Look for <!-- Page X --> marker (most common format)
+    match = re.search(r"<!--\s*Page\s+(\d+)\s*-->", text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # Look for [Page X] format
+    match = re.search(r"\[\s*Page\s+(\d+)\s*\]", text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # Look for "Page X" at start of text
+    match = re.search(r"^\s*Page\s+(\d+)\s*[:\-]?", text, re.IGNORECASE | re.MULTILINE)
+    if match:
+        return int(match.group(1))
+
+    return None
 
 
 @dataclass
@@ -273,19 +308,34 @@ class HierarchicalChunker:
         # If section fits in one chunk
         if size <= self.max_chunk_size:
             chunk_id = self._generate_chunk_id(doc_id, chunk_index)
+
+            # CRITICAL FIX: Extract page number from chunk content
+            content_page = extract_page_from_content(content)
+            chunk_metadata = metadata.copy()
+            if content_page is not None:
+                chunk_metadata["page"] = content_page
+                actual_page_start = content_page
+                actual_page_end = content_page
+                logger.debug(
+                    f"Extracted page {content_page} from section chunk content"
+                )
+            else:
+                actual_page_start = section["page_start"]
+                actual_page_end = section["page_end"]
+
             chunk = Chunk(
                 chunk_id=chunk_id,
                 text=content,
                 doc_id=doc_id,
-                page_start=section["page_start"],
-                page_end=section["page_end"],
+                page_start=actual_page_start,
+                page_end=actual_page_end,
                 char_count=len(content),
                 token_count=size if self.use_token_count else 0,
                 chunk_index=chunk_index,
                 parent_chunk_id=parent_id,
                 heading=section["heading"],
                 level=section["level"],
-                metadata=metadata,
+                metadata=chunk_metadata,
             )
             chunks.append(chunk)
         else:
@@ -355,19 +405,33 @@ class HierarchicalChunker:
                 chunk_text = "\n\n".join(current_chunk_text)
                 chunk_id = self._generate_chunk_id(doc_id, chunk_index + len(chunks))
 
+                # CRITICAL FIX: Extract page number from chunk content
+                # This ensures metadata.page matches the actual content page
+                content_page = extract_page_from_content(chunk_text)
+                chunk_metadata = metadata.copy()
+                if content_page is not None:
+                    chunk_metadata["page"] = content_page
+                    # Update page_start/page_end to match content
+                    actual_page_start = content_page
+                    actual_page_end = content_page
+                    logger.debug(f"Extracted page {content_page} from chunk content")
+                else:
+                    actual_page_start = page_start
+                    actual_page_end = page_end
+
                 chunk = Chunk(
                     chunk_id=chunk_id,
                     text=chunk_text,
                     doc_id=doc_id,
-                    page_start=page_start,
-                    page_end=page_end,
+                    page_start=actual_page_start,
+                    page_end=actual_page_end,
                     char_count=len(chunk_text),
                     token_count=current_size if self.use_token_count else 0,
                     chunk_index=chunk_index + len(chunks),
                     parent_chunk_id=parent_id,
                     heading=heading,
                     level=level,
-                    metadata=metadata,
+                    metadata=chunk_metadata,
                 )
                 chunks.append(chunk)
 
@@ -389,19 +453,31 @@ class HierarchicalChunker:
             chunk_text = "\n\n".join(current_chunk_text)
             chunk_id = self._generate_chunk_id(doc_id, chunk_index + len(chunks))
 
+            # CRITICAL FIX: Extract page number from chunk content
+            content_page = extract_page_from_content(chunk_text)
+            chunk_metadata = metadata.copy()
+            if content_page is not None:
+                chunk_metadata["page"] = content_page
+                actual_page_start = content_page
+                actual_page_end = content_page
+                logger.debug(f"Extracted page {content_page} from final chunk content")
+            else:
+                actual_page_start = page_start
+                actual_page_end = page_end
+
             chunk = Chunk(
                 chunk_id=chunk_id,
                 text=chunk_text,
                 doc_id=doc_id,
-                page_start=page_start,
-                page_end=page_end,
+                page_start=actual_page_start,
+                page_end=actual_page_end,
                 char_count=len(chunk_text),
                 token_count=current_size if self.use_token_count else 0,
                 chunk_index=chunk_index + len(chunks),
                 parent_chunk_id=parent_id,
                 heading=heading,
                 level=level,
-                metadata=metadata,
+                metadata=chunk_metadata,
             )
             chunks.append(chunk)
 

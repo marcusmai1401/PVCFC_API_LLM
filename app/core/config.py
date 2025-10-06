@@ -72,6 +72,20 @@ class Settings(BaseSettings):
     )
 
     # ========================================
+    # Phase 2 - Day 13: Bbox Detection
+    # ========================================
+    enable_bbox_detection: bool = Field(
+        default=True,
+        description="Enable automatic bbox detection for citations (Day 13)",
+    )
+    bbox_detection_fuzzy_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Fuzzy match threshold for bbox detection (0.0-1.0)",
+    )
+
+    # ========================================
     # Phase 2 - Degrade Mode & Resilience
     # ========================================
     retrieval_allow_bm25_only_fallback: bool = Field(
@@ -93,6 +107,14 @@ class Settings(BaseSettings):
     retrieve_cache_ttl_min: int = Field(
         default=10,
         description="TTL for retrieval/rerank cache in minutes (LRU cache with time expiration)",
+    )
+
+    # ========================================
+    # Index Directory Configuration
+    # ========================================
+    index_dir: str = Field(
+        default="artifacts/index_production",
+        description="Directory containing BM25 and FAISS indices",
     )
 
     model_config = SettingsConfigDict(

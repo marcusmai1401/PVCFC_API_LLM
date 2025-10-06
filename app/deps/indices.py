@@ -38,8 +38,14 @@ class IndexManager:
             project_root = Path(app.__file__).parent.parent
 
             # Check if index directories exist (use absolute paths)
-            bm25_path = project_root / "artifacts" / "index" / "bm25"
-            faiss_path = project_root / "artifacts" / "index" / "faiss"
+            # Use index directory from settings (configurable via INDEX_DIR env var)
+            index_base = project_root / self.settings.index_dir
+            bm25_path = index_base / "bm25"
+            faiss_path = (
+                index_base / "faiss_index"
+                if "data/indexes" in self.settings.index_dir
+                else index_base / "faiss"
+            )
 
             bm25_exists = bm25_path.exists()
             faiss_exists = faiss_path.exists()
@@ -119,7 +125,26 @@ class IndexManager:
         """
         # Get stats from retriever if available
         if self.retriever and hasattr(self.retriever, "get_statistics"):
-            return self.retriever.get_statistics()
+            raw_stats = self.retriever.get_statistics()
+
+            # Transform to expected format
+            bm25_count = raw_stats.get("bm25_documents", 0)
+            faiss_count = raw_stats.get("faiss_documents", 0)
+
+            return {
+                "bm25": {
+                    "loaded": bm25_count > 0,
+                    "doc_count": bm25_count,
+                    "chunk_count": bm25_count,  # For BM25, doc_count = chunk_count
+                },
+                "faiss": {
+                    "loaded": faiss_count > 0,
+                    "vector_count": faiss_count,
+                    "dimension": 768,  # Gemini embedding dimension
+                },
+                "config": raw_stats.get("config", {}),
+                "metadata": self.metadata,
+            }
 
         # Return basic stats if retriever not available
         return {

@@ -1,0 +1,24 @@
+[
+  {
+    "chunk_id": "test_table_sample_chunk_0_c5c8a5b13a365fd6",
+    "doc_id": "test_table_sample",
+    "chunk_index": 0,
+    "text": "Test Document with Table This is a test document to verify table extraction. Below is a table with torque specifications: Size Torque (Nm) Type M36 1200 Bolt M42 1650 Bolt M48 2150 Bolt Table 1: Anchor bolt torque specifications\n\n================================================================================\n\n<!-- TABLE 1 -->\n<!-- Table: 4 rows × 3 cols -->\n\n| Size | Torque (Nm) | Type |\n| --- | --- | --- |\n| M36 | 1200 | Bolt |\n| M42 | 1650 | Bolt |\n| M48 | 2150 | Bolt |\n\n<!-- END TABLE 1 -->",
+    "char_count": 499,
+    "word_count": 93,
+    "start_char": 0,
+    "end_char": 491,
+    "page_nums": [
+      1
+    ],
+    "metadata": {
+      "title": "",
+      "author": "",
+      "subject": "",
+      "file_name": "test_table_sample.pdf",
+      "page": 1,
+      "has_tables": true
+    },
+    "parent_id": null
+  }
+]

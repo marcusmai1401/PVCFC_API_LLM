@@ -85,6 +85,15 @@ class HybridSearchConfig:
     min_cluster_score: float = 0.1  # Minimum total score for a cluster
     page_gap_tolerance: int = 1  # Max gap between pages to consider consecutive
 
+    # Phase 1: Page-level reranking with citations
+    enable_page_reranking: bool = False  # Enable page-level reranking (mutually exclusive with page_range_expansion)
+    top_k_docs_for_page_rerank: Optional[
+        int
+    ] = None  # Number of docs to rerank (None = use all from top_rrf)
+    top_k_pages_per_doc: int = 3  # Pages to extract per document
+    max_snippets_per_page: int = 3  # Snippets per page for metadata
+    page_reranking_min_score: float = 0.0  # Minimum BM25 score threshold
+
 
 class HybridRetriever:
     """
@@ -114,6 +123,17 @@ class HybridRetriever:
             config: Search configuration
         """
         self.config = config or HybridSearchConfig()
+
+        # Validate mutually exclusive options
+        if (
+            self.config.enable_page_reranking
+            and self.config.enable_page_range_expansion
+        ):
+            logger.warning(
+                "enable_page_reranking and enable_page_range_expansion are mutually exclusive. "
+                "Disabling page_range_expansion in favor of page_reranking."
+            )
+            self.config.enable_page_range_expansion = False
 
         # Initialize indices
         self.bm25_indexer = None
@@ -277,6 +297,55 @@ class HybridRetriever:
 
         logger.info(f"RRF fusion produced {len(fused_results)} results")
 
+        # Page-level reranking with citations (Phase 1)
+        if config.enable_page_reranking:
+            logger.info("Applying page-level reranking with citations")
+
+            # Extract unique doc_ids from top results
+            top_n_docs = config.top_k_docs_for_page_rerank or config.top_rrf
+            doc_ids = self._extract_doc_ids_from_results(
+                fused_results, top_n=top_n_docs
+            )
+
+            if doc_ids:
+                # Call CitationRetriever for page-level ranking
+                try:
+                    citations = self._rerank_at_page_level(
+                        query=transformed_query.normalized,
+                        doc_ids=doc_ids,
+                        config=config,
+                    )
+
+                    # Convert citations back to RetrievalResult format
+                    fused_results = self._citations_to_retrieval_results(citations)
+
+                    logger.info(
+                        f"Page reranking completed: {len(fused_results)} page-level results"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Page reranking failed: {e}, falling back to chunk-level results"
+                    )
+                    # Keep original fused_results on failure (graceful degradation)
+            else:
+                logger.warning(
+                    "No doc_ids found for page reranking, using chunk-level results"
+                )
+
+            # Preserve degrade metadata if FAISS failed
+            if faiss_failed:
+                for result in fused_results:
+                    if result.metadata is None:
+                        result.metadata = {}
+                    result.metadata["degrade_mode"] = True
+                    result.metadata["degrade_reason"] = degrade_reason
+                logger.info("Degrade metadata preserved after page reranking")
+
+            # Skip page-range expansion (incompatible with page reranking)
+            logger.debug("Skipping page-range expansion (page reranking active)")
+
+            return fused_results
+
         # Attach degrade metadata if FAISS failed
         if faiss_failed:
             for result in fused_results:
@@ -307,6 +376,13 @@ class HybridRetriever:
                 window_size=config.sentence_window,
             )
             logger.info("Parent context expansion completed")
+
+        # Fix 4: Enrich all results with pdf_path from doc_id_map (for Vision downstream)
+        # This ensures Vision can find PDF files even if metadata doesn't have pdf_path
+        try:
+            fused_results = self._enrich_results_with_pdf_path(fused_results)
+        except Exception as e:
+            logger.debug(f"Failed to enrich results with pdf_path: {e}")
 
         return fused_results
 
@@ -522,7 +598,55 @@ class HybridRetriever:
                     self._doc_id_map_cache = {}
             except Exception:
                 self._doc_id_map_cache = {}
-        return self._doc_id_map_cache.get(doc_id)
+
+        # Handle both dict format (new) and string format (legacy)
+        doc_info = self._doc_id_map_cache.get(doc_id)
+        if doc_info is None:
+            return None
+        elif isinstance(doc_info, dict):
+            return doc_info.get("pdf_path")
+        elif isinstance(doc_info, str):
+            return doc_info
+        return None
+
+    def _enrich_results_with_pdf_path(
+        self, results: List[RetrievalResult]
+    ) -> List[RetrievalResult]:
+        """Enrich retrieval results with pdf_path in metadata (Fix 4)
+
+        This ensures downstream components (especially Vision) can reliably find PDF files.
+        Uses doc_id_map.json to resolve doc_id -> pdf_path.
+
+        Args:
+            results: List of retrieval results
+
+        Returns:
+            Same results with enriched metadata
+        """
+        if not results:
+            return results
+
+        enriched_count = 0
+        for result in results:
+            # Skip if already has pdf_path
+            if result.metadata and result.metadata.get("pdf_path"):
+                continue
+
+            # Try to resolve pdf_path from doc_id
+            if result.doc_id:
+                pdf_path = self._get_pdf_path_for_doc(result.doc_id)
+                if pdf_path:
+                    if result.metadata is None:
+                        result.metadata = {}
+                    result.metadata["pdf_path"] = pdf_path
+                    enriched_count += 1
+
+        if enriched_count > 0:
+            logger.info(
+                f"Enriched {enriched_count}/{len(results)} results with pdf_path"
+            )
+
+        return results
 
     def _upgrade_results_with_full_pages(
         self, results: List[RetrievalResult]
@@ -609,6 +733,134 @@ class HybridRetriever:
             fused_results.append(result)
 
         return fused_results
+
+    def _extract_doc_ids_from_results(
+        self, results: List[RetrievalResult], top_n: int
+    ) -> List[str]:
+        """
+        Extract unique document IDs from top retrieval results
+
+        Args:
+            results: List of retrieval results
+            top_n: Maximum number of unique doc_ids to extract
+
+        Returns:
+            List of unique document IDs (up to top_n)
+        """
+        seen = set()
+        doc_ids = []
+
+        for result in results:
+            if result.doc_id and result.doc_id not in seen:
+                doc_ids.append(result.doc_id)
+                seen.add(result.doc_id)
+
+                if len(doc_ids) >= top_n:
+                    break
+
+        return doc_ids
+
+    def _rerank_at_page_level(
+        self,
+        query: str,
+        doc_ids: List[str],
+        config: HybridSearchConfig,
+    ) -> List["CitationResult"]:
+        """
+        Perform page-level reranking within documents using CitationRetriever
+
+        Args:
+            query: Search query
+            doc_ids: List of document IDs to rerank
+            config: Hybrid search configuration
+
+        Returns:
+            List of CitationResult objects with page-level rankings
+        """
+        from app.rag.citation_retriever import SearchConfig, get_citation_retriever
+
+        citation_retriever = get_citation_retriever()
+
+        # Build SearchConfig for CitationRetriever
+        citation_config = SearchConfig(
+            top_k_docs=len(doc_ids),  # Use all provided doc_ids
+            top_k_pages_per_doc=config.top_k_pages_per_doc,
+            min_page_score=config.page_reranking_min_score,
+            max_snippets_per_page=config.max_snippets_per_page,
+            max_total_citations=config.top_rrf,  # Match original top_rrf limit
+            deduplicate_pages=True,
+        )
+
+        # Call citation retriever with doc_ids
+        return citation_retriever.search_with_citations(
+            query=query,
+            doc_ids=doc_ids,
+            config_override=citation_config,
+        )
+
+    def _citations_to_retrieval_results(
+        self,
+        citations: List["CitationResult"],
+    ) -> List[RetrievalResult]:
+        """
+        Convert page-level citations back to RetrievalResult format
+
+        This allows page-level results to be used seamlessly with
+        the existing Generator that expects RetrievalResult objects.
+
+        Args:
+            citations: List of CitationResult objects from page reranker
+
+        Returns:
+            List of RetrievalResult objects with page-level granularity
+        """
+        results = []
+
+        for citation in citations:
+            # Use page text as main content
+            text = citation.page_text
+
+            # Build metadata with page-level information
+            metadata = {
+                **citation.metadata,
+                "page": citation.page,
+                "citation_rank": citation.rank,
+                "page_level_result": True,  # Flag to identify page-level results
+            }
+
+            # Add snippets to metadata for Generator access (always include key, even if empty)
+            metadata["snippets"] = (
+                [
+                    {
+                        "text": s.text,
+                        "highlighted": s.highlighted_text,
+                        "score": s.score,
+                        "matched_keywords": list(s.matched_keywords)
+                        if hasattr(s, "matched_keywords")
+                        else [],
+                    }
+                    for s in citation.snippets
+                ]
+                if citation.snippets
+                else []
+            )
+
+            # Create RetrievalResult with page-level data
+            result = RetrievalResult(
+                chunk_id=f"page_{citation.doc_id}_{citation.page}",
+                text=text,
+                score=citation.score,
+                source="page_reranked",  # Identify source as page reranking
+                metadata=metadata,
+                doc_id=citation.doc_id,
+                page=citation.page,
+                bbox=None,  # Pages don't have bbox
+                parent_id=None,  # Pages are top-level
+            )
+
+            results.append(result)
+
+        return results
 
     def _expand_parent_context(
         self,

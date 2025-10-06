@@ -8,22 +8,22 @@ maxMessageSize = 200
 # Enable file watching to auto-reload on changes
 fileWatcherType = "auto"
 
-# Disable usage statistics
-gatherUsageStats = false
-
 # Run on port 8501 (default)
 port = 8501
 
-# Enable CORS for development
-enableCORS = false
+# CORS settings (fixed conflict with XSRF protection)
+# Option 1: Keep XSRF protection (recommended for security)
+enableCORS = true
+enableXsrfProtection = true
+
+# Option 2: If you need open CORS, disable XSRF (less secure)
+# enableCORS = true
+# enableXsrfProtection = false
 
 # Enable hot reloading
 runOnSave = true
 
 [browser]
-# Disable gathering usage stats from the browser
-gatherUsageStats = false
-
 # Server address for the browser
 serverAddress = "localhost"
 
@@ -39,15 +39,9 @@ font = "sans serif"
 # Magic commands are enabled by default
 magicEnabled = true
 
-# Install packages automatically
+# Fast reruns enabled
 fastReruns = true
 
 [client]
 # Show error details
 showErrorDetails = true
-
-# Enable caching to improve performance
-caching = true
-
-# Display rerun button when script errors
-displayEnabled = true
