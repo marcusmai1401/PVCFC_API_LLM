@@ -1,0 +1,18 @@
+{
+  "test_name": "golden_citation_accuracy",
+  "timestamp": "20251007_044602",
+  "api_url": "http://localhost:8000",
+  "dataset": "golden_citation_accuracy_test",
+  "summary": {
+    "total_tests": 0,
+    "correct_doc_and_page": 0,
+    "correct_doc_wrong_page": 0,
+    "wrong_doc": 0,
+    "no_answer": 0,
+    "page_off_by_1": 0,
+    "page_off_by_2_plus": 0,
+    "vision_enabled_tests": 0,
+    "vision_disabled_tests": 0
+  },
+  "results": []
+}

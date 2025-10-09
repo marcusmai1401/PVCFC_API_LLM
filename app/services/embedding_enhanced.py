@@ -70,10 +70,38 @@ class UniversalEmbeddingService:
 
         # Initialize cache and quarantine paths
         self.cache_dir = Path("artifacts/ingestion/cache")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Handle symlinks/junctions on Windows
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except (FileExistsError, OSError) as e:
+            # If parent is a symlink/junction, resolve and create
+            logger.debug(
+                f"Cache dir creation issue (likely symlink): {e}, resolving..."
+            )
+            try:
+                # Ensure parent exists (resolve symlink)
+                resolved_parent = self.cache_dir.parent.resolve()
+                if resolved_parent.exists():
+                    resolved_cache = resolved_parent / self.cache_dir.name
+                    resolved_cache.mkdir(exist_ok=True)
+                    self.cache_dir = resolved_cache
+                else:
+                    logger.warning(f"Could not resolve cache parent: {resolved_parent}")
+                    # Fallback to temp cache
+                    self.cache_dir = Path("artifacts/cache_fallback")
+                    self.cache_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e2:
+                logger.warning(f"Could not create cache dir, using fallback: {e2}")
+                self.cache_dir = Path("artifacts/cache_fallback")
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+
         self.cache_db_path = self.cache_dir / "embeddings.sqlite"
         self.quarantine_path = Path("artifacts/ingestion/quarantine_embedding.jsonl")
-        self.quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+        except (FileExistsError, OSError):
+            # If parent is symlink, just use it as-is
+            pass
 
         # Initialize cache database
         self._init_cache_db()

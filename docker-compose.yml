@@ -1,0 +1,62 @@
+# Docker Compose for Page-First RAG Agent API
+version: '3.8'
+
+services:
+  page-first-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: page-first-rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      # API Configuration
+      - LOG_LEVEL=INFO
+
+      # Page-First Agent Configuration
+      - PAGE_FIRST_TOPK_BM25=${PAGE_FIRST_TOPK_BM25:-30}
+      - PAGE_FIRST_TOPK_VEC=${PAGE_FIRST_TOPK_VEC:-30}
+      - PAGE_FIRST_MERGED_K=${PAGE_FIRST_MERGED_K:-40}
+      - PAGE_FIRST_RERANK_KEEP=${PAGE_FIRST_RERANK_KEEP:-8}
+      - PAGE_FIRST_NEIGHBOR_RADIUS=${PAGE_FIRST_NEIGHBOR_RADIUS:-2}
+      - PAGE_FIRST_CTX_MAX_TOKENS=${PAGE_FIRST_CTX_MAX_TOKENS:-2200}
+      - PAGE_FIRST_ANSWER_MAX_TOKENS=${PAGE_FIRST_ANSWER_MAX_TOKENS:-400}
+      - PAGE_FIRST_NLI_THRESHOLD=${PAGE_FIRST_NLI_THRESHOLD:-0.60}
+      - PAGE_FIRST_FUZZY_MIN=${PAGE_FIRST_FUZZY_MIN:-0.55}
+
+      # API Keys (from .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+
+    volumes:
+      # Mount artifacts directory (for persistence)
+      - ./artifacts:/app/artifacts
+
+      # Mount logs directory
+      - ./logs:/app/logs
+
+      # Optional: mount for development hot-reload
+      # - ./app:/app/app
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+networks:
+  default:
+    name: page-first-network

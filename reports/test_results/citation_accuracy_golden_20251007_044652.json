@@ -1,0 +1,66 @@
+{
+  "test_name": "golden_citation_accuracy",
+  "timestamp": "20251007_044652",
+  "api_url": "http://localhost:8000",
+  "dataset": "golden_citation_accuracy_test",
+  "summary": {
+    "total_tests": 5,
+    "correct_doc_and_page": 0,
+    "correct_doc_wrong_page": 0,
+    "wrong_doc": 0,
+    "no_answer": 5,
+    "page_off_by_1": 0,
+    "page_off_by_2_plus": 0,
+    "vision_enabled_tests": 0,
+    "vision_disabled_tests": 5,
+    "pass_rate": 0.0,
+    "doc_match_rate": 0.0
+  },
+  "results": [
+    {
+      "question_id": "q1_vi_co2_stage3",
+      "query": "Để đánh giá hiệu suất của máy nén CO2 ở cấp nén thứ 3 (Rated 3rd) theo tài liệu này, cần phải dựa trên những điều kiện vận hành tiêu chuẩn nào và giá trị cụ thể của chúng là bao nhiêu?",
+      "language": "vi",
+      "vision_enabled": false,
+      "success": false,
+      "error": "API call failed",
+      "elapsed_ms": 2055.1819801330566
+    },
+    {
+      "question_id": "q2_en_polytropic_efficiency",
+      "query": "For the 1st stage of the CO2 compressor operating under 'Rated' conditions, what is the expected polytropic efficiency (%) at the specified suction capacity of 36,962.0 m³/hr?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": false,
+      "error": "API call failed",
+      "elapsed_ms": 2063.8821125030518
+    },
+    {
+      "question_id": "q3_vi_ammonia_parts",
+      "query": "Theo đề xuất bảo trì cho Bơm cấp liệu Amoniac (AMMONIA FEED PUMP), những phụ tùng nào cần được chuẩn bị tại công trường cho đợt \"Kiểm tra thông thường\" (Convention Inspection)?",
+      "language": "vi",
+      "vision_enabled": false,
+      "success": false,
+      "error": "API call failed",
+      "elapsed_ms": 2077.359437942505
+    },
+    {
+      "question_id": "q4_en_shaft_repair",
+      "query": "According to the maintenance proposal for the Ammonia Feed Pump, what is the recommended repair action for the shaft (Item No. 5) if its measured runout is 0.15mm or greater during a major inspection?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": false,
+      "error": "API call failed",
+      "elapsed_ms": 2068.9496994018555
+    },
+    {
+      "question_id": "q5_en_4th_stage_conditions",
+      "query": "What are the specified \"Rated\" operating conditions for the 4th stage of the CO2 compressor, specifically regarding inlet pressure, temperature, and molecular weight of the gas?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": false,
+      "error": "API call failed",
+      "elapsed_ms": 2040.816307067871
+    }
+  ]
+}

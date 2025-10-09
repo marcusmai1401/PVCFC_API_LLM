@@ -100,6 +100,50 @@ python scripts/test_scripts/online_audit/test_online_comprehensive.py
 
 ---
 
+### 4. test_citation_accuracy_golden.py ⭐ NEW
+**Purpose**: Test citation accuracy with verified ground truth
+
+**What it does**:
+- Tests 5 verified Q&A pairs with known correct citations
+- Compares API results against ground truth (doc + page)
+- Tests with vision ON and OFF (10 total requests)
+- Identifies citation mismatch patterns
+
+**Run**:
+```bash
+# Test with both vision variants (default)
+python scripts/test_scripts/online_audit/test_citation_accuracy_golden.py
+
+# Test only with vision enabled
+python scripts/test_scripts/online_audit/test_citation_accuracy_golden.py --vision-only
+
+# Test only without vision
+python scripts/test_scripts/online_audit/test_citation_accuracy_golden.py --no-vision
+
+# Custom API URL
+python scripts/test_scripts/online_audit/test_citation_accuracy_golden.py --api-url http://localhost:8001
+```
+
+**Expected**:
+- Pass rate ≥ 60% (at least 3/5 questions correct)
+- Identifies specific citation issues for investigation
+
+**Output**:
+- Console: Detailed per-question results with verdict
+- JSON: `reports/test_results/citation_accuracy_golden_{timestamp}.json`
+- Contains full response dumps for deep analysis
+
+**Exit codes**:
+- 0: Pass rate ≥ 60%
+- 1: Pass rate < 60% (needs investigation)
+
+**Dataset**: `golden_citation_dataset.json`
+- Q1-Q2: CO2 compressor (VI/EN) → File: `003_3N4-S4274345...pdf`
+- Q3-Q4: Ammonia pump (VI/EN) → File: `Ammonia Maintenance Schedule.pdf`
+- Q5: Compressor datasheet (EN) → File: `002_3N4-S4274343...pdf`
+
+---
+
 ## Golden Queries
 
 **File**: `golden_queries.json`
@@ -208,4 +252,3 @@ VI reranking returned empty results (NaN issue)
 
 **Created**: 2025-10-07
 **Status**: Ready for use
-

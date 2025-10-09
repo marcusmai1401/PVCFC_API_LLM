@@ -72,12 +72,12 @@ def convert_to_ieee_style(
 ) -> Tuple[str, List[Dict]]:
     """
     Convert inline [Doc X, p.Y] citations to IEEE-style [n] format.
-    
+
     Args:
         answer_text: The answer text containing [Doc X, p.Y] style citations
         citations: List of citation dicts from the API response
         doc_number_map: Optional mapping from doc_number to {doc_id, pdf_path, file_name}
-    
+
     Returns:
         Tuple of (converted_text, ordered_citation_list)
         - converted_text: Answer with [1], [2], etc. instead of [Doc X, p.Y]
@@ -86,26 +86,26 @@ def convert_to_ieee_style(
     """
     if not answer_text:
         return answer_text, []
-    
+
     # Pattern to match [Doc X, p.Y] or [Doc X, pp. Y-Z] or [Doc X]
     # Also handles multiple citations in one bracket: [Doc 1, p.5; Doc 2, p.10]
-    pattern = r'\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]'
-    
+    pattern = r"\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]"
+
     # Normalize doc_number_map keys to strings for uniform matching
     doc_number_map_str = {}
     if isinstance(doc_number_map, dict):
         for k, v in doc_number_map.items():
             doc_number_map_str[str(k)] = v
-    
+
     # Build a mapping from doc_number to citation info collected from citations list
     doc_citation_map = {}  # {doc_number: {doc_id, file_name, pages: set(), pdf_path}}
-    
+
     # First, populate from citations list (best source for page numbers)
     for cit in citations:
         doc_id = cit.get("doc_id", "Unknown")
         page = cit.get("page")
         pdf_path = cit.get("pdf_path", "")
-        
+
         # Try to determine doc_number for this doc via doc_number_map
         doc_number = None
         for num_key, doc_info in doc_number_map_str.items():
@@ -113,15 +113,19 @@ def convert_to_ieee_style(
                 doc_number = str(num_key)
                 pdf_path = doc_info.get("pdf_path", pdf_path)
                 break
-        
+
         # Extract file_name from pdf_path or doc_id
         file_name = doc_id
         if pdf_path:
             file_name = Path(pdf_path).name
         elif doc_id.startswith("DOCID_"):
             parts = doc_id.split("_")
-            file_name = "_".join(parts[1:-1]) if len(parts) > 2 else (parts[1] if len(parts) > 1 else doc_id)
-        
+            file_name = (
+                "_".join(parts[1:-1])
+                if len(parts) > 2
+                else (parts[1] if len(parts) > 1 else doc_id)
+            )
+
         if doc_number:
             if doc_number not in doc_citation_map:
                 doc_citation_map[doc_number] = {
@@ -142,15 +146,19 @@ def convert_to_ieee_style(
                 except Exception:
                     # Ignore non-integer pages
                     pass
-    
+
     # Track unique citations in order of appearance
-    citation_list: List[Dict] = []  # Ordered list of {doc_id, file_name, pages: [list], pdf_path}
+    citation_list: List[
+        Dict
+    ] = []  # Ordered list of {doc_id, file_name, pages: [list], pdf_path}
     citation_lookup: Dict[str, int] = {}  # Map doc_id -> citation index (1-based)
-    
+
     converted_text = answer_text
-    
+
     # Helper to ensure a doc_id is present in citation_list
-    def ensure_citation_entry(doc_id: str, file_name: str, pages: List[int], pdf_path: str) -> int:
+    def ensure_citation_entry(
+        doc_id: str, file_name: str, pages: List[int], pdf_path: str
+    ) -> int:
         if doc_id not in citation_lookup:
             citation_list.append(
                 {
@@ -162,17 +170,17 @@ def convert_to_ieee_style(
             )
             citation_lookup[doc_id] = len(citation_list)
         return citation_lookup[doc_id]
-    
+
     # Find all citation patterns and replace them
     def replace_citation(match):
         full_match = match.group(0)
-        
+
         # Extract all Doc X patterns from the matched text
-        doc_pattern = r'Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?'
+        doc_pattern = r"Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?"
         doc_matches = list(re.finditer(doc_pattern, full_match))
-        
+
         ieee_refs = []
-        
+
         for doc_match in doc_matches:
             doc_num = str(doc_match.group(1))
             # 1) If we have citation info (with pages) for this doc number, use it
@@ -197,17 +205,23 @@ def convert_to_ieee_style(
             else:
                 # 3) Last-resort: keep the numeric label but no entry (should be rare)
                 ieee_refs.append(doc_num)
-        
+
         # Return IEEE-style reference
         if len(ieee_refs) == 1:
             return f"[{ieee_refs[0]}]"
         else:
             # Multiple citations: [1][2]
             return "".join([f"[{ref}]" for ref in ieee_refs])
-    
+
     # Replace all citation patterns
     converted_text = re.sub(pattern, replace_citation, converted_text)
-    
+
+    # Post-process to remove duplicate consecutive citations like [1][1] -> [1]
+    # Pattern: [N][N] where N is the same number
+    dedupe_pattern = r"\[(\d+)\]\[\1\]"
+    while re.search(dedupe_pattern, converted_text):
+        converted_text = re.sub(dedupe_pattern, r"[\1]", converted_text)
+
     return converted_text, citation_list
 
 
@@ -1038,9 +1052,38 @@ def render(vision_mode=False):
                         doc_number_map = results.get("meta", {}).get("doc_number_map")
                 except Exception:
                     doc_number_map = {}
-                
+
                 # Check if IEEE-style citations is enabled
                 use_ieee = st.session_state.get("use_ieee_citations", True)
+
+                # DEBUG: Log raw data
+                with st.expander("🔍 DEBUG: Raw Data", expanded=False):
+                    st.json(
+                        {
+                            "answer_text_preview": answer_text[:500]
+                            if answer_text
+                            else None,
+                            "citations_count": len(citations),
+                            "citations_sample": [
+                                {
+                                    "doc_id": c.get("doc_id"),
+                                    "page": c.get("page"),
+                                    "pdf_path": c.get("pdf_path", "")[:80] + "..."
+                                    if c.get("pdf_path")
+                                    else None,
+                                }
+                                for c in citations[:3]
+                            ],
+                            "doc_number_map_keys": list(doc_number_map.keys())
+                            if doc_number_map
+                            else [],
+                            "doc_number_map_sample": {
+                                k: v for k, v in list(doc_number_map.items())[:3]
+                            }
+                            if doc_number_map
+                            else {},
+                        }
+                    )
 
                 # Check if answer is empty or too short
                 if not answer_text or len(answer_text.strip()) < 10:
@@ -1127,11 +1170,14 @@ def render(vision_mode=False):
 
                                         if pdf_exists:
                                             # Build URL for PDF open endpoint (native PDF viewing)
+                                            # We need both: page query param for API and #page=N fragment for browser
+                                            # The #page=N fragment tells browser's PDF viewer where to scroll to
                                             params = {
                                                 "pdf_path": pdf_path,
                                                 "page": str(page),
                                             }
                                             params_str = urlencode(params)
+                                            # Add #page=N fragment for browser PDF viewer to auto-scroll
                                             pdf_url = f"{st.session_state.api_base_url}/api/pdf/open?{params_str}#page={page}"
                                             page_links.append(
                                                 f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px;" title="Open PDF at page {page}">p.{page}</a>'

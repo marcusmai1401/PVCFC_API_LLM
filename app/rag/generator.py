@@ -1644,6 +1644,7 @@ Response:"""
         vision_doc_number_map = {}
         try:
             from pathlib import Path as _Path
+
             for i, result in vision_doc_mapping.items():
                 # Extract pdf_path and file_name from result.metadata
                 pdf_path_val = None

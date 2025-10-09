@@ -1,0 +1,1980 @@
+{
+  "test_name": "golden_citation_accuracy",
+  "timestamp": "20251007_044908",
+  "api_url": "http://localhost:8000",
+  "dataset": "golden_citation_accuracy_test",
+  "summary": {
+    "total_tests": 5,
+    "correct_doc_and_page": 1,
+    "correct_doc_wrong_page": 3,
+    "wrong_doc": 1,
+    "no_answer": 0,
+    "page_off_by_1": 1,
+    "page_off_by_2_plus": 2,
+    "vision_enabled_tests": 0,
+    "vision_disabled_tests": 5,
+    "pass_rate": 0.2,
+    "doc_match_rate": 0.8
+  },
+  "results": [
+    {
+      "question_id": "q1_vi_co2_stage3",
+      "query": "Để đánh giá hiệu suất của máy nén CO2 ở cấp nén thứ 3 (Rated 3rd) theo tài liệu này, cần phải dựa trên những điều kiện vận hành tiêu chuẩn nào và giá trị cụ thể của chúng là bao nhiêu?",
+      "language": "vi",
+      "vision_enabled": false,
+      "success": true,
+      "elapsed_ms": 25376.634120941162,
+      "verdict": "~ PARTIAL (page off by 1)",
+      "comparison": {
+        "question_id": "q1_vi_co2_stage3",
+        "ground_truth_page": 8,
+        "ground_truth_file": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf",
+        "doc_match": true,
+        "page_match": "off_by_1",
+        "page_distance": 1,
+        "citations_found": 1,
+        "matched_citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 9,
+            "page_diff": 1,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          }
+        ],
+        "mismatched_citations": [],
+        "answer_length": 682,
+        "has_keywords": false
+      },
+      "response": {
+        "answer": "[LOW CONFIDENCE]\nĐể đánh giá hiệu suất của máy nén CO2 ở cấp nén thứ 3 (Rated 3rd), cần dựa trên các điều kiện vận hành tiêu chuẩn được nêu trong tài liệu [Doc 2, p. 9]. Các giá trị cụ thể của những điều kiện này là:\n\n*   **Khối lượng phân tử (MOLECULAR WEIGH):** 43.32 [Doc 2, p. 9]\n*   **Tỷ số nhiệt dung riêng (SPECIFIC_HEAT RATIO):** 1.266 [Doc 2, p. 9]\n*   **Nhiệt độ hút (SUCTION TEMPERATURE):** 45.0 DEG. C [Doc 2, p. 9]\n*   **Áp suất hút (SUCTION PRESSURE):** 20.9 BAR. A [Doc 2, p. 9]\n\n⚠️ **Verification Notice**: This answer has limited verification coverage (0% verified, avg: 0.19, confidence: 24%). Please cross-reference with source documents for critical information.",
+        "citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 9,
+            "bbox": null,
+            "confidence": 0.48124999999999996,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          }
+        ],
+        "context_used": [
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+          "bm25_2"
+        ],
+        "confidence": 0.23958058105180124,
+        "meta": {
+          "latency_ms": 23290,
+          "breakdown": {
+            "transform_ms": 6495,
+            "retrieve_ms": 1452,
+            "rerank_ms": 3,
+            "generate_ms": 10293
+          },
+          "k": 8,
+          "execution_mode": "production",
+          "trace_id": "unknown",
+          "model_generation": "gemini-2.5-pro",
+          "model_query_transform": "gemini-2.5-flash",
+          "embed_model": "gemini-embedding-001",
+          "degrade_mode": false,
+          "degrade_reason": null,
+          "bm25_k_current": 50,
+          "top_rerank_current": 20,
+          "vision_page_selector_enabled": false,
+          "text_range_scan_enabled": false,
+          "cache_hit": false,
+          "model": "gemini-2.5-pro"
+        },
+        "warnings": [
+          "⚠️ Verification: 3/3 claims have lower confidence (verification < 0.4, answer confidence: 24%)",
+          "   • Low verification (0.12): '[LOW CONFIDENCE]\nĐể đánh giá hiệu suất của máy nén CO2 ở cấp...'",
+          "Low verification rate (0%, global confidence: 24%) - 3 claims checked, 0 verified"
+        ],
+        "retrieval_details": {
+          "bm25": [
+            {
+              "chunk_id": "bm25_2",
+              "text": "10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WITHOUT PERMISSION O...",
+              "score": 0.0508,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_28",
+              "text": "\nThe code of steam turbine WT8043,which type is ENK40/45/60,sigle casing extraction\ncondensing type, is applied to ca mau fertilizer plant project, and to drive CO2 Compressor group.\nSteam conditions ...",
+              "score": 0.0268,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 45
+            },
+            {
+              "chunk_id": "bm25_0",
+              "text": "---\nsource: D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Spare parts\\KT06101-technical spare part list.pdf\ntotal_pages: 0\n---\n\n<!-- Page 5 -->\n\n5- 7410-4003-78 5-7410-4003-35\n\n---\n\n<!-- Page 10...",
+              "score": 0.023,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Spare_parts_KT06101-technical_spare_part_d508bf2f",
+              "page": 4
+            },
+            {
+              "chunk_id": "bm25_1",
+              "text": "---\nsource: D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\MANUAL(COMPRESSOR)l.pdf\ntotal_pages: 0\n---\n\n<!-- Page 292 -->\n\nDự kiến thay bằng vật liệu: PEEK vì dùng ASTM ...",
+              "score": 0.021,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+              "page": 291
+            },
+            {
+              "chunk_id": "bm25_9",
+              "text": "--- TABLE START (Page 113, Table 1: 15x15, confidence=0.05) ---\n|  |  | Hơi cấp chính 110 Hơi lấy ra extraction 11000 Hơi Vùng thêm vào admission stea |  |  |  |  |  |  |  |  |  |  |  |  |\n| --- | ---...",
+              "score": 0.0186,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_12",
+              "text": "FRESH COOLING WATER RETURN TE25-17 FRESH COOLING WATER SUPPLY TE25-17 Design flow rate： 297 m3/h Discharge pressure ： 14.45MPa(g) Type:centrifugal type-steam turbine drving Suction pressure ： 0.28MPa(...",
+              "score": 0.0178,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_8",
+              "text": "--- TABLE START (Page 113, Table 2: 3x7, confidence=0.06) ---\n|  |  |  |  |  |  |  |\n| --- | --- | --- | --- | --- | --- | --- |\n|  |  |  |  |  |  |  |\n|  |  | 110 |  |  |  |  |\n--- TABLE END ---\n\n---...",
+              "score": 0.0174,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_3",
+              "text": "<!-- Page 75 --> 10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WIT...",
+              "score": 0.0172,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_4",
+              "text": "--- TABLE START (Page 75, Table 1: 18x19, confidence=0.15) --- | | | SL04001 K04421 PROCESS AIR COMPRESSOR E04421 PROCESS AIR COMPRESSOR K04421 PROCESS AIR COMPRESSOR E04422 PROCESS AIR COMPRESSOR K04...",
+              "score": 0.0169,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_10",
+              "text": "---\n\n<!-- Page 8 -->\n\nCA.MAU FERTILIZER PLANT DOC NO. 07087-CP22-KT06101 WEC UREA UNIT Page 8/8 Rev. 0F SPECIAL PURPOSE STEAM TURBINE DATA SHEET SERVICE: DRIVER FOR CO2 COMPRESSOR ITEM No. KT06101 Ste...",
+              "score": 0.0169,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-CP22-KT06101_rev_0F_e99222e0",
+              "page": 1
+            }
+          ],
+          "faiss": [
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 40 Ty FACTOR; 0. 617 RATIO > 1. 379 SUCTION TEMPERA...",
+              "score": 0.0768,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3. 32) COMPRESS SPECIFIC_HEAT RATIO.; 1. 266 SUCTIO...",
+              "score": 0.0681,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+              "text": "<!-- Page 6 -->\n\nPERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED C02 MOLECULAR WEIGH 42. 86 COMPRESSIBILITY FACTOR; 0. 98 RATIO SUCTION TEMPERATUR ...",
+              "score": 0.0644,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 6
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMPRESSIBILITY FACTO RATIO Ba SUCTION TEMPERATURE, DE...",
+              "score": 0.0612,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEIGH : 42. 86 COMPRESSIBILITY FACTOR 0. 98 FIC_HEAT ...",
+              "score": 0.0582,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT COMPRESSIBILITY FACTOR 0. 617 RATIO SUCTION TENPE...",
+              "score": 0.0542,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRESSIBILITY FACTOR; SPECIFIC_HEAT RATIO : SUCTION TEM...",
+              "score": 0.0519,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "chunk_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_3N4-S4275356_c1b2bc9a_chunk_0001",
+              "text": "<!-- Page 3 -->\n\nHTC AA APPLICABLETO: PROPOSAL CA MAU FERTILIZER VIETNAM C02 COMPRESSOR | MANUFACTURER HTC | | a] OPERATING POINTS INFORMATION TO BE COMPLETED BY: | TURBINE OAS BUILT UNIT NO, REQUIRED...",
+              "score": 0.0456,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_3N4-S4275356_c1b2bc9a",
+              "page": 3
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0007",
+              "text": "<!-- Page 8 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS.; 0 MOLECULAR WEIGH A COMPRESSIBILITY FACTOR; ECIFIC_HEAT RATIO; UCTION TEMPERAT...",
+              "score": 0.0451,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 8
+            },
+            {
+              "chunk_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_3N4-S4275356_c1b2bc9a_chunk_0002",
+              "text": "HTC AA APPLICABLETO: PROPOSAL CA MAU FERTILIZER VIETNAM C02 COMPRESSOR | MANUFACTURER HTC | | a] OPERATING POINTS INFORMATION TO BE COMPLETED BY: | TURBINE OAS BUILT UNIT NO, REQUIRED DRIVEN EQUIPMENT...",
+              "score": 0.0429,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_3N4-S4275356_c1b2bc9a",
+              "page": 1
+            }
+          ],
+          "total_retrieved": 60,
+          "degrade_mode": false,
+          "from_cache": false
+        },
+        "reranking_details": {
+          "method": "score",
+          "input_count": 60,
+          "output_count": 8,
+          "top_k": 20,
+          "from_cache": false,
+          "results": [
+            {
+              "rank": 1,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "score": 0.0768,
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 4...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "rank": 2,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "score": 0.0681,
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "rank": 3,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+              "score": 0.0644,
+              "text": "<!-- Page 6 -->\n\nPERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED C02 MOLECULAR WEIGH 42. 86 COMPR...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 6
+            },
+            {
+              "rank": 4,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "score": 0.0612,
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMP...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "rank": 5,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "score": 0.0582,
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEI...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "rank": 6,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "score": 0.0542,
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "rank": 7,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "score": 0.0519,
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRES...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "rank": 8,
+              "chunk_id": "bm25_2",
+              "score": 0.0508,
+              "text": "10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, ...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            }
+          ]
+        },
+        "generation_details": {
+          "model": "gemini-2.5-pro",
+          "tier": "heavy",
+          "language": "vi",
+          "execution_mode": "production",
+          "vision_enabled": false,
+          "cove_enabled": true,
+          "answer_length": 682,
+          "citations_count": 1,
+          "confidence": 0.23958058105180124,
+          "metadata": {
+            "citation_validation": {
+              "total_count": 1,
+              "valid_count": 1,
+              "invalid_count": 0,
+              "corrected_count": 0,
+              "avg_confidence": 0.48124999999999996,
+              "details": [
+                {
+                  "citation_index": 0,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+                  "page": 9,
+                  "is_valid": true,
+                  "confidence": 0.48124999999999996,
+                  "errors": [
+                    {
+                      "type": "text_not_found",
+                      "message": "Cited page text does not match actual page content (confidence: 48.12%)",
+                      "severity": "warning",
+                      "details": {
+                        "page_text_confidence": 0.48124999999999996
+                      }
+                    },
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 48.12% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.48124999999999996,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                }
+              ]
+            },
+            "intent": "ask",
+            "num_docs": 8,
+            "has_filters": true,
+            "used_hyde": false,
+            "confidence_mode": "legacy"
+          }
+        }
+      }
+    },
+    {
+      "question_id": "q2_en_polytropic_efficiency",
+      "query": "For the 1st stage of the CO2 compressor operating under 'Rated' conditions, what is the expected polytropic efficiency (%) at the specified suction capacity of 36,962.0 m³/hr?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": true,
+      "elapsed_ms": 18858.77251625061,
+      "verdict": "✓ PASS (exact page)",
+      "comparison": {
+        "question_id": "q2_en_polytropic_efficiency",
+        "ground_truth_page": 5,
+        "ground_truth_file": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf",
+        "doc_match": true,
+        "page_match": "exact",
+        "page_distance": 0,
+        "citations_found": 1,
+        "matched_citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 5,
+            "page_diff": 0,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          }
+        ],
+        "mismatched_citations": [],
+        "answer_length": 563,
+        "has_keywords": false
+      },
+      "response": {
+        "answer": "[LOW CONFIDENCE]\nFor the 1st stage of the CO2 compressor operating under rated conditions, the expected polytropic efficiency is 82% at a suction capacity of 36,962.0 m³/hr [Doc 1, p. 5]. The performance curve for the rated 1st stage shows that the vertical \"Rated\" line, corresponding to the specified suction capacity, intersects the efficiency curve at 82% [Doc 1, p. 5].\n\n⚠️ **Verification Notice**: This answer has limited verification coverage (0% verified, avg: 0.09, confidence: 34%). Please cross-reference with source documents for critical information.",
+        "citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 5,
+            "bbox": null,
+            "confidence": 0.5764705882352941,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          }
+        ],
+        "context_used": [
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0001",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0007"
+        ],
+        "confidence": 0.34148068896885886,
+        "meta": {
+          "latency_ms": 16765,
+          "breakdown": {
+            "transform_ms": 2426,
+            "retrieve_ms": 506,
+            "rerank_ms": 2,
+            "generate_ms": 10336
+          },
+          "k": 8,
+          "execution_mode": "production",
+          "trace_id": "unknown",
+          "model_generation": "gemini-2.5-pro",
+          "model_query_transform": "gemini-2.5-flash",
+          "embed_model": "gemini-embedding-001",
+          "degrade_mode": false,
+          "degrade_reason": null,
+          "bm25_k_current": 50,
+          "top_rerank_current": 20,
+          "vision_page_selector_enabled": false,
+          "text_range_scan_enabled": false,
+          "cache_hit": false,
+          "model": "gemini-2.5-pro"
+        },
+        "warnings": [
+          "⚠️ Verification: 3/3 claims have lower confidence (verification < 0.4, answer confidence: 34%)",
+          "   • Low verification (0.09): '[LOW CONFIDENCE]\nFor the 1st stage of the CO2 compressor ope...'",
+          "   • Low verification (0.09): '[LOW CONFIDENCE]\nFor the 1st stage of the CO2 compressor ope...'",
+          "Low verification rate (0%, global confidence: 34%) - 3 claims checked, 0 verified"
+        ],
+        "retrieval_details": {
+          "bm25": [
+            {
+              "chunk_id": "bm25_8",
+              "text": "10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WITHOUT PERMISSION O...",
+              "score": 0.0564,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_27",
+              "text": "\nThe code of steam turbine WT8043,which type is ENK40/45/60,sigle casing extraction\ncondensing type, is applied to ca mau fertilizer plant project, and to drive CO2 Compressor group.\nSteam conditions ...",
+              "score": 0.0407,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 45
+            },
+            {
+              "chunk_id": "bm25_0",
+              "text": "<!-- Page 2 -->\n\nCA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 2/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compres...",
+              "score": 0.0377,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_37",
+              "text": "\nUsually, the increase of the axial displacement for the turbine rotor is caused by the\nfollowing reasons:\nIncrease of the load or steam flow;\nDamage of the steam path section;\nSevere deposit in the s...",
+              "score": 0.0365,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 227
+            },
+            {
+              "chunk_id": "bm25_2",
+              "text": "CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 2/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compressor K06101 4 Appl...",
+              "score": 0.0365,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_1",
+              "text": "CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compressor K06101 4 Appl...",
+              "score": 0.0355,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_41",
+              "text": "---\n\n<!-- Page 1089 -->\n\nShanghai Li’an Lubricating Equipment Manufacture Co., Ltd. MANUAL - 2 - Ⅰ、SUMMARIZE This lube oil unit is designed ＆ manufactured special used in the oil circulating lubricati...",
+              "score": 0.0351,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+              "page": 291
+            },
+            {
+              "chunk_id": "bm25_3",
+              "text": "<!-- Page 1 -->\n\nCA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compres...",
+              "score": 0.0344,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_5",
+              "text": "--- TABLE START (Page 91, Table 1: 16x18, confidence=0.00) ---\n|  |  | CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea ...",
+              "score": 0.0333,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_6",
+              "text": "<!-- Page 3 -->\n\nCA.MAU FERTILIZER PROJECT DOC NO. 07087-CP22-K06101 WEC UREA PLANT Page 3/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 SERVICE: CO2 Compressor ITEM No. 2 K06101 3 OPERATING CONDITION...",
+              "score": 0.0328,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            }
+          ],
+          "faiss": [
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRESSIBILITY FACTOR; SPECIFIC_HEAT RATIO : SUCTION TEM...",
+              "score": 0.128,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEIGH : 42. 86 COMPRESSIBILITY FACTOR 0. 98 FIC_HEAT ...",
+              "score": 0.1264,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3. 32) COMPRESS SPECIFIC_HEAT RATIO.; 1. 266 SUCTIO...",
+              "score": 0.1078,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMPRESSIBILITY FACTO RATIO Ba SUCTION TEMPERATURE, DE...",
+              "score": 0.0994,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0001",
+              "text": "<!-- Page 2 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED; CO MOLECULAR WEIGHT + SUCTION TEMPERATURE i 0 DEG. C SUCTION PRESS...",
+              "score": 0.0944,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 2
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 40 Ty FACTOR; 0. 617 RATIO > 1. 379 SUCTION TEMPERA...",
+              "score": 0.0879,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT COMPRESSIBILITY FACTOR 0. 617 RATIO SUCTION TENPE...",
+              "score": 0.0847,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0007",
+              "text": "<!-- Page 8 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS.; 0 MOLECULAR WEIGH A COMPRESSIBILITY FACTOR; ECIFIC_HEAT RATIO; UCTION TEMPERAT...",
+              "score": 0.0812,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 8
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+              "text": "<!-- Page 6 -->\n\nPERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED C02 MOLECULAR WEIGH 42. 86 COMPRESSIBILITY FACTOR; 0. 98 RATIO SUCTION TEMPERATUR ...",
+              "score": 0.0796,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 6
+            },
+            {
+              "chunk_id": "DOCID_003_3N4-S4274345_Expected_Performance_Curve_of_Compressor_Rev.01_70b4ad0d_chunk_0003",
+              "text": "<!-- Page 4 -->\n\nLE - EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. oO MOLECULAR WEIGHT > G15) COMPRESSIBILITY FACTOR; '\"Ord9% ZN RATIO; SUCTION \"TE...",
+              "score": 0.0544,
+              "doc_id": "DOCID_003_3N4-S4274345_Expected_Performance_Curve_of_Compressor_Rev.01_70b4ad0d",
+              "page": 4
+            }
+          ],
+          "total_retrieved": 60,
+          "degrade_mode": false,
+          "from_cache": false
+        },
+        "reranking_details": {
+          "method": "cross_encoder",
+          "input_count": 60,
+          "output_count": 8,
+          "top_k": 20,
+          "from_cache": false,
+          "results": [
+            {
+              "rank": 1,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "score": 0.128,
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRES...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "rank": 2,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "score": 0.1264,
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEI...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "rank": 3,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "score": 0.1078,
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "rank": 4,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "score": 0.0994,
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMP...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "rank": 5,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0001",
+              "score": 0.0944,
+              "text": "<!-- Page 2 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED; CO MOLECULAR WEI...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 2
+            },
+            {
+              "rank": 6,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "score": 0.0879,
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 4...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "rank": 7,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "score": 0.0847,
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "rank": 8,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0007",
+              "score": 0.0812,
+              "text": "<!-- Page 8 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS.; 0 MOLECULAR WEIGH A COMPRESS...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 8
+            }
+          ]
+        },
+        "generation_details": {
+          "model": "gemini-2.5-pro",
+          "tier": "heavy",
+          "language": "en",
+          "execution_mode": "production",
+          "vision_enabled": false,
+          "cove_enabled": true,
+          "answer_length": 563,
+          "citations_count": 1,
+          "confidence": 0.34148068896885886,
+          "metadata": {
+            "citation_validation": {
+              "total_count": 1,
+              "valid_count": 1,
+              "invalid_count": 0,
+              "corrected_count": 0,
+              "avg_confidence": 0.5764705882352941,
+              "details": [
+                {
+                  "citation_index": 0,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+                  "page": 5,
+                  "is_valid": true,
+                  "confidence": 0.5764705882352941,
+                  "errors": [
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 57.65% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.5764705882352941,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                }
+              ]
+            },
+            "intent": "ask",
+            "num_docs": 8,
+            "has_filters": true,
+            "used_hyde": false,
+            "confidence_mode": "legacy"
+          }
+        }
+      }
+    },
+    {
+      "question_id": "q3_vi_ammonia_parts",
+      "query": "Theo đề xuất bảo trì cho Bơm cấp liệu Amoniac (AMMONIA FEED PUMP), những phụ tùng nào cần được chuẩn bị tại công trường cho đợt \"Kiểm tra thông thường\" (Convention Inspection)?",
+      "language": "vi",
+      "vision_enabled": false,
+      "success": true,
+      "elapsed_ms": 16078.636407852173,
+      "verdict": "✗✗ FAIL (wrong doc)",
+      "comparison": {
+        "question_id": "q3_vi_ammonia_parts",
+        "ground_truth_page": 1,
+        "ground_truth_file": "Ammonia Maintenance Schedule.pdf",
+        "doc_match": false,
+        "page_match": "no_citation",
+        "page_distance": null,
+        "citations_found": 3,
+        "matched_citations": [],
+        "mismatched_citations": [
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1
+          },
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1
+          },
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1
+          }
+        ],
+        "answer_length": 250,
+        "has_keywords": false
+      },
+      "response": {
+        "answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.\n\n⚠️ **Verification Notice**: This answer has limited verification coverage (0% verified, avg: 0.09, confidence: 36%). Please cross-reference with source documents for critical information.",
+        "citations": [
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1,
+            "bbox": null,
+            "confidence": 1.0,
+            "pdf_path": "D:\\Data_Raw\\01. P&ID Ammonia Unit Rev12 (04000).pdf"
+          },
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1,
+            "bbox": null,
+            "confidence": 0.11666666666666665,
+            "pdf_path": "D:\\Data_Raw\\01. P&ID Ammonia Unit Rev12 (04000).pdf"
+          },
+          {
+            "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+            "page": 1,
+            "bbox": null,
+            "confidence": 0.12727272727272726,
+            "pdf_path": "D:\\Data_Raw\\01. P&ID Ammonia Unit Rev12 (04000).pdf"
+          }
+        ],
+        "context_used": [
+          "bm25_3",
+          "bm25_25",
+          "bm25_24",
+          "bm25_29",
+          "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0274",
+          "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0250",
+          "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0251",
+          "bm25_45"
+        ],
+        "confidence": 0.36418547324588524,
+        "meta": {
+          "latency_ms": 14041,
+          "breakdown": {
+            "transform_ms": 5150,
+            "retrieve_ms": 697,
+            "rerank_ms": 3,
+            "generate_ms": 7226
+          },
+          "k": 8,
+          "execution_mode": "production",
+          "trace_id": "unknown",
+          "model_generation": "gemini-2.5-pro",
+          "model_query_transform": "gemini-2.5-flash",
+          "embed_model": "gemini-embedding-001",
+          "degrade_mode": false,
+          "degrade_reason": null,
+          "bm25_k_current": 50,
+          "top_rerank_current": 20,
+          "vision_page_selector_enabled": false,
+          "text_range_scan_enabled": false,
+          "cache_hit": false,
+          "model": "gemini-2.5-pro"
+        },
+        "warnings": [
+          "⚠️ Verification: 1/1 claims have lower confidence (verification < 0.4, answer confidence: 36%)",
+          "   • Low verification (0.09): '[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp...'",
+          "Low verification rate (0%, global confidence: 36%) - 1 claims checked, 0 verified"
+        ],
+        "retrieval_details": {
+          "bm25": [
+            {
+              "chunk_id": "bm25_3",
+              "text": "10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WITHOUT PERMISSION O...",
+              "score": 0.238,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_25",
+              "text": "<!-- Page 71 -->\n\nM LAH 5061 LI 5062 LT 5062 LALL 5061 LT 5571 PI 5566 AP 5572 PI 506 I 5062 LAHH 506 I 5566 LI LAL 07087-37000-CP11-05 CP25-37 210 CP25-39 225 CP25-39 227 CP25-40-1 231 CP25-40-1 232 ...",
+              "score": 0.0487,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_24",
+              "text": "M LAH 5061 LI 5062 LT 5062 LALL 5061 LT 5571 PI 5566 AP 5572 PI 506 I 5062 LAHH 506 I 5566 LI LAL 07087-37000-CP11-05 CP25-37 210 CP25-39 225 CP25-39 227 CP25-40-1 231 CP25-40-1 232 CP25-40-1 233 CP25...",
+              "score": 0.0437,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_29",
+              "text": "<!-- Page 44 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WI...",
+              "score": 0.0435,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_45",
+              "text": "<!-- Page 66 -->\n\nM M CLOSE Down 3/4\" Down LP CIRCULATION PUMP OFF GAS ABSORBER 1.67 MPag | 47 °C 2.5 MPag | 80 °C FC 2.65 MPag | 84 °C 3.0 MPag | 120 °C CW BL 1.7 MPag | 84 °C 2.5 MPag | 120 °C 1 1/2...",
+              "score": 0.0379,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_42",
+              "text": "<!-- Page 79 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WI...",
+              "score": 0.0377,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_9",
+              "text": "<!-- Page 69 -->\n\nM M THERMAL RELIEF VALVE TO BE PLACED, WHERE ISOLATION OF LIQUID AMMONIA IS POSSIBLE. AMMONIA REFLUX PUMP AMMONIA OH DRUM AMMONIA OH CONDENSER G2 G1 1 1/2\" 1 1/2\" M 1 1/2\" 1 1/2\" 3\" ...",
+              "score": 0.0304,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_2",
+              "text": "FRESH COOLING WATER RETURN TE25-17 FRESH COOLING WATER SUPPLY TE25-17 Design flow rate： 297 m3/h Discharge pressure ： 14.45MPa(g) Type:centrifugal type-steam turbine drving Suction pressure ： 0.28MPa(...",
+              "score": 0.0222,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_4",
+              "text": "<!-- Page 5 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WIT...",
+              "score": 0.0215,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_0",
+              "text": "---\nsource: D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Spare parts\\KT06101-technical spare part list.pdf\ntotal_pages: 0\n---\n\n<!-- Page 5 -->\n\n5- 7410-4003-78 5-7410-4003-35\n\n---\n\n<!-- Page 10...",
+              "score": 0.0197,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Spare_parts_KT06101-technical_spare_part_d508bf2f",
+              "page": 4
+            }
+          ],
+          "faiss": [
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0274",
+              "text": "<!-- Page 89 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WI...",
+              "score": 0.0428,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 89
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0250",
+              "text": "<!-- Page 82 -->\n\n5 1 3 4 2 4209 4212 4211 4210 VE VE VE VE 4205 4202 4208 4203 4207 4204 4206 4201 VE VE VE VE VE VE VE VE 4209 4212 4211 4210 4231 4231 4232 4232 4230 4230 4233 4233 VT VT VT VT TE T...",
+              "score": 0.0423,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 82
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0251",
+              "text": "5 1 3 4 2 4209 4212 4211 4210 VE VE VE VE 4205 4202 4208 4203 4207 4204 4206 4201 VE VE VE VE VE VE VE VE 4209 4212 4211 4210 4231 4231 4232 4232 4230 4230 4233 4233 VT VT VT VT TE TE TE TE TE TE TE T...",
+              "score": 0.0409,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0031",
+              "text": "<!-- Page 11 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WI...",
+              "score": 0.0374,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 11
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0129",
+              "text": "---\n\n<!-- Page 43 -->\n\nNITROGEN FROM HEADER DRAIN TO T04303 3/4\" 3/4\" 8PG 04344 CB1 H 10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINE...",
+              "score": 0.0364,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 43
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0270",
+              "text": "<!-- Page 88 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, TRANSMITTED TO OTHERS OR USED WI...",
+              "score": 0.0349,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 88
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0221",
+              "text": "<!-- Page 73 -->\n\n5064A LXT 5063 LSAH 5063A LXT 5063B LXT IS 5567 LI 5568 LI 5064B LXT CP25-37 205 CP25-36 207 CP25-42 241 GASEOUS AMMONIA FROM E 04511 GASEOUS AMMONIA FROM E04508 GASEOUS AMMONIA FROM...",
+              "score": 0.0311,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 73
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0304",
+              "text": "<!-- Page 99 -->\n\nlube oil outlet TURNING GEAR PG TE TE 385 386 TE TE 384 383 COUPLING COMPRESSOR TE TE TE TE TE TE 770 769 738 737 VT VE 734 733 VT VE M 459 460 457 458 TG Oe LL 7900 7401 Oa 386 385 ...",
+              "score": 0.0304,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 99
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0215",
+              "text": "5064A LXT 5063 LSAH 5063A LXT 5063B LXT IS 5567 LI 5568 LI 5064B LXT CP25-37 205 CP25-36 207 CP25-42 241 GASEOUS AMMONIA FROM E 04511 GASEOUS AMMONIA FROM E04508 GASEOUS AMMONIA FROM E04506 0.2MPag | ...",
+              "score": 0.0286,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0305",
+              "text": "lube oil outlet TURNING GEAR PG TE TE 385 386 TE TE 384 383 COUPLING COMPRESSOR TE TE TE TE TE TE 770 769 738 737 VT VE 734 733 VT VE M 459 460 457 458 TG Oe LL 7900 7401 Oa 386 385 738 737 734 733 38...",
+              "score": 0.0272,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            }
+          ],
+          "total_retrieved": 60,
+          "degrade_mode": false,
+          "from_cache": false
+        },
+        "reranking_details": {
+          "method": "score",
+          "input_count": 60,
+          "output_count": 8,
+          "top_k": 20,
+          "from_cache": false,
+          "results": [
+            {
+              "rank": 1,
+              "chunk_id": "bm25_3",
+              "score": 0.238,
+              "text": "10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MUST NOT BE COPIED, ...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "rank": 2,
+              "chunk_id": "bm25_25",
+              "score": 0.0487,
+              "text": "<!-- Page 71 -->\n\nM LAH 5061 LI 5062 LT 5062 LALL 5061 LT 5571 PI 5566 AP 5572 PI 506 I 5062 LAHH 506 I 5566 LI LAL 07087-37000-CP11-05 CP25-37 210 CP...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "rank": 3,
+              "chunk_id": "bm25_24",
+              "score": 0.0437,
+              "text": "M LAH 5061 LI 5062 LT 5062 LALL 5061 LT 5571 PI 5566 AP 5572 PI 506 I 5062 LAHH 506 I 5566 LI LAL 07087-37000-CP11-05 CP25-37 210 CP25-39 225 CP25-39 ...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "rank": 4,
+              "chunk_id": "bm25_29",
+              "score": 0.0435,
+              "text": "<!-- Page 44 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MU...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "rank": 5,
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0274",
+              "score": 0.0428,
+              "text": "<!-- Page 89 -->\n\n10 B A C D E G H J I F 9 8 7 6 5 4 3 2 1 1 2 3 4 5 6 7 8 9 10 F E D C B A 594×841 A1 SIGNATURE SPECI WUHUAN ENGINEERING CO., LTD. MU...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 89
+            },
+            {
+              "rank": 6,
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0250",
+              "score": 0.0423,
+              "text": "<!-- Page 82 -->\n\n5 1 3 4 2 4209 4212 4211 4210 VE VE VE VE 4205 4202 4208 4203 4207 4204 4206 4201 VE VE VE VE VE VE VE VE 4209 4212 4211 4210 4231 4...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 82
+            },
+            {
+              "rank": 7,
+              "chunk_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b_chunk_0251",
+              "score": 0.0409,
+              "text": "5 1 3 4 2 4209 4212 4211 4210 VE VE VE VE 4205 4202 4208 4203 4207 4204 4206 4201 VE VE VE VE VE VE VE VE 4209 4212 4211 4210 4231 4231 4232 4232 4230...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "rank": 8,
+              "chunk_id": "bm25_45",
+              "score": 0.0379,
+              "text": "<!-- Page 66 -->\n\nM M CLOSE Down 3/4\" Down LP CIRCULATION PUMP OFF GAS ABSORBER 1.67 MPag | 47 °C 2.5 MPag | 80 °C FC 2.65 MPag | 84 °C 3.0 MPag | 120...",
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            }
+          ]
+        },
+        "generation_details": {
+          "model": "gemini-2.5-pro",
+          "tier": "heavy",
+          "language": "vi",
+          "execution_mode": "production",
+          "vision_enabled": false,
+          "cove_enabled": true,
+          "answer_length": 250,
+          "citations_count": 3,
+          "confidence": 0.36418547324588524,
+          "metadata": {
+            "citation_validation": {
+              "total_count": 3,
+              "valid_count": 3,
+              "invalid_count": 0,
+              "corrected_count": 0,
+              "avg_confidence": 0.41464646464646465,
+              "details": [
+                {
+                  "citation_index": 0,
+                  "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+                  "page": 1,
+                  "is_valid": true,
+                  "confidence": 1.0,
+                  "errors": [],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 1,
+                  "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+                  "page": 1,
+                  "is_valid": true,
+                  "confidence": 0.11666666666666665,
+                  "errors": [
+                    {
+                      "type": "text_not_found",
+                      "message": "Cited page text does not match actual page content (confidence: 11.67%)",
+                      "severity": "warning",
+                      "details": {
+                        "page_text_confidence": 0.11666666666666665
+                      }
+                    },
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 11.67% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.11666666666666665,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 2,
+                  "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+                  "page": 1,
+                  "is_valid": true,
+                  "confidence": 0.12727272727272726,
+                  "errors": [
+                    {
+                      "type": "text_not_found",
+                      "message": "Cited page text does not match actual page content (confidence: 12.73%)",
+                      "severity": "warning",
+                      "details": {
+                        "page_text_confidence": 0.12727272727272726
+                      }
+                    },
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 12.73% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.12727272727272726,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                }
+              ]
+            },
+            "intent": "ask",
+            "num_docs": 8,
+            "has_filters": true,
+            "used_hyde": false,
+            "confidence_mode": "legacy"
+          }
+        }
+      }
+    },
+    {
+      "question_id": "q4_en_shaft_repair",
+      "query": "According to the maintenance proposal for the Ammonia Feed Pump, what is the recommended repair action for the shaft (Item No. 5) if its measured runout is 0.15mm or greater during a major inspection?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": true,
+      "elapsed_ms": 18248.513221740723,
+      "verdict": "✗ FAIL (doc OK, page wrong: off_by_2_to_3)",
+      "comparison": {
+        "question_id": "q4_en_shaft_repair",
+        "ground_truth_page": 2,
+        "ground_truth_file": "Ammonia Maintenance Schedule.pdf",
+        "doc_match": true,
+        "page_match": "off_by_2_to_3",
+        "page_distance": 2,
+        "citations_found": 3,
+        "matched_citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 2,
+            "page_diff": 0,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 1,
+            "page_diff": 1,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 4,
+            "page_diff": 2,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          }
+        ],
+        "mismatched_citations": [],
+        "answer_length": 559,
+        "has_keywords": false
+      },
+      "response": {
+        "answer": "[LOW CONFIDENCE]\nAccording to the maintenance proposal for the ammonia feed pump, if the measured runout of the shaft (item no. 5) is 0.15mm or over, the recommended repair action is to replace the shaft with a new item [Doc 1, p. 2, Doc 2, p. 1]. This action is specified for a major inspection, which has a recommended interval of 4-6 years [Doc 1, p. 2, Doc 2, p. 1].\n\n⚠️ **Verification Notice**: This answer has limited verification coverage (0% verified, avg: 0.06, confidence: 47%). Please cross-reference with source documents for critical information.",
+        "citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 2,
+            "bbox": null,
+            "confidence": 0.5833333333333334,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 1,
+            "bbox": null,
+            "confidence": 0.4117647058823529,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+            "page": 4,
+            "bbox": null,
+            "confidence": 0.6588235294117647,
+            "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Maintenance\\Ammonia Maintenance Schedule.pdf"
+          }
+        ],
+        "context_used": [
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0002",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0003",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0008",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0011",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0009",
+          "bm25_0",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0012",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0014"
+        ],
+        "confidence": 0.46938759378295625,
+        "meta": {
+          "latency_ms": 16173,
+          "breakdown": {
+            "transform_ms": 2230,
+            "retrieve_ms": 518,
+            "rerank_ms": 2,
+            "generate_ms": 12003
+          },
+          "k": 8,
+          "execution_mode": "production",
+          "trace_id": "unknown",
+          "model_generation": "gemini-2.5-pro",
+          "model_query_transform": "gemini-2.5-flash",
+          "embed_model": "gemini-embedding-001",
+          "degrade_mode": false,
+          "degrade_reason": null,
+          "bm25_k_current": 50,
+          "top_rerank_current": 20,
+          "vision_page_selector_enabled": false,
+          "text_range_scan_enabled": false,
+          "cache_hit": false,
+          "model": "gemini-2.5-pro"
+        },
+        "warnings": [
+          "⚠️ Verification: 3/3 claims have lower confidence (verification < 0.4, answer confidence: 47%)",
+          "   • Low verification (0.06): 'This action is specified for a major inspection, which has a...'",
+          "   • Low verification (0.06): '15mm or over, the recommended repair action is to replace th...'",
+          "Low verification rate (0%, global confidence: 47%) - 3 claims checked, 0 verified"
+        ],
+        "retrieval_details": {
+          "bm25": [
+            {
+              "chunk_id": "bm25_0",
+              "text": "\nBased on the range and work amount of inspection and maintenance involved in the\noverhaul, the turbine overhaul can be divided into four types, i.e. minor overhaul,\nintermediate overhaul, major overh...",
+              "score": 0.0715,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 259
+            },
+            {
+              "chunk_id": "bm25_2",
+              "text": "\nDuring an overhaul the precautionary inspections for the defects should be performed so\nas to discover and eliminate the hidden troubles as soon as possible for preventing fault.\nThe following are th...",
+              "score": 0.063,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 261
+            },
+            {
+              "chunk_id": "bm25_6",
+              "text": "\nThis section, taking a condensing turbine as the example, introduces the steps of the\ncheck and repair for turbine body in overhaul.\nWhen establishing the overhaul schedule, the user should draw up t...",
+              "score": 0.0622,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 273
+            },
+            {
+              "chunk_id": "bm25_23",
+              "text": "Masoneilan Dresser SVI II AP Instruction Manual 98 Optional Display and Pushbuttons The optional display and buttons are mounted on the SVI II AP cover plate. The three pushbutton switches operating i...",
+              "score": 0.0497,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+              "page": 291
+            },
+            {
+              "chunk_id": "bm25_25",
+              "text": "<!-- Page 892 -->\n\nMasoneilan Dresser SVI II AP Instruction Manual 98 Optional Display and Pushbuttons The optional display and buttons are mounted on the SVI II AP cover plate. The three pushbutton s...",
+              "score": 0.0486,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+              "page": 291
+            },
+            {
+              "chunk_id": "bm25_35",
+              "text": "\nThis section deals mainly with the works in the endgame of turbine major overhaul,\nwhich can be taken as a reference for other overhaul.\nRecommissioning\nCommissioning must be carried out after turbin...",
+              "score": 0.0435,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 279
+            },
+            {
+              "chunk_id": "bm25_42",
+              "text": "\nThe section “maintenance” in this Operating Instructions deals chiefly with the\ndemonstrations and suggestions for turbine maintenance, inspection and repair.\nThe maintenance of the turbine includes ...",
+              "score": 0.0386,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 239
+            },
+            {
+              "chunk_id": "bm25_8",
+              "text": "Operating Instructions Installation of Condensing Turbine with Baseplate Delivered in Completion 2-0400-13-01 Hangzhou Steam Turbine Company Limited Page 5 of 8 of the rotor with respect to its positi...",
+              "score": 0.0319,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_KT06101_Installation_instruction_c2974d5b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_9",
+              "text": "Operating Instructions\nInstallation of Condensing Turbine with Baseplate Delivered in Completion     2-0400-13-01\nof the rotor with respect to its positioning reference, with the thrust bearing remove...",
+              "score": 0.0314,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 160
+            },
+            {
+              "chunk_id": "bm25_10",
+              "text": "<!-- Page 12 -->\n\nOperating Instructions Installation of Condensing Turbine with Baseplate Delivered in Completion 2-0400-13-01 Hangzhou Steam Turbine Company Limited Page 5 of 8 of the rotor with res...",
+              "score": 0.031,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_KT06101_Installation_instruction_c2974d5b",
+              "page": 1
+            }
+          ],
+          "faiss": [
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0002",
+              "text": "<!-- Page 2 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP 2. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 2/7 PMtOU No. Inspected parts Inspection Item Procedure Repair Maxi...",
+              "score": 0.0911,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 2
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0003",
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP 2. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 2/7 PMtOU No. Inspected parts Inspection Item Procedure Repair Maximum New Parts Gen...",
+              "score": 0.0882,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0008",
+              "text": "<!-- Page 4 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP. P. 4/7 4. Recommended Inspection Interval : 4-6 years (Major Inspection) No. Inspected parts Inspection Item Procedure Repair Maximum N...",
+              "score": 0.0748,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 4
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0011",
+              "text": "<!-- Page 5 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP P. 5/7 5. Recommended Inspection Interval : 2-4 years (Convention Inspection) No. Inspected parts Inspection Item Procedure Repair Maxim...",
+              "score": 0.0733,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 5
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0009",
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP. P. 4/7 4. Recommended Inspection Interval : 4-6 years (Major Inspection) No. Inspected parts Inspection Item Procedure Repair Maximum New Parts General ...",
+              "score": 0.0727,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0012",
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP P. 5/7 5. Recommended Inspection Interval : 2-4 years (Convention Inspection) No. Inspected parts Inspection Item Procedure Repair Maximum New Parts Gene...",
+              "score": 0.0711,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0014",
+              "text": "<!-- Page 6 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP P. 6/7 7. Consumable Parts for each Inspection No. Inspected parts Inspection Item Procedure Repair Maximum New Parts General Recommende...",
+              "score": 0.068,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 6
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0005",
+              "text": "<!-- Page 3 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP 3. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 3/7 PMtOU No. Inspected parts Inspection Item Procedure Repair Maxi...",
+              "score": 0.0679,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 3
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0006",
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP 3. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 3/7 PMtOU No. Inspected parts Inspection Item Procedure Repair Maximum New Parts Gen...",
+              "score": 0.0663,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0015",
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP P. 6/7 7. Consumable Parts for each Inspection No. Inspected parts Inspection Item Procedure Repair Maximum New Parts General Recommended Probable troubl...",
+              "score": 0.0645,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            }
+          ],
+          "total_retrieved": 60,
+          "degrade_mode": false,
+          "from_cache": false
+        },
+        "reranking_details": {
+          "method": "cross_encoder",
+          "input_count": 60,
+          "output_count": 8,
+          "top_k": 20,
+          "from_cache": false,
+          "results": [
+            {
+              "rank": 1,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0002",
+              "score": 0.0911,
+              "text": "<!-- Page 2 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP 2. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 2/7 PMtOU No. Ins...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 2
+            },
+            {
+              "rank": 2,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0003",
+              "score": 0.0882,
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP 2. Recommended Inspection Interval : 4-6 years (Major Inspection) P. 2/7 PMtOU No. Inspected parts Insp...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "rank": 3,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0008",
+              "score": 0.0748,
+              "text": "<!-- Page 4 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP. P. 4/7 4. Recommended Inspection Interval : 4-6 years (Major Inspection) No. Inspecte...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 4
+            },
+            {
+              "rank": 4,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0011",
+              "score": 0.0733,
+              "text": "<!-- Page 5 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP P. 5/7 5. Recommended Inspection Interval : 2-4 years (Convention Inspection) No. Insp...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 5
+            },
+            {
+              "rank": 5,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0009",
+              "score": 0.0727,
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP. P. 4/7 4. Recommended Inspection Interval : 4-6 years (Major Inspection) No. Inspected parts Inspectio...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "rank": 6,
+              "chunk_id": "bm25_0",
+              "score": 0.0715,
+              "text": "\nBased on the range and work amount of inspection and maintenance involved in the\noverhaul, the turbine overhaul can be divided into four types, i.e. ...",
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 259
+            },
+            {
+              "rank": 7,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0012",
+              "score": 0.0711,
+              "text": "Proposals for Maintenance of AMMONIA FEED PUMP P. 5/7 5. Recommended Inspection Interval : 2-4 years (Convention Inspection) No. Inspected parts Inspe...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 1
+            },
+            {
+              "rank": 8,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b_chunk_0014",
+              "score": 0.068,
+              "text": "<!-- Page 6 -->\n\nProposals for Maintenance of AMMONIA FEED PUMP P. 6/7 7. Consumable Parts for each Inspection No. Inspected parts Inspection Item Pro...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+              "page": 6
+            }
+          ]
+        },
+        "generation_details": {
+          "model": "gemini-2.5-pro",
+          "tier": "heavy",
+          "language": "en",
+          "execution_mode": "production",
+          "vision_enabled": false,
+          "cove_enabled": true,
+          "answer_length": 559,
+          "citations_count": 3,
+          "confidence": 0.46938759378295625,
+          "metadata": {
+            "citation_validation": {
+              "total_count": 3,
+              "valid_count": 3,
+              "invalid_count": 0,
+              "corrected_count": 0,
+              "avg_confidence": 0.5513071895424836,
+              "details": [
+                {
+                  "citation_index": 0,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+                  "page": 2,
+                  "is_valid": true,
+                  "confidence": 0.5833333333333334,
+                  "errors": [
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 58.33% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.5833333333333334,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 1,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+                  "page": 1,
+                  "is_valid": true,
+                  "confidence": 0.4117647058823529,
+                  "errors": [
+                    {
+                      "type": "text_not_found",
+                      "message": "Cited page text does not match actual page content (confidence: 41.18%)",
+                      "severity": "warning",
+                      "details": {
+                        "page_text_confidence": 0.4117647058823529
+                      }
+                    },
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 41.18% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.4117647058823529,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 2,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Maintenance_Ammonia__7647400b",
+                  "page": 4,
+                  "is_valid": true,
+                  "confidence": 0.6588235294117647,
+                  "errors": [
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 65.88% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.6588235294117647,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                }
+              ]
+            },
+            "intent": "ask",
+            "num_docs": 8,
+            "has_filters": true,
+            "used_hyde": false,
+            "confidence_mode": "legacy"
+          }
+        }
+      }
+    },
+    {
+      "question_id": "q5_en_4th_stage_conditions",
+      "query": "What are the specified \"Rated\" operating conditions for the 4th stage of the CO2 compressor, specifically regarding inlet pressure, temperature, and molecular weight of the gas?",
+      "language": "en",
+      "vision_enabled": false,
+      "success": true,
+      "elapsed_ms": 21198.457717895508,
+      "verdict": "✗ FAIL (doc OK, page wrong: off_by_2_to_3)",
+      "comparison": {
+        "question_id": "q5_en_4th_stage_conditions",
+        "ground_truth_page": 3,
+        "ground_truth_file": "002_3N4-S4274343 datasheet for K06101_Rev.02.pdf",
+        "doc_match": true,
+        "page_match": "off_by_2_to_3",
+        "page_distance": 2,
+        "citations_found": 3,
+        "matched_citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 10,
+            "page_diff": 7,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 11,
+            "page_diff": 8,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          },
+          {
+            "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+            "page": 1,
+            "page_diff": 2,
+            "pdf_path": "D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Data\\07087-06000-CP22-K06101 rev 0F.pdf"
+          }
+        ],
+        "mismatched_citations": [],
+        "answer_length": 899,
+        "has_keywords": false
+      },
+      "response": {
+        "answer": "The specified rated operating conditions for the 4th stage of the CO2 compressor are a suction pressure of 79.5 BAR. A and a suction temperature of 50.0 DEG. C [Doc 2, p.10], [Doc 6, p.11]. The molecular weight for the 4th stage is not clearly specified in the provided documents.\n\n*   **Inlet Pressure:** 79. 5 BAR. A [Doc 2, p.10] / 79. 5 BARA [Doc 6, p.11]\n*   **Inlet Temperature:** 50. 0 DEG. C [Doc 2, p.10], [Doc 6, p.11]. A note also states that the \"Suction temp. of 4th stage must never drop below 50℃\" [Doc 3, p.1].\n*   **Molecular Weight:** Not specified. One performance curve for the 4th stage shows a garbled value (\"res 40 Ty\") [Doc 2, p.10], while another leaves the value blank [Doc 6, p.11].\n\n⚠️ **Verification Notice**: This answer has limited verification coverage (0% verified, avg: 0.11, confidence: 50%). Please cross-reference with source documents for critical information.",
+        "citations": [
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 10,
+            "bbox": null,
+            "confidence": 0.48124999999999996,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          },
+          {
+            "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+            "page": 11,
+            "bbox": null,
+            "confidence": 0.5833333333333334,
+            "pdf_path": "D:\\Data_Raw\\003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01.pdf"
+          },
+          {
+            "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+            "page": 1,
+            "bbox": null,
+            "confidence": 0.6124999999999999,
+            "pdf_path": "D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Data\\07087-06000-CP22-K06101 rev 0F.pdf"
+          }
+        ],
+        "context_used": [
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+          "bm25_5",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+          "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005"
+        ],
+        "confidence": 0.5017560857176857,
+        "meta": {
+          "latency_ms": 19142,
+          "breakdown": {
+            "transform_ms": 2547,
+            "retrieve_ms": 414,
+            "rerank_ms": 2,
+            "generate_ms": 14787
+          },
+          "k": 8,
+          "execution_mode": "production",
+          "trace_id": "unknown",
+          "model_generation": "gemini-2.5-pro",
+          "model_query_transform": "gemini-2.5-flash",
+          "embed_model": "gemini-embedding-001",
+          "degrade_mode": false,
+          "degrade_reason": null,
+          "bm25_k_current": 50,
+          "top_rerank_current": 20,
+          "vision_page_selector_enabled": false,
+          "text_range_scan_enabled": false,
+          "cache_hit": false,
+          "model": "gemini-2.5-pro"
+        },
+        "warnings": [
+          "⚠️ Verification: 3/3 claims have lower confidence (verification < 0.4, answer confidence: 50%)",
+          "   • Low verification (0.19): '10], while another leaves the value blank [Doc 6, p....'",
+          "   • Low verification (0.06): 'A and a suction temperature of 50.0 DEG....'",
+          "Low verification rate (0%, global confidence: 50%) - 3 claims checked, 0 verified"
+        ],
+        "retrieval_details": {
+          "bm25": [
+            {
+              "chunk_id": "bm25_5",
+              "text": "<!-- Page 3 -->\n\nCA.MAU FERTILIZER PROJECT DOC NO. 07087-CP22-K06101 WEC UREA PLANT Page 3/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 SERVICE: CO2 Compressor ITEM No. 2 K06101 3 OPERATING CONDITION...",
+              "score": 0.0906,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_22",
+              "text": "<!-- Page 5 -->\n\nCA.MAU FERTILIZER PROJECT DOC NO. 07087-CP22-K06101 WEC UREA PLANT Page 5/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 SERVICE: CO2 Compressor ITEM No. 2 K06101 3 CONSTRUCTION FEATUR...",
+              "score": 0.0515,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_36",
+              "text": "\nUsually, the increase of the axial displacement for the turbine rotor is caused by the\nfollowing reasons:\nIncrease of the load or steam flow;\nDamage of the steam path section;\nSevere deposit in the s...",
+              "score": 0.0349,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 227
+            },
+            {
+              "chunk_id": "bm25_43",
+              "text": "\nThe code of steam turbine WT8043,which type is ENK40/45/60,sigle casing extraction\ncondensing type, is applied to ca mau fertilizer plant project, and to drive CO2 Compressor group.\nSteam conditions ...",
+              "score": 0.0345,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 45
+            },
+            {
+              "chunk_id": "bm25_0",
+              "text": "<!-- Page 2 -->\n\nCA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 2/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compres...",
+              "score": 0.0344,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_1",
+              "text": "CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compressor K06101 4 Appl...",
+              "score": 0.0339,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_34",
+              "text": "\nMake sure that the preparations have been ready, commence to start the turbine.\n1. Warming up piping\nTo warm up the main steam piping between the emergency stop valve and the isolated\nvalve, graduall...",
+              "score": 0.0335,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Manual_Operating_Manual_KT06101_0-2520-8_d728f633",
+              "page": 197
+            },
+            {
+              "chunk_id": "bm25_2",
+              "text": "<!-- Page 1 -->\n\nCA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compres...",
+              "score": 0.0333,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_4",
+              "text": "--- TABLE START (Page 91, Table 1: 16x18, confidence=0.00) ---\n|  |  | CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 1/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea ...",
+              "score": 0.0323,
+              "doc_id": "DOCID_01._P_ID_Ammonia_Unit_Rev12_04000_27bfb26b",
+              "page": 1
+            },
+            {
+              "chunk_id": "bm25_6",
+              "text": "CA.MAU FERTILIZER PLANT Doc. No. 07087-CP22-K06101 WEC UREA UNIT Page 2/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 Unit: Urea SERVICE: ITEM No. 2 Supplier 3 Quantity: 1 CO2 Compressor K06101 4 Appl...",
+              "score": 0.0313,
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            }
+          ],
+          "faiss": [
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3. 32) COMPRESS SPECIFIC_HEAT RATIO.; 1. 266 SUCTIO...",
+              "score": 0.1152,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 40 Ty FACTOR; 0. 617 RATIO > 1. 379 SUCTION TEMPERA...",
+              "score": 0.0968,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMPRESSIBILITY FACTO RATIO Ba SUCTION TEMPERATURE, DE...",
+              "score": 0.0879,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRESSIBILITY FACTOR; SPECIFIC_HEAT RATIO : SUCTION TEM...",
+              "score": 0.0873,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT COMPRESSIBILITY FACTOR 0. 617 RATIO SUCTION TENPE...",
+              "score": 0.0796,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEIGH : 42. 86 COMPRESSIBILITY FACTOR 0. 98 FIC_HEAT ...",
+              "score": 0.0778,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+              "text": "<!-- Page 6 -->\n\nPERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED C02 MOLECULAR WEIGH 42. 86 COMPRESSIBILITY FACTOR; 0. 98 RATIO SUCTION TEMPERATUR ...",
+              "score": 0.0746,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 6
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0001",
+              "text": "<!-- Page 2 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED; CO MOLECULAR WEIGHT + SUCTION TEMPERATURE i 0 DEG. C SUCTION PRESS...",
+              "score": 0.0727,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 2
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_002_3N4-S427434_1be298a4_chunk_0011",
+              "text": "CA. MAU FERTILIZER PROJECT DOC N 3 3 | 'at 2\", 3° 4\" suction 4 | Gas analysis | re [a0 0 CENTRIFUGAL COMPRESSOR DATA SHEET SERVICE: CO2 Compressor ITEM No. K06101 OPERATING CONDITIONS (CONTINUED) All ...",
+              "score": 0.0611,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_002_3N4-S427434_1be298a4",
+              "page": 1
+            },
+            {
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_002_3N4-S427434_1be298a4_chunk_0010",
+              "text": "<!-- Page 5 -->\n\nCA. MAU FERTILIZER PROJECT DOC N 3 3 | 'at 2\", 3° 4\" suction 4 | Gas analysis | re [a0 0 CENTRIFUGAL COMPRESSOR DATA SHEET SERVICE: CO2 Compressor ITEM No. K06101 OPERATING CONDITIONS...",
+              "score": 0.0593,
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_002_3N4-S427434_1be298a4",
+              "page": 5
+            }
+          ],
+          "total_retrieved": 60,
+          "degrade_mode": false,
+          "from_cache": false
+        },
+        "reranking_details": {
+          "method": "cross_encoder",
+          "input_count": 60,
+          "output_count": 8,
+          "top_k": 20,
+          "from_cache": false,
+          "results": [
+            {
+              "rank": 1,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0008",
+              "score": 0.1152,
+              "text": "<!-- Page 9 -->\n\n\"EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED 0 MOLECULAR WEIGH > @3...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 9
+            },
+            {
+              "rank": 2,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0009",
+              "score": 0.0968,
+              "text": "<!-- Page 10 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE CONDITIONS. GAS HAND Le ED MOLECULAR WEIGH : res 4...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 10
+            },
+            {
+              "rank": 3,
+              "chunk_id": "bm25_5",
+              "score": 0.0906,
+              "text": "<!-- Page 3 -->\n\nCA.MAU FERTILIZER PROJECT DOC NO. 07087-CP22-K06101 WEC UREA PLANT Page 3/8 Rev. 0F CENTRIFUGAL COMPRESSOR DATA SHEET 1 SERVICE: CO2 ...",
+              "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+              "page": 1
+            },
+            {
+              "rank": 4,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0002",
+              "score": 0.0879,
+              "text": "<!-- Page 3 -->\n\nLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID-IN THE FOLLOWING CONDITIONS. GAS_HANDLED MOLECULAR WEIGH COMP...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 3
+            },
+            {
+              "rank": 5,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0004",
+              "score": 0.0873,
+              "text": "<!-- Page 5 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. CO MOLECULAR WEIGHT : COMPRES...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 5
+            },
+            {
+              "rank": 6,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0010",
+              "score": 0.0796,
+              "text": "<!-- Page 11 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED MOLECULAR WEIGHT...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 11
+            },
+            {
+              "rank": 7,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0006",
+              "score": 0.0778,
+              "text": "<!-- Page 7 -->\n\nTITLE EXPECTED PERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS, GAS HANDLED COZ MOLECULAR WEI...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 7
+            },
+            {
+              "rank": 8,
+              "chunk_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6_chunk_0005",
+              "score": 0.0746,
+              "text": "<!-- Page 6 -->\n\nPERFORMANCE CURVES OF CO2 Compressor THESE CURVES ARE VALID IN THE FOLLOWING CONDITIONS. GAS HANDLED C02 MOLECULAR WEIGH 42. 86 COMPR...",
+              "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+              "page": 6
+            }
+          ]
+        },
+        "generation_details": {
+          "model": "gemini-2.5-pro",
+          "tier": "heavy",
+          "language": "en",
+          "execution_mode": "production",
+          "vision_enabled": false,
+          "cove_enabled": true,
+          "answer_length": 899,
+          "citations_count": 3,
+          "confidence": 0.5017560857176857,
+          "metadata": {
+            "citation_validation": {
+              "total_count": 3,
+              "valid_count": 3,
+              "invalid_count": 0,
+              "corrected_count": 0,
+              "avg_confidence": 0.5590277777777777,
+              "details": [
+                {
+                  "citation_index": 0,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+                  "page": 10,
+                  "is_valid": true,
+                  "confidence": 0.48124999999999996,
+                  "errors": [
+                    {
+                      "type": "text_not_found",
+                      "message": "Cited page text does not match actual page content (confidence: 48.12%)",
+                      "severity": "warning",
+                      "details": {
+                        "page_text_confidence": 0.48124999999999996
+                      }
+                    },
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 48.12% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.48124999999999996,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 1,
+                  "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_003_3N4-S427434_3027d5a6",
+                  "page": 11,
+                  "is_valid": true,
+                  "confidence": 0.5833333333333334,
+                  "errors": [
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 58.33% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.5833333333333334,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                },
+                {
+                  "citation_index": 2,
+                  "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+                  "page": 1,
+                  "is_valid": true,
+                  "confidence": 0.6124999999999999,
+                  "errors": [
+                    {
+                      "type": "low_confidence",
+                      "message": "Validation confidence 61.25% below threshold 70.00%",
+                      "severity": "warning",
+                      "details": {
+                        "confidence": 0.6124999999999999,
+                        "threshold": 0.7
+                      }
+                    }
+                  ],
+                  "bbox_error": "find_bbox_by_quote() got an unexpected keyword argument 'quote_text'"
+                }
+              ]
+            },
+            "intent": "ask",
+            "num_docs": 8,
+            "has_filters": true,
+            "used_hyde": false,
+            "confidence_mode": "legacy"
+          }
+        }
+      }
+    }
+  ]
+}

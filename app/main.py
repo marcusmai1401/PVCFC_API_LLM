@@ -46,22 +46,37 @@ async def lifespan(app: FastAPI):
             app.state.retriever = manager.get_retriever()
             app.state.settings = settings
 
-            # Load doc_id_map if available
+            # Load doc_id_map if available (prioritize production path)
             import json
             from pathlib import Path
 
-            doc_id_map_path = Path("artifacts/ingestion/doc_id_map.json")
-            if doc_id_map_path.exists():
+            production_path = Path("artifacts/ingestion_production/doc_id_map.json")
+            legacy_path = Path("artifacts/ingestion/doc_id_map.json")
+
+            loaded = False
+            if production_path.exists():
                 try:
-                    with open(doc_id_map_path, "r", encoding="utf-8") as f:
+                    with open(production_path, "r", encoding="utf-8") as f:
                         app.state.doc_id_map = json.load(f)
                     logger.info(
-                        f"Loaded doc_id_map with {len(app.state.doc_id_map)} entries"
+                        f"Loaded doc_id_map from production with {len(app.state.doc_id_map)} entries"
                     )
+                    loaded = True
                 except Exception as e:
-                    logger.warning(f"Failed to load doc_id_map: {e}")
-                    app.state.doc_id_map = {}
-            else:
+                    logger.warning(f"Failed to load doc_id_map from production: {e}")
+
+            if not loaded and legacy_path.exists():
+                try:
+                    with open(legacy_path, "r", encoding="utf-8") as f:
+                        app.state.doc_id_map = json.load(f)
+                    logger.info(
+                        f"Loaded doc_id_map from legacy path with {len(app.state.doc_id_map)} entries"
+                    )
+                    loaded = True
+                except Exception as e:
+                    logger.warning(f"Failed to load doc_id_map from legacy path: {e}")
+
+            if not loaded:
                 logger.info("No doc_id_map.json found, citations will use doc_id only")
                 app.state.doc_id_map = {}
         else:
