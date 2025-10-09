@@ -72,12 +72,12 @@ def convert_to_ieee_style(
 ) -> Tuple[str, List[Dict]]:
     """
     Convert inline [Doc X, p.Y] citations to IEEE-style [n] format.
-
+    
     Args:
         answer_text: The answer text containing [Doc X, p.Y] style citations
         citations: List of citation dicts from the API response
         doc_number_map: Optional mapping from doc_number to {doc_id, pdf_path, file_name}
-
+    
     Returns:
         Tuple of (converted_text, ordered_citation_list)
         - converted_text: Answer with [1], [2], etc. instead of [Doc X, p.Y]
@@ -86,47 +86,42 @@ def convert_to_ieee_style(
     """
     if not answer_text:
         return answer_text, []
-
+    
     # Pattern to match [Doc X, p.Y] or [Doc X, pp. Y-Z] or [Doc X]
     # Also handles multiple citations in one bracket: [Doc 1, p.5; Doc 2, p.10]
-    pattern = r"\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]"
-
-    # Build a mapping from doc_number to citation info
+    pattern = r'\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]'
+    
+    # Normalize doc_number_map keys to strings for uniform matching
+    doc_number_map_str = {}
+    if isinstance(doc_number_map, dict):
+        for k, v in doc_number_map.items():
+            doc_number_map_str[str(k)] = v
+    
+    # Build a mapping from doc_number to citation info collected from citations list
     doc_citation_map = {}  # {doc_number: {doc_id, file_name, pages: set(), pdf_path}}
-
-    # First, populate from citations list
+    
+    # First, populate from citations list (best source for page numbers)
     for cit in citations:
         doc_id = cit.get("doc_id", "Unknown")
         page = cit.get("page")
         pdf_path = cit.get("pdf_path", "")
-
-        # Try to extract doc_number from doc_id if available
-        # Format might be: DOCID_filename_hash or just a number
+        
+        # Try to determine doc_number for this doc via doc_number_map
         doc_number = None
-
-        # Check if citation has explicit doc_number
-        if "doc_number" in cit:
-            doc_number = str(cit["doc_number"])
-
-        # If we have doc_number_map, use it
-        if doc_number_map:
-            for num_key, doc_info in doc_number_map.items():
-                if doc_info.get("doc_id") == doc_id:
-                    doc_number = str(num_key)
-                    pdf_path = doc_info.get("pdf_path", pdf_path)
-                    break
-
-        # Extract file_name from doc_id or pdf_path
+        for num_key, doc_info in doc_number_map_str.items():
+            if doc_info.get("doc_id") == doc_id:
+                doc_number = str(num_key)
+                pdf_path = doc_info.get("pdf_path", pdf_path)
+                break
+        
+        # Extract file_name from pdf_path or doc_id
         file_name = doc_id
         if pdf_path:
             file_name = Path(pdf_path).name
         elif doc_id.startswith("DOCID_"):
             parts = doc_id.split("_")
-            if len(parts) > 2:
-                file_name = "_".join(parts[1:-1])
-            elif len(parts) > 1:
-                file_name = parts[1]
-
+            file_name = "_".join(parts[1:-1]) if len(parts) > 2 else (parts[1] if len(parts) > 1 else doc_id)
+        
         if doc_number:
             if doc_number not in doc_citation_map:
                 doc_citation_map[doc_number] = {
@@ -136,67 +131,83 @@ def convert_to_ieee_style(
                     "pdf_path": pdf_path,
                 }
             if page:
-                doc_citation_map[doc_number]["pages"].add(page)
-
+                try:
+                    # Support pages like "5-7" by splitting and adding numbers
+                    if isinstance(page, str) and "-" in page:
+                        start, end = page.split("-", 1)
+                        for p in range(int(start), int(end) + 1):
+                            doc_citation_map[doc_number]["pages"].add(int(p))
+                    else:
+                        doc_citation_map[doc_number]["pages"].add(int(page))
+                except Exception:
+                    # Ignore non-integer pages
+                    pass
+    
     # Track unique citations in order of appearance
-    citation_list = []  # Ordered list of {doc_id, file_name, pages: [list], pdf_path}
-    citation_lookup = {}  # Map (doc_id or doc_number) to citation index (1-based)
-
+    citation_list: List[Dict] = []  # Ordered list of {doc_id, file_name, pages: [list], pdf_path}
+    citation_lookup: Dict[str, int] = {}  # Map doc_id -> citation index (1-based)
+    
     converted_text = answer_text
-
+    
+    # Helper to ensure a doc_id is present in citation_list
+    def ensure_citation_entry(doc_id: str, file_name: str, pages: List[int], pdf_path: str) -> int:
+        if doc_id not in citation_lookup:
+            citation_list.append(
+                {
+                    "doc_id": doc_id,
+                    "file_name": file_name,
+                    "pages": sorted(list(set(pages))) if pages else [],
+                    "pdf_path": pdf_path,
+                }
+            )
+            citation_lookup[doc_id] = len(citation_list)
+        return citation_lookup[doc_id]
+    
     # Find all citation patterns and replace them
     def replace_citation(match):
         full_match = match.group(0)
-        doc_number = match.group(1)  # First Doc number
-        page_ref = match.group(2)  # First page reference (optional)
-
-        # Parse multiple citations in the same bracket
-        # For now, handle single citation pattern
+        
         # Extract all Doc X patterns from the matched text
-        doc_pattern = r"Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?"
+        doc_pattern = r'Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?'
         doc_matches = list(re.finditer(doc_pattern, full_match))
-
+        
         ieee_refs = []
-
+        
         for doc_match in doc_matches:
-            doc_num = doc_match.group(1)
-            page_num = doc_match.group(2)
-
-            # Get citation info from map
+            doc_num = str(doc_match.group(1))
+            # 1) If we have citation info (with pages) for this doc number, use it
             if doc_num in doc_citation_map:
                 cit_info = doc_citation_map[doc_num]
                 doc_id = cit_info["doc_id"]
-
-                # Check if this doc_id is already in citation_list
-                if doc_id not in citation_lookup:
-                    # Add to citation list
-                    citation_list.append(
-                        {
-                            "doc_id": doc_id,
-                            "file_name": cit_info["file_name"],
-                            "pages": sorted(list(cit_info["pages"])),
-                            "pdf_path": cit_info["pdf_path"],
-                        }
-                    )
-                    citation_lookup[doc_id] = len(citation_list)  # 1-based index
-
-                ieee_num = citation_lookup[doc_id]
+                ieee_num = ensure_citation_entry(
+                    doc_id,
+                    cit_info["file_name"],
+                    list(cit_info["pages"]),
+                    cit_info["pdf_path"],
+                )
+                ieee_refs.append(str(ieee_num))
+            # 2) Otherwise, fall back to doc_number_map to at least list the document
+            elif doc_num in doc_number_map_str:
+                info = doc_number_map_str[doc_num]
+                doc_id = info.get("doc_id", f"doc_{doc_num}")
+                file_name = info.get("file_name", doc_id)
+                pdf_path = info.get("pdf_path", "")
+                ieee_num = ensure_citation_entry(doc_id, file_name, [], pdf_path)
                 ieee_refs.append(str(ieee_num))
             else:
-                # Fallback: treat doc_num as-is (shouldn't happen if data is correct)
+                # 3) Last-resort: keep the numeric label but no entry (should be rare)
                 ieee_refs.append(doc_num)
-
+        
         # Return IEEE-style reference
         if len(ieee_refs) == 1:
             return f"[{ieee_refs[0]}]"
         else:
-            # Multiple citations: [1][2] or [1,2] depending on preference
-            # Use [1][2] format for clarity
+            # Multiple citations: [1][2]
             return "".join([f"[{ref}]" for ref in ieee_refs])
-
+    
     # Replace all citation patterns
     converted_text = re.sub(pattern, replace_citation, converted_text)
-
+    
     return converted_text, citation_list
 
 
@@ -1012,8 +1023,22 @@ def render(vision_mode=False):
                 st.markdown("### 📝 Answer")
                 answer_text = results.get("answer", "")
                 citations = results.get("citations", [])
-                doc_number_map = results.get("meta", {}).get("doc_number_map", {})
-
+                # Fetch doc_number_map from the correct location
+                # Prefer generation_details.metadata.doc_number_map, fallback to meta.doc_number_map
+                doc_number_map = {}
+                try:
+                    gen_meta = (
+                        results.get("generation_details", {})
+                        .get("metadata", {})
+                        .get("doc_number_map")
+                    )
+                    if gen_meta:
+                        doc_number_map = gen_meta
+                    elif results.get("meta", {}).get("doc_number_map"):
+                        doc_number_map = results.get("meta", {}).get("doc_number_map")
+                except Exception:
+                    doc_number_map = {}
+                
                 # Check if IEEE-style citations is enabled
                 use_ieee = st.session_state.get("use_ieee_citations", True)
 
