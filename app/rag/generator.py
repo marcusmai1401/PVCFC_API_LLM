@@ -719,7 +719,16 @@ class ResponseGenerator:
                 metadata_extra["uncited_fallback"] = True
 
             # Build doc_number_map for IEEE-style citations (Frontend will use this)
-            doc_number_map = self._build_doc_number_map(doc_mapping)
+            # Prefer vision mapping if available; otherwise fallback to text doc_mapping
+            if (
+                isinstance(metadata_extra, dict)
+                and metadata_extra.get("vision_generation")
+                and isinstance(metadata_extra.get("vision_generation"), dict)
+                and metadata_extra["vision_generation"].get("doc_number_map")
+            ):
+                doc_number_map = metadata_extra["vision_generation"]["doc_number_map"]
+            else:
+                doc_number_map = self._build_doc_number_map(doc_mapping)
             metadata_extra["doc_number_map"] = doc_number_map
 
             return GeneratedAnswer(
@@ -1631,11 +1640,35 @@ Response:"""
         # This ensures citations point to the actual pages shown in vision images
         citations = self._extract_citations(answer_text, vision_doc_mapping)
 
+        # Build a doc_number_map for vision mapping so frontend can render IEEE references correctly
+        vision_doc_number_map = {}
+        try:
+            from pathlib import Path as _Path
+            for i, result in vision_doc_mapping.items():
+                # Extract pdf_path and file_name from result.metadata
+                pdf_path_val = None
+                if result.metadata and "pdf_path" in result.metadata:
+                    pdf_path_val = result.metadata.get("pdf_path")
+                file_name = "Unknown"
+                if pdf_path_val:
+                    try:
+                        file_name = _Path(pdf_path_val).name
+                    except Exception:
+                        file_name = "Unknown"
+                vision_doc_number_map[i] = {
+                    "doc_id": result.doc_id or "unknown",
+                    "pdf_path": str(pdf_path_val) if pdf_path_val else "",
+                    "file_name": file_name,
+                }
+        except Exception:
+            vision_doc_number_map = {}
+
         vision_meta = {
             "pages_used": pages_used,
             "pages_failed": pages_failed,
             "excerpts": [],  # Optional: can parse excerpts from answer in future
             "vision_strategy": strategy_meta,
+            "doc_number_map": vision_doc_number_map,
         }
 
         # Log vision pages summary
