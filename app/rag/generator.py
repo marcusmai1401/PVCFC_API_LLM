@@ -34,13 +34,27 @@ def _get_doc_id_map() -> Dict[str, str]:
         import json
         from pathlib import Path
 
-        path = Path("artifacts/ingestion/doc_id_map.json")
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
+        # Try production path first (priority)
+        production_path = Path("artifacts/ingestion_production/doc_id_map.json")
+        legacy_path = Path("artifacts/ingestion/doc_id_map.json")
+
+        if production_path.exists():
+            with open(production_path, "r", encoding="utf-8") as f:
                 _DOC_ID_MAP_CACHE = json.load(f)
+            logger.info(
+                f"Loaded doc_id_map from production: {len(_DOC_ID_MAP_CACHE)} entries"
+            )
+        elif legacy_path.exists():
+            with open(legacy_path, "r", encoding="utf-8") as f:
+                _DOC_ID_MAP_CACHE = json.load(f)
+            logger.info(
+                f"Loaded doc_id_map from legacy path: {len(_DOC_ID_MAP_CACHE)} entries"
+            )
         else:
             _DOC_ID_MAP_CACHE = {}
-    except Exception:
+            logger.warning("No doc_id_map.json found in production or legacy paths")
+    except Exception as e:
+        logger.error(f"Failed to load doc_id_map: {e}")
         _DOC_ID_MAP_CACHE = {}
     return _DOC_ID_MAP_CACHE
 
@@ -704,6 +718,10 @@ class ResponseGenerator:
             if "fallback_used" in locals() and fallback_used:
                 metadata_extra["uncited_fallback"] = True
 
+            # Build doc_number_map for IEEE-style citations (Frontend will use this)
+            doc_number_map = self._build_doc_number_map(doc_mapping)
+            metadata_extra["doc_number_map"] = doc_number_map
+
             return GeneratedAnswer(
                 query=query.original,
                 answer=final_answer,
@@ -750,6 +768,55 @@ class ResponseGenerator:
             context = context[: self.config.max_context_length] + "..."
 
         return context, doc_mapping
+
+    def _build_doc_number_map(
+        self, doc_mapping: Dict[int, RetrievalResult]
+    ) -> Dict[int, Dict[str, str]]:
+        """Build doc_number_map for IEEE-style citations in frontend.
+
+        Args:
+            doc_mapping: Mapping of doc numbers (1-indexed) to RetrievalResult objects
+
+        Returns:
+            Dict mapping doc_number -> {doc_id, pdf_path, file_name}
+        """
+        from pathlib import Path
+
+        doc_number_map = {}
+        doc_id_map = _get_doc_id_map()
+
+        for doc_num, result in doc_mapping.items():
+            doc_id = result.doc_id or (
+                result.metadata.get("doc_id") if result.metadata else None
+            )
+
+            # Try to get pdf_path from result metadata first
+            pdf_path = None
+            if result.metadata and "pdf_path" in result.metadata:
+                pdf_path = str(result.metadata["pdf_path"])
+            # Otherwise lookup via doc_id_map
+            elif doc_id and doc_id in doc_id_map:
+                doc_info = doc_id_map[doc_id]
+                if isinstance(doc_info, dict):
+                    pdf_path = doc_info.get("pdf_path")
+                elif isinstance(doc_info, str):
+                    pdf_path = doc_info
+
+            # Extract file_name from pdf_path
+            file_name = "Unknown"
+            if pdf_path:
+                try:
+                    file_name = Path(pdf_path).name
+                except Exception:
+                    file_name = "Unknown"
+
+            doc_number_map[doc_num] = {
+                "doc_id": doc_id or "unknown",
+                "pdf_path": pdf_path or "",
+                "file_name": file_name,
+            }
+
+        return doc_number_map
 
     def _call_llm_with_fallback(
         self, prompt: str, temperature: float, max_tokens: int

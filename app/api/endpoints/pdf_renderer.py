@@ -83,6 +83,84 @@ class CacheStats(BaseModel):
     cache_directory: str
 
 
+@router.get("/open")
+async def open_pdf_in_browser(
+    pdf_path: str = Query(..., description="Path to PDF file"),
+    page: int = Query(default=1, ge=1, description="Page number to open (1-indexed)"),
+):
+    """
+    Stream PDF file for viewing in browser with ability to jump to specific page.
+
+    The browser will open the PDF viewer and jump to the specified page using
+    the PDF fragment identifier (#page=N).
+
+    **Use Cases:**
+    - Direct PDF viewing with page navigation
+    - IEEE-style citation links that open at exact page
+    - Better UX than image rendering for multi-page viewing
+
+    **Browser Support:**
+    - Chrome/Edge: Full support for #page=N fragment
+    - Firefox: Full support
+    - Safari: Partial support (may need plugin)
+    """
+    try:
+        # Validate PDF path
+        is_valid, error_msg = validate_pdf_path(pdf_path)
+        if not is_valid:
+            raise HTTPException(status_code=404, detail=error_msg)
+
+        # Verify file exists
+        pdf_file = Path(pdf_path)
+        if not pdf_file.exists():
+            raise HTTPException(
+                status_code=404, detail=f"PDF file not found: {pdf_file.name}"
+            )
+
+        # Validate page number
+        page_count = get_pdf_page_count(pdf_path)
+        if page > page_count:
+            logger.warning(
+                f"Requested page {page} exceeds page count {page_count}, opening at page 1"
+            )
+            page = 1
+
+        # Read PDF file
+        try:
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+        except Exception as e:
+            logger.error(f"Error reading PDF file: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to read PDF file: {str(e)[:100]}"
+            )
+
+        # Log the request
+        logger.info(
+            f"Streaming PDF: {pdf_file.name} ({len(pdf_bytes)} bytes, page {page}/{page_count})"
+        )
+
+        # Return PDF with inline disposition so browser opens it
+        # Browser will use #page=N fragment from URL to jump to page
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{pdf_file.name}"',
+                "X-Page-Number": str(page),
+                "X-Total-Pages": str(page_count),
+                "Cache-Control": "public, max-age=86400",  # Cache for 1 day
+                "Accept-Ranges": "bytes",  # Support range requests for large PDFs
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in open_pdf_in_browser: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/info", response_model=PDFInfo)
 async def get_pdf_info(pdf_path: str = Query(..., description="Path to PDF file")):
     """

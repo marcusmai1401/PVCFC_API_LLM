@@ -4,16 +4,19 @@ Phase 1 improvements:
 - Show both score and confidence in citations
 - Add PDF page viewer button
 - Force execution_mode = production
+- IEEE-style citations with direct PDF links
 """
 
 import base64
 import json
 import os
+import re
 import sys
 import time
 import traceback
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import plotly.express as px
@@ -62,6 +65,139 @@ except ImportError:
 
     def get_logger(*args, **kwargs):
         return DummyLogger()
+
+
+def convert_to_ieee_style(
+    answer_text: str, citations: List[Dict], doc_number_map: Optional[Dict] = None
+) -> Tuple[str, List[Dict]]:
+    """
+    Convert inline [Doc X, p.Y] citations to IEEE-style [n] format.
+
+    Args:
+        answer_text: The answer text containing [Doc X, p.Y] style citations
+        citations: List of citation dicts from the API response
+        doc_number_map: Optional mapping from doc_number to {doc_id, pdf_path, file_name}
+
+    Returns:
+        Tuple of (converted_text, ordered_citation_list)
+        - converted_text: Answer with [1], [2], etc. instead of [Doc X, p.Y]
+        - ordered_citation_list: List of unique citations in order of first appearance
+          Each entry: {"doc_id", "file_name", "pages": [list], "pdf_path": str}
+    """
+    if not answer_text:
+        return answer_text, []
+
+    # Pattern to match [Doc X, p.Y] or [Doc X, pp. Y-Z] or [Doc X]
+    # Also handles multiple citations in one bracket: [Doc 1, p.5; Doc 2, p.10]
+    pattern = r"\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]"
+
+    # Build a mapping from doc_number to citation info
+    doc_citation_map = {}  # {doc_number: {doc_id, file_name, pages: set(), pdf_path}}
+
+    # First, populate from citations list
+    for cit in citations:
+        doc_id = cit.get("doc_id", "Unknown")
+        page = cit.get("page")
+        pdf_path = cit.get("pdf_path", "")
+
+        # Try to extract doc_number from doc_id if available
+        # Format might be: DOCID_filename_hash or just a number
+        doc_number = None
+
+        # Check if citation has explicit doc_number
+        if "doc_number" in cit:
+            doc_number = str(cit["doc_number"])
+
+        # If we have doc_number_map, use it
+        if doc_number_map:
+            for num_key, doc_info in doc_number_map.items():
+                if doc_info.get("doc_id") == doc_id:
+                    doc_number = str(num_key)
+                    pdf_path = doc_info.get("pdf_path", pdf_path)
+                    break
+
+        # Extract file_name from doc_id or pdf_path
+        file_name = doc_id
+        if pdf_path:
+            file_name = Path(pdf_path).name
+        elif doc_id.startswith("DOCID_"):
+            parts = doc_id.split("_")
+            if len(parts) > 2:
+                file_name = "_".join(parts[1:-1])
+            elif len(parts) > 1:
+                file_name = parts[1]
+
+        if doc_number:
+            if doc_number not in doc_citation_map:
+                doc_citation_map[doc_number] = {
+                    "doc_id": doc_id,
+                    "file_name": file_name,
+                    "pages": set(),
+                    "pdf_path": pdf_path,
+                }
+            if page:
+                doc_citation_map[doc_number]["pages"].add(page)
+
+    # Track unique citations in order of appearance
+    citation_list = []  # Ordered list of {doc_id, file_name, pages: [list], pdf_path}
+    citation_lookup = {}  # Map (doc_id or doc_number) to citation index (1-based)
+
+    converted_text = answer_text
+
+    # Find all citation patterns and replace them
+    def replace_citation(match):
+        full_match = match.group(0)
+        doc_number = match.group(1)  # First Doc number
+        page_ref = match.group(2)  # First page reference (optional)
+
+        # Parse multiple citations in the same bracket
+        # For now, handle single citation pattern
+        # Extract all Doc X patterns from the matched text
+        doc_pattern = r"Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?"
+        doc_matches = list(re.finditer(doc_pattern, full_match))
+
+        ieee_refs = []
+
+        for doc_match in doc_matches:
+            doc_num = doc_match.group(1)
+            page_num = doc_match.group(2)
+
+            # Get citation info from map
+            if doc_num in doc_citation_map:
+                cit_info = doc_citation_map[doc_num]
+                doc_id = cit_info["doc_id"]
+
+                # Check if this doc_id is already in citation_list
+                if doc_id not in citation_lookup:
+                    # Add to citation list
+                    citation_list.append(
+                        {
+                            "doc_id": doc_id,
+                            "file_name": cit_info["file_name"],
+                            "pages": sorted(list(cit_info["pages"])),
+                            "pdf_path": cit_info["pdf_path"],
+                        }
+                    )
+                    citation_lookup[doc_id] = len(citation_list)  # 1-based index
+
+                ieee_num = citation_lookup[doc_id]
+                ieee_refs.append(str(ieee_num))
+            else:
+                # Fallback: treat doc_num as-is (shouldn't happen if data is correct)
+                ieee_refs.append(doc_num)
+
+        # Return IEEE-style reference
+        if len(ieee_refs) == 1:
+            return f"[{ieee_refs[0]}]"
+        else:
+            # Multiple citations: [1][2] or [1,2] depending on preference
+            # Use [1][2] format for clarity
+            return "".join([f"[{ref}]" for ref in ieee_refs])
+
+    # Replace all citation patterns
+    converted_text = re.sub(pattern, replace_citation, converted_text)
+
+    return converted_text, citation_list
 
 
 def render_pdf_page(
@@ -748,6 +884,15 @@ def render(vision_mode=False):
         # Language
         language = st.radio("Language", ["vi", "en"], horizontal=True)
 
+        # Citation style toggle
+        with st.expander("Citation Settings", expanded=False):
+            use_ieee_citations = st.checkbox(
+                "Use IEEE-style Citations",
+                value=True,
+                key="use_ieee_citations",
+                help="Convert citations from [Doc X, p.Y] to [1], [2] with references section",
+            )
+
         # Run button
         if st.button(
             "🚀 Run Query", type="primary", use_container_width=True, key="run_query_btn"
@@ -850,13 +995,12 @@ def render(vision_mode=False):
             meta = results.get("meta", {})
 
             # Result tabs with actual data
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
                 [
                     "Overview",
                     "Retrieval",
                     "Rerank",
                     "Generation",
-                    "📌 Citations (Enhanced)",
                     "Vision Verify",
                     "Metrics",
                     "Raw Data",
@@ -867,6 +1011,11 @@ def render(vision_mode=False):
                 # Overview Tab
                 st.markdown("### 📝 Answer")
                 answer_text = results.get("answer", "")
+                citations = results.get("citations", [])
+                doc_number_map = results.get("meta", {}).get("doc_number_map", {})
+
+                # Check if IEEE-style citations is enabled
+                use_ieee = st.session_state.get("use_ieee_citations", True)
 
                 # Check if answer is empty or too short
                 if not answer_text or len(answer_text.strip()) < 10:
@@ -889,7 +1038,14 @@ def render(vision_mode=False):
                             f"Found {len(results.get('context_used', []))} relevant document chunks. See Citations tab for details."
                         )
                 else:
-                    st.markdown(answer_text)
+                    # Convert to IEEE style if enabled
+                    if use_ieee and citations:
+                        converted_answer, ieee_citation_list = convert_to_ieee_style(
+                            answer_text, citations, doc_number_map
+                        )
+                        st.markdown(converted_answer)
+                    else:
+                        st.markdown(answer_text)
 
                 # Display confidence and warnings
                 col_m1, col_m2, col_m3 = st.columns(3)
@@ -909,6 +1065,141 @@ def render(vision_mode=False):
                     st.warning("⚠️ Warnings:")
                     for warn in warnings:
                         st.write(f"- {warn}")
+
+                # References section - IEEE style or traditional
+                if citations:
+                    st.markdown("---")
+
+                    if use_ieee and "ieee_citation_list" in locals():
+                        # IEEE-style references
+                        st.markdown("### 📚 References")
+
+                        from urllib.parse import urlencode
+
+                        for idx, ref in enumerate(ieee_citation_list, 1):
+                            file_name = ref.get("file_name", "Unknown")
+                            pages = ref.get("pages", [])
+                            pdf_path = ref.get("pdf_path", "")
+
+                            # Display reference number and file name
+                            st.markdown(f"**[{idx}]** {file_name}")
+
+                            # Display pages with links
+                            if pages and pdf_path:
+                                page_links = []
+                                for page in pages:
+                                    # Try to build PDF link with fallback to image
+                                    try:
+                                        # Check if PDF file exists
+                                        import os
+                                        from pathlib import Path
+
+                                        pdf_exists = (
+                                            os.path.exists(pdf_path)
+                                            if pdf_path
+                                            else False
+                                        )
+
+                                        if pdf_exists:
+                                            # Build URL for PDF open endpoint (native PDF viewing)
+                                            params = {
+                                                "pdf_path": pdf_path,
+                                                "page": str(page),
+                                            }
+                                            params_str = urlencode(params)
+                                            pdf_url = f"{st.session_state.api_base_url}/api/pdf/open?{params_str}#page={page}"
+                                            page_links.append(
+                                                f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px;" title="Open PDF at page {page}">p.{page}</a>'
+                                            )
+                                        else:
+                                            # Fallback to image render endpoint
+                                            params = {
+                                                "pdf_path": pdf_path,
+                                                "page_num": str(page),
+                                                "dpi": "200",
+                                                "format": "png",
+                                            }
+                                            params_str = urlencode(params)
+                                            img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
+                                            page_links.append(
+                                                f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">⚠️ p.{page}</a>'
+                                            )
+                                    except Exception as e:
+                                        # If any error, provide image fallback
+                                        params = {
+                                            "pdf_path": pdf_path,
+                                            "page_num": str(page),
+                                            "dpi": "200",
+                                            "format": "png",
+                                        }
+                                        params_str = urlencode(params)
+                                        img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
+                                        page_links.append(
+                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">⚠️ p.{page}</a>'
+                                        )
+
+                                st.markdown(
+                                    "&nbsp;&nbsp;&nbsp;&nbsp;" + " ".join(page_links),
+                                    unsafe_allow_html=True,
+                                )
+                            elif pages:
+                                # No PDF path, just show page numbers
+                                pages_str = ", ".join([f"p.{p}" for p in pages])
+                                st.caption(f"    {pages_str}")
+                    else:
+                        # Traditional sources section
+                        st.markdown("### 📚 Referenced Sources")
+
+                        # Extract unique doc_ids with their details
+                        unique_sources = {}
+                        for cit in citations:
+                            doc_id = cit.get("doc_id", "Unknown")
+                            if doc_id not in unique_sources:
+                                # Try to get file_name from doc_id (parse the readable part)
+                                # Format: DOCID_<readable_part>_<hash>
+                                file_name = doc_id
+                                if doc_id.startswith("DOCID_"):
+                                    parts = doc_id.split("_")
+                                    if len(parts) > 1:
+                                        # Join all parts except the last hash part
+                                        file_name = (
+                                            "_".join(parts[1:-1])
+                                            if len(parts) > 2
+                                            else parts[1]
+                                        )
+
+                                unique_sources[doc_id] = {
+                                    "file_name": file_name,
+                                    "pages": set(),
+                                }
+
+                            # Collect all pages referenced from this document
+                            page = cit.get("page")
+                            if page:
+                                unique_sources[doc_id]["pages"].add(page)
+
+                        # Display each unique source
+                        for idx, (doc_id, info) in enumerate(unique_sources.items(), 1):
+                            pages_list = sorted(list(info["pages"]))
+                            pages_str = (
+                                ", ".join([f"p.{p}" for p in pages_list])
+                                if pages_list
+                                else "N/A"
+                            )
+
+                            with st.expander(
+                                f"📄 {idx}. {info['file_name']}", expanded=False
+                            ):
+                                st.caption(f"**Document ID:** `{doc_id}`")
+                                st.caption(f"**Referenced Pages:** {pages_str}")
+
+                                # Show snippet from first citation of this document
+                                first_cit = next(
+                                    (c for c in citations if c.get("doc_id") == doc_id),
+                                    None,
+                                )
+                                if first_cit and first_cit.get("text_snippet"):
+                                    st.text(first_cit["text_snippet"][:200] + "...")
 
             with tab2:
                 # Retrieval Tab
@@ -1016,22 +1307,6 @@ def render(vision_mode=False):
                     st.info("Prompt info not available")
 
             with tab5:
-                # Enhanced Citations Tab
-                st.markdown("### 📌 Enhanced Citations")
-                st.caption(
-                    "Showing both retrieval score and confidence for each citation"
-                )
-
-                citations = results.get("citations", [])
-                if citations:
-                    # Use the enhanced citation viewer with logging
-                    render_citations_with_viewer(
-                        citations, st.session_state.api_base_url, logger
-                    )
-                else:
-                    st.info("No citations found")
-
-            with tab6:
                 # Vision Verify Tab - Check if vision was actually used in generation
                 vision_info = ui["vision"]
 
@@ -1087,7 +1362,7 @@ def render(vision_mode=False):
                             "Vision features are disabled. Enable 'Vision Features' in sidebar settings to use vision generation."
                         )
 
-            with tab7:
+            with tab6:
                 # Metrics Tab
                 st.markdown("### 📈 Performance Metrics")
 
@@ -1109,7 +1384,7 @@ def render(vision_mode=False):
                     request_id = meta.get("request_id", "N/A")
                     st.metric("Request ID", request_id)
 
-            with tab8:
+            with tab7:
                 # Raw Data Tab
                 st.markdown("### 📜 Raw Response Data")
                 st.json(results)
