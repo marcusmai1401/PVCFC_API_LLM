@@ -16,14 +16,15 @@ from app.rag.query_transform import QueryTransformer
 from app.rag.reranker import Reranker
 from app.rag.retriever import HybridRetriever
 from app.rag.schemas import AskRequest, AskResponse, Citation, ErrorResponse
+from app.rag.weaviate_retriever import WeaviateRetriever
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ask", tags=["RAG"])
 
 
 # Dependencies will be injected from main app
-async def get_retriever(request: Request) -> HybridRetriever:
-    """Get retriever from app state."""
+async def get_retriever(request: Request):
+    """Get retriever from app state (HybridRetriever or WeaviateRetriever)."""
     if not hasattr(request.app.state, "retriever"):
         raise HTTPException(status_code=503, detail="Retriever not initialized")
     return request.app.state.retriever
@@ -48,7 +49,7 @@ async def get_settings(request: Request) -> Settings:
 async def ask_question(
     request: AskRequest,
     http_request: Request,
-    retriever: HybridRetriever = Depends(get_retriever),
+    retriever=Depends(get_retriever),
     settings: Settings = Depends(get_settings),
 ) -> AskResponse:
     """
@@ -165,68 +166,97 @@ async def ask_question(
 
         # Step 3: Reranking (sync) - skip if cache hit
         if not cache_hit:
-            # Determine rerank top_k based on degrade mode
-            rerank_top_k = (
-                settings.rerank_top_n_when_degrade
-                if degrade_mode
-                else settings.top_rerank
-            )
-
-            # Create reranker with appropriate top_k
-            reranker = Reranker(
-                config=RerankConfig(method=rerank_method, top_k=rerank_top_k)
-            )
-            rerank_start = time.time()
-            reranked_results = reranker.rerank(
-                query=request.query, results=retrieval_results
-            )
-
-            # DIAGNOSTIC: Log rerank results
-            logger.info(
-                f"[DIAGNOSTIC] Rerank input: {len(retrieval_results)} results, "
-                f"method={rerank_method}, top_k={rerank_top_k}"
-            )
-            logger.info(f"[DIAGNOSTIC] Rerank output: {len(reranked_results)} results")
-
-            # Safety fallback: if cross-encoder produced zero results, retry with score-based reranker
-            if (
-                len(reranked_results) == 0
-                and len(retrieval_results) > 0
-                and reranker.config.method == "cross_encoder"
-            ):
-                logger.warning(
-                    f"[{trace_id}] Cross-encoder reranking returned 0 results; falling back to score-based rerank"
+            # If BGE reranking was already applied inside retriever, skip route-level rerank
+            if getattr(settings, "enable_bge_rerank", False):
+                logger.info(
+                    f"[{trace_id}] BGE reranking enabled at retriever level; skipping route-level rerank"
                 )
+                # Use retrieval_results directly (already reranked by BGE)
+                reranked_results = retrieval_results[: request.max_context]
+                rerank_time = 0
+                # Define rerank_top_k for downstream meta (use BGE top_k if available)
                 try:
-                    from app.rag.reranker import RerankConfig as _RerankConfig
+                    rerank_top_k = settings.bge_rerank_top_k
+                except Exception:
+                    rerank_top_k = len(reranked_results)
 
-                    _fallback_reranker = Reranker(
-                        config=_RerankConfig(method="score", top_k=request.max_context)
-                    )
-                    reranked_results = _fallback_reranker.rerank(
-                        query=request.query, results=retrieval_results
-                    )
-                    logger.info(
-                        f"[DIAGNOSTIC] Fallback rerank output: {len(reranked_results)} results"
-                    )
-                except Exception as _:
-                    # Keep as empty; downstream will handle
-                    pass
+                # Cache the results
+                cache.set(
+                    cache_key_data[0],  # query (normalized)
+                    reranked_results,  # results to cache
+                    cache_key_data[1],  # filters (dict or None)
+                    cache_key_data[2],  # k (max_context)
+                )
+                logger.info(
+                    f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results (BGE rerank)"
+                )
+            else:
+                # Determine rerank top_k based on degrade mode
+                rerank_top_k = (
+                    settings.rerank_top_n_when_degrade
+                    if degrade_mode
+                    else settings.top_rerank
+                )
 
-            # Apply max_context limit
-            reranked_results = reranked_results[: request.max_context]
-            rerank_time = (time.time() - rerank_start) * 1000
+                # Create reranker with appropriate top_k
+                reranker = Reranker(
+                    config=RerankConfig(method=rerank_method, top_k=rerank_top_k)
+                )
+                rerank_start = time.time()
+                reranked_results = reranker.rerank(
+                    query=request.query, results=retrieval_results
+                )
 
-            # Cache the reranked results for future requests
-            cache.set(
-                cache_key_data[0],  # query (normalized)
-                reranked_results,  # results to cache
-                cache_key_data[1],  # filters (dict or None)
-                cache_key_data[2],  # k (max_context)
-            )
-            logger.info(
-                f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results"
-            )
+                # DIAGNOSTIC: Log rerank results
+                logger.info(
+                    f"[DIAGNOSTIC] Rerank input: {len(retrieval_results)} results, "
+                    f"method={rerank_method}, top_k={rerank_top_k}"
+                )
+                logger.info(
+                    f"[DIAGNOSTIC] Rerank output: {len(reranked_results)} results"
+                )
+
+                # Safety fallback: if cross-encoder produced zero results, retry with score-based reranker
+                if (
+                    len(reranked_results) == 0
+                    and len(retrieval_results) > 0
+                    and reranker.config.method == "cross_encoder"
+                ):
+                    logger.warning(
+                        f"[{trace_id}] Cross-encoder reranking returned 0 results; falling back to score-based rerank"
+                    )
+                    try:
+                        from app.rag.reranker import RerankConfig as _RerankConfig
+
+                        _fallback_reranker = Reranker(
+                            config=_RerankConfig(
+                                method="score", top_k=request.max_context
+                            )
+                        )
+                        reranked_results = _fallback_reranker.rerank(
+                            query=request.query, results=retrieval_results
+                        )
+                        logger.info(
+                            f"[DIAGNOSTIC] Fallback rerank output: {len(reranked_results)} results"
+                        )
+                    except Exception as _:
+                        # Keep as empty; downstream will handle
+                        pass
+
+                # Apply max_context limit
+                reranked_results = reranked_results[: request.max_context]
+                rerank_time = (time.time() - rerank_start) * 1000
+
+                # Cache the reranked results for future requests
+                cache.set(
+                    cache_key_data[0],  # query (normalized)
+                    reranked_results,  # results to cache
+                    cache_key_data[1],  # filters (dict or None)
+                    cache_key_data[2],  # k (max_context)
+                )
+                logger.info(
+                    f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results"
+                )
 
         logger.debug(
             f"[{trace_id}] Reranked to {len(reranked_results)} results in {rerank_time:.0f}ms"
@@ -471,11 +501,35 @@ Provide a direct, helpful answer in 1-2 sentences:"""
         # Build response
         # Determine current k values (may be different if in degrade mode)
         # For bm25_k_current: use actual retriever config or degrade value
-        bm25_k_current = (
-            settings.bm25_k_when_degrade
-            if degrade_mode
-            else (retriever.config.k_bm25 if hasattr(retriever, "config") else 50)
+        # Handle different retriever types
+        from app.rag.hybrid_weaviate_opensearch_retriever import (
+            HybridWeaviateOpenSearchRetriever,
         )
+
+        if isinstance(retriever, WeaviateRetriever):
+            # Weaviate mode: use its config
+            bm25_k_current = (
+                retriever.config.retrieval_limit if hasattr(retriever, "config") else 50
+            )
+        elif isinstance(retriever, HybridWeaviateOpenSearchRetriever):
+            # Modern Hybrid mode: use opensearch_limit
+            bm25_k_current = (
+                retriever.config.opensearch_limit
+                if hasattr(retriever, "config")
+                else 50
+            )
+        else:
+            # FAISS mode: use HybridRetriever config or degrade value
+            bm25_k_current = (
+                settings.bm25_k_when_degrade
+                if degrade_mode
+                else (
+                    retriever.config.k_bm25
+                    if hasattr(retriever, "config")
+                    and hasattr(retriever.config, "k_bm25")
+                    else 50
+                )
+            )
         # For top_rerank_current: use actual reranker config if available
         top_rerank_current = rerank_top_k if not cache_hit else settings.top_rerank
 
@@ -547,43 +601,72 @@ Provide a direct, helpful answer in 1-2 sentences:"""
                 }
 
         # Build debug details for UI
-        # 1. Retrieval details (separate BM25 and FAISS results)
+        # 1. Retrieval details (separate BM25 and FAISS results, or Weaviate)
         # Always populate, even on cache hit (use cached results in that case)
         retrieval_details = None
         if retrieval_results:  # Will have results either from retrieval or cache
-            bm25_docs = [
-                {
-                    "chunk_id": r.chunk_id,
-                    "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
-                    "score": round(r.score, 4) if r.score else 0.0,
-                    "doc_id": r.doc_id,
-                    "page": r.page,
-                }
+            # Check if using Weaviate (Phase 4) or FAISS (legacy)
+            is_weaviate = any(
+                hasattr(r, "source") and r.source and "weaviate" in r.source.lower()
                 for r in retrieval_results
-                if hasattr(r, "source") and r.source == "bm25"
-            ][
-                :10
-            ]  # Top 10 for UI
-            faiss_docs = [
-                {
-                    "chunk_id": r.chunk_id,
-                    "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
-                    "score": round(r.score, 4) if r.score else 0.0,
-                    "doc_id": r.doc_id,
-                    "page": r.page,
+            )
+
+            if is_weaviate:
+                # Weaviate mode: show all results as one list
+                weaviate_docs = [
+                    {
+                        "chunk_id": r.chunk_id,
+                        "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
+                        "score": round(r.score, 4) if r.score else 0.0,
+                        "doc_id": r.doc_id,
+                        "page": r.page,
+                    }
+                    for r in retrieval_results
+                ][
+                    :10
+                ]  # Top 10 for UI
+                retrieval_details = {
+                    "weaviate": weaviate_docs,
+                    "total_retrieved": len(retrieval_results),
+                    "retriever_type": "weaviate",
+                    "from_cache": cache_hit,
                 }
-                for r in retrieval_results
-                if hasattr(r, "source") and r.source == "faiss"
-            ][
-                :10
-            ]  # Top 10 for UI
-            retrieval_details = {
-                "bm25": bm25_docs,
-                "faiss": faiss_docs,
-                "total_retrieved": len(retrieval_results),
-                "degrade_mode": degrade_mode,
-                "from_cache": cache_hit,  # Indicate if these came from cache
-            }
+            else:
+                # FAISS mode (legacy): separate BM25 and FAISS
+                bm25_docs = [
+                    {
+                        "chunk_id": r.chunk_id,
+                        "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
+                        "score": round(r.score, 4) if r.score else 0.0,
+                        "doc_id": r.doc_id,
+                        "page": r.page,
+                    }
+                    for r in retrieval_results
+                    if hasattr(r, "source") and r.source == "bm25"
+                ][
+                    :10
+                ]  # Top 10 for UI
+                faiss_docs = [
+                    {
+                        "chunk_id": r.chunk_id,
+                        "text": r.text[:200] + "..." if len(r.text) > 200 else r.text,
+                        "score": round(r.score, 4) if r.score else 0.0,
+                        "doc_id": r.doc_id,
+                        "page": r.page,
+                    }
+                    for r in retrieval_results
+                    if hasattr(r, "source") and r.source == "faiss"
+                ][
+                    :10
+                ]  # Top 10 for UI
+                retrieval_details = {
+                    "bm25": bm25_docs,
+                    "faiss": faiss_docs,
+                    "total_retrieved": len(retrieval_results),
+                    "retriever_type": "faiss",
+                    "degrade_mode": degrade_mode,
+                    "from_cache": cache_hit,  # Indicate if these came from cache
+                }
 
         # 2. Reranking details
         # Always populate, even on cache hit (results are same, just from cache)
@@ -623,11 +706,34 @@ Provide a direct, helpful answer in 1-2 sentences:"""
         if isinstance(generated_answer.metadata, dict):
             generation_details["metadata"] = generated_answer.metadata
 
+        # VALIDATION: Assert confidence is in valid range [0, 1]
+        # Log error if invalid (helps catch bugs early), but allow to proceed with clamping
+        # to avoid breaking production requests due to edge cases
+        final_confidence = generated_answer.confidence
+        if final_confidence is None or not (0 <= final_confidence <= 1):
+            # Extract confidence mode from metadata if available
+            conf_mode = "unknown"
+            if isinstance(generated_answer.metadata, dict):
+                conf_mode = generated_answer.metadata.get("confidence_mode", "unknown")
+
+            logger.error(
+                f"[{trace_id}] Invalid confidence value detected: {final_confidence}. "
+                f"This indicates a bug in confidence calculation. Clamping to valid range.",
+                extra={
+                    "confidence_raw": final_confidence,
+                    "confidence_mode": conf_mode,
+                    "num_citations": len(citations_list),
+                    "num_docs": len(reranked_results),
+                },
+            )
+            # Clamp as last resort for production stability, but we've logged the issue
+            final_confidence = max(0.0, min(1.0, float(final_confidence or 0.0)))
+
         return AskResponse(
             answer=final_answer,
             citations=citations_list,
             context_used=[result.chunk_id for result in reranked_results],
-            confidence=generated_answer.confidence,
+            confidence=final_confidence,
             meta=meta_dict,
             warnings=warnings if warnings else None,
             retrieval_details=retrieval_details,

@@ -2036,7 +2036,11 @@ Response:"""
 
         # Base confidence from document scores
         if docs:
-            avg_score = sum(d.score for d in docs[:3]) / min(3, len(docs))
+            # IMPORTANT: Ensure scores are non-negative (can be negative from cross-encoder)
+            # Also handle None scores (defensive: some retrievers may not set score)
+            avg_score = sum(max(0, (d.score or 0)) for d in docs[:3]) / min(
+                3, len(docs)
+            )
             base_confidence = min(avg_score * 2, 1.0)  # Scale up
         else:
             base_confidence = 0.0
@@ -2055,7 +2059,9 @@ Response:"""
         if any(phrase in answer.lower() for phrase in uncertainty_phrases):
             base_confidence *= 0.8
 
-        return base_confidence
+        # IMPORTANT: Final clamp to ensure confidence is always in [0, 1] range
+        # This handles any edge cases where calculations might produce values outside bounds
+        return max(0.0, min(1.0, base_confidence))
 
     def _post_process_answer(
         self, answer: str, citations: List[Citation], confidence: float

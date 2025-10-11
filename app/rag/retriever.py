@@ -14,9 +14,14 @@ from loguru import logger
 
 from app.rag.indexers.bm25_indexer import BM25Indexer
 from app.rag.indexers.faiss_indexer import VectorIndexer
+from app.rag.indexers.opensearch_bm25_retriever import (
+    OpenSearchBM25Retriever,
+    create_opensearch_retriever,
+)
 from app.rag.page_range_expander import PageRangeConfig, PageRangeExpander
 from app.rag.query_transform import QueryFilters, TransformedQuery
 from app.services.embedding_enhanced import EmbeddingService
+from app.services.reranker import get_reranker_service
 
 # Import page utilities for consistent page handling
 try:
@@ -170,13 +175,47 @@ class HybridRetriever:
         )
 
     def load_bm25_index(self, index_dir: str):
-        """Load BM25 index from directory"""
+        """Load BM25 index from directory (offline) or connect to OpenSearch"""
         try:
-            self.bm25_indexer = BM25Indexer()
-            self.bm25_indexer.load_index(index_dir)
-            logger.info(
-                f"Loaded BM25 index from {index_dir} with {len(self.bm25_indexer.documents)} documents"
-            )
+            # Check if OpenSearch is enabled
+            from app.core.config import settings
+
+            if settings.opensearch_enabled:
+                # Use OpenSearch BM25 retriever
+                logger.info(
+                    f"OpenSearch enabled, using OpenSearchBM25Retriever "
+                    f"(host={settings.opensearch_host}, index={settings.opensearch_index})"
+                )
+                self.bm25_indexer = create_opensearch_retriever(
+                    host=settings.opensearch_host,
+                    port=settings.opensearch_port,
+                    index_name=settings.opensearch_index,
+                    k1=settings.opensearch_bm25_k1,
+                    b=settings.opensearch_bm25_b,
+                    timeout=settings.opensearch_timeout,
+                )
+
+                # Health check
+                if not self.bm25_indexer.health_check():
+                    logger.error("OpenSearch health check failed")
+                    raise ConnectionError(
+                        f"OpenSearch at {settings.opensearch_host}:{settings.opensearch_port} "
+                        f"is not healthy or index '{settings.opensearch_index}' doesn't exist"
+                    )
+
+                stats = self.bm25_indexer.get_statistics()
+                logger.info(
+                    f"Connected to OpenSearch: {stats['num_documents']} documents, "
+                    f"index={stats['index_name']}"
+                )
+            else:
+                # Use offline BM25 indexer (legacy)
+                logger.info(f"Using offline BM25 indexer from {index_dir}")
+                self.bm25_indexer = BM25Indexer()
+                self.bm25_indexer.load_index(index_dir)
+                logger.info(
+                    f"Loaded BM25 index from {index_dir} with {len(self.bm25_indexer.documents)} documents"
+                )
         except Exception as e:
             logger.error(f"Failed to load BM25 index: {e}")
             raise
@@ -296,6 +335,18 @@ class HybridRetriever:
         )
 
         logger.info(f"RRF fusion produced {len(fused_results)} results")
+
+        # Apply BGE reranking if enabled (Phase 3)
+        if self._should_apply_bge_rerank():
+            try:
+                fused_results = self._apply_bge_reranking(
+                    query=transformed_query.normalized,
+                    results=fused_results,
+                )
+                logger.info(f"BGE reranking complete: {len(fused_results)} results")
+            except Exception as e:
+                logger.error(f"BGE reranking failed: {e}, continuing without reranking")
+                # Graceful degradation: continue with original results
 
         # Page-level reranking with citations (Phase 1)
         if config.enable_page_reranking:
@@ -978,12 +1029,178 @@ class HybridRetriever:
 
         return True
 
+    def _should_apply_bge_rerank(self) -> bool:
+        """Check if BGE reranking should be applied"""
+        try:
+            from app.core.config import settings
+
+            return settings.enable_bge_rerank
+        except Exception:
+            return False
+
+    def _apply_bge_reranking(
+        self, query: str, results: List[RetrievalResult]
+    ) -> List[RetrievalResult]:
+        """
+        Apply BGE reranking to retrieval results
+
+        Args:
+            query: User query
+            results: List of retrieval results from RRF fusion
+
+        Returns:
+            Reranked results (top-k based on config)
+        """
+        from app.core.config import settings
+
+        # Get reranker service
+        reranker = get_reranker_service()
+
+        # Convert RetrievalResult to dict format expected by reranker
+        chunks = [
+            {
+                "doc_id": r.doc_id or r.chunk_id,
+                "text": r.text,
+                "page_num": str(r.page) if r.page is not None else "unknown",
+                "metadata": r.metadata or {},
+                "chunk_id": r.chunk_id,
+                "source": r.source,
+                "original_score": r.score,
+            }
+            for r in results
+        ]
+
+        # Apply reranking based on configured level
+        rerank_level = settings.bge_rerank_level
+        top_k = settings.bge_rerank_top_k
+        aggregation = settings.bge_rerank_aggregation
+
+        logger.info(
+            f"Applying BGE reranking: level={rerank_level}, top_k={top_k}, "
+            f"aggregation={aggregation}, candidates={len(chunks)}"
+        )
+
+        if rerank_level == "chunk":
+            # Chunk-level reranking (default)
+            reranked_chunks = reranker.rerank_chunks(query, chunks, top_k=top_k)
+
+            # Convert back to RetrievalResult
+            return [
+                RetrievalResult(
+                    chunk_id=chunk["chunk_id"],
+                    text=chunk["text"],
+                    score=float(score),  # BGE rerank score
+                    source="bge_reranked_" + chunk["source"],
+                    metadata={
+                        **chunk["metadata"],
+                        "bge_rerank_score": float(score),
+                        "original_rrf_score": chunk["original_score"],
+                    },
+                    doc_id=chunk["doc_id"],
+                    page=results[i].page if i < len(results) else None,
+                    bbox=results[i].bbox if i < len(results) else None,
+                    parent_id=results[i].parent_id if i < len(results) else None,
+                )
+                for i, (chunk, score) in enumerate(reranked_chunks)
+            ]
+
+        elif rerank_level == "doc":
+            # Document-level reranking
+            doc_results = reranker.rerank_documents(
+                query, chunks, top_k=top_k, aggregation=aggregation
+            )
+
+            # Convert back to RetrievalResult (flatten doc chunks)
+            reranked_results = []
+            for doc_id, doc_score, doc_chunks in doc_results:
+                for chunk in doc_chunks:
+                    # Find original result for metadata
+                    orig_result = next(
+                        (r for r in results if r.chunk_id == chunk["chunk_id"]), None
+                    )
+                    reranked_results.append(
+                        RetrievalResult(
+                            chunk_id=chunk["chunk_id"],
+                            text=chunk["text"],
+                            score=float(doc_score),  # Use doc-level aggregated score
+                            source="bge_reranked_doc_" + chunk["source"],
+                            metadata={
+                                **chunk["metadata"],
+                                "bge_doc_score": float(doc_score),
+                                "original_rrf_score": chunk["original_score"],
+                            },
+                            doc_id=doc_id,
+                            page=orig_result.page if orig_result else None,
+                            bbox=orig_result.bbox if orig_result else None,
+                            parent_id=orig_result.parent_id if orig_result else None,
+                        )
+                    )
+            return reranked_results[:top_k]  # Limit to top_k total chunks
+
+        elif rerank_level == "page":
+            # Page-level reranking
+            page_results = reranker.rerank_pages(
+                query, chunks, top_k=top_k, aggregation=aggregation
+            )
+
+            # Convert back to RetrievalResult (flatten page chunks)
+            reranked_results = []
+            for doc_id, page_num, page_score, page_chunks in page_results:
+                for chunk in page_chunks:
+                    # Find original result for metadata
+                    orig_result = next(
+                        (r for r in results if r.chunk_id == chunk["chunk_id"]), None
+                    )
+                    reranked_results.append(
+                        RetrievalResult(
+                            chunk_id=chunk["chunk_id"],
+                            text=chunk["text"],
+                            score=float(page_score),  # Use page-level aggregated score
+                            source="bge_reranked_page_" + chunk["source"],
+                            metadata={
+                                **chunk["metadata"],
+                                "bge_page_score": float(page_score),
+                                "original_rrf_score": chunk["original_score"],
+                            },
+                            doc_id=doc_id,
+                            page=int(page_num) if page_num.isdigit() else None,
+                            bbox=orig_result.bbox if orig_result else None,
+                            parent_id=orig_result.parent_id if orig_result else None,
+                        )
+                    )
+            return reranked_results[:top_k]  # Limit to top_k total chunks
+
+        else:
+            logger.warning(f"Unknown rerank level: {rerank_level}, skipping reranking")
+            return results
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the loaded indices"""
+        # Check if BM25 indexer is OpenSearch or offline
+        bm25_docs = 0
+        bm25_type = "none"
+        bm25_details = {}
+
+        if self.bm25_indexer:
+            # Check if it's OpenSearch retriever
+            if isinstance(self.bm25_indexer, OpenSearchBM25Retriever):
+                bm25_type = "opensearch"
+                opensearch_stats = self.bm25_indexer.get_statistics()
+                bm25_docs = opensearch_stats.get("num_documents", 0)
+                bm25_details = {
+                    "host": opensearch_stats.get("host"),
+                    "index_name": opensearch_stats.get("index_name"),
+                    "bm25_params": opensearch_stats.get("bm25_params", {}),
+                }
+            elif hasattr(self.bm25_indexer, "documents"):
+                # Offline BM25 indexer
+                bm25_type = "offline"
+                bm25_docs = len(self.bm25_indexer.documents)
+
         stats = {
-            "bm25_documents": len(self.bm25_indexer.documents)
-            if self.bm25_indexer
-            else 0,
+            "bm25_documents": bm25_docs,
+            "bm25_type": bm25_type,
+            "bm25_details": bm25_details,
             "faiss_documents": len(self.faiss_indexer.documents)
             if self.faiss_indexer
             else 0,

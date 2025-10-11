@@ -87,6 +87,9 @@ def convert_to_ieee_style(
     if not answer_text:
         return answer_text, []
 
+    import re
+    from pathlib import Path
+
     # Pattern to match [Doc X, p.Y] or [Doc X, pp. Y-Z] or [Doc X]
     # Also handles multiple citations in one bracket: [Doc 1, p.5; Doc 2, p.10]
     pattern = r"\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]"
@@ -97,8 +100,11 @@ def convert_to_ieee_style(
         for k, v in doc_number_map.items():
             doc_number_map_str[str(k)] = v
 
-    # Build a mapping from doc_number to citation info collected from citations list
+    # Build mappings collected from citations
+    # 1) From doc_number -> citation info (legacy behavior)
     doc_citation_map = {}  # {doc_number: {doc_id, file_name, pages: set(), pdf_path}}
+    # 2) From doc_id -> pages/pdf_path (new, to handle many doc_numbers -> one doc_id)
+    doc_id_pages_map: Dict[str, Dict[str, Any]] = {}
 
     # First, populate from citations list (best source for page numbers)
     for cit in citations:
@@ -106,7 +112,7 @@ def convert_to_ieee_style(
         page = cit.get("page")
         pdf_path = cit.get("pdf_path", "")
 
-        # Try to determine doc_number for this doc via doc_number_map
+        # Try to determine doc_number for this doc via doc_number_map (may be many)
         doc_number = None
         for num_key, doc_info in doc_number_map_str.items():
             if doc_info.get("doc_id") == doc_id:
@@ -126,6 +132,7 @@ def convert_to_ieee_style(
                 else (parts[1] if len(parts) > 1 else doc_id)
             )
 
+        # Store by doc_number (if any)
         if doc_number:
             if doc_number not in doc_citation_map:
                 doc_citation_map[doc_number] = {
@@ -146,6 +153,27 @@ def convert_to_ieee_style(
                 except Exception:
                     # Ignore non-integer pages
                     pass
+
+        # Always store by doc_id (new robust map)
+        if doc_id not in doc_id_pages_map:
+            doc_id_pages_map[doc_id] = {
+                "pages": set(),
+                "pdf_path": pdf_path,
+                "file_name": file_name,
+            }
+        if page:
+            try:
+                if isinstance(page, str) and "-" in page:
+                    start, end = page.split("-", 1)
+                    for p in range(int(start), int(end) + 1):
+                        doc_id_pages_map[doc_id]["pages"].add(int(p))
+                else:
+                    doc_id_pages_map[doc_id]["pages"].add(int(page))
+            except Exception:
+                pass
+        # Prefer non-empty pdf_path if missing previously
+        if pdf_path and not doc_id_pages_map[doc_id].get("pdf_path"):
+            doc_id_pages_map[doc_id]["pdf_path"] = pdf_path
 
     # Track unique citations in order of appearance
     citation_list: List[
@@ -194,13 +222,26 @@ def convert_to_ieee_style(
                     cit_info["pdf_path"],
                 )
                 ieee_refs.append(str(ieee_num))
-            # 2) Otherwise, fall back to doc_number_map to at least list the document
+            # 2) Otherwise, fall back to doc_number_map and try to merge with pages by doc_id
             elif doc_num in doc_number_map_str:
                 info = doc_number_map_str[doc_num]
                 doc_id = info.get("doc_id", f"doc_{doc_num}")
                 file_name = info.get("file_name", doc_id)
                 pdf_path = info.get("pdf_path", "")
-                ieee_num = ensure_citation_entry(doc_id, file_name, [], pdf_path)
+                # Merge pages from any citations with the same doc_id
+                pages_from_id = []
+                if doc_id in doc_id_pages_map:
+                    pages_from_id = list(doc_id_pages_map[doc_id]["pages"]) or []
+                    if not pdf_path:
+                        pdf_path = doc_id_pages_map[doc_id].get("pdf_path", "")
+                    # Prefer better file name if available
+                    if file_name == doc_id and doc_id_pages_map[doc_id].get(
+                        "file_name"
+                    ):
+                        file_name = doc_id_pages_map[doc_id]["file_name"]
+                ieee_num = ensure_citation_entry(
+                    doc_id, file_name, pages_from_id, pdf_path
+                )
                 ieee_refs.append(str(ieee_num))
             else:
                 # 3) Last-resort: keep the numeric label but no entry (should be rare)
@@ -1039,8 +1080,10 @@ def render(vision_mode=False):
                 citations = results.get("citations", [])
                 # Fetch doc_number_map from the correct location
                 # Prefer generation_details.metadata.doc_number_map, fallback to meta.doc_number_map
+                # CRITICAL FIX: Also check vision_generation paths for Vision-enabled answers
                 doc_number_map = {}
                 try:
+                    # Priority 1: generation_details.metadata.doc_number_map
                     gen_meta = (
                         results.get("generation_details", {})
                         .get("metadata", {})
@@ -1048,10 +1091,76 @@ def render(vision_mode=False):
                     )
                     if gen_meta:
                         doc_number_map = gen_meta
+                    # Priority 2: generation_details.metadata.vision_generation.doc_number_map
+                    elif (
+                        results.get("generation_details", {})
+                        .get("metadata", {})
+                        .get("vision_generation", {})
+                        .get("doc_number_map")
+                    ):
+                        doc_number_map = (
+                            results.get("generation_details", {})
+                            .get("metadata", {})
+                            .get("vision_generation", {})
+                            .get("doc_number_map")
+                        )
+                    # Priority 3: meta.doc_number_map
                     elif results.get("meta", {}).get("doc_number_map"):
                         doc_number_map = results.get("meta", {}).get("doc_number_map")
-                except Exception:
+                    # Priority 4: meta.vision_generation.doc_number_map
+                    elif (
+                        results.get("meta", {})
+                        .get("vision_generation", {})
+                        .get("doc_number_map")
+                    ):
+                        doc_number_map = (
+                            results.get("meta", {})
+                            .get("vision_generation", {})
+                            .get("doc_number_map")
+                        )
+
+                    # FALLBACK: If still empty, build from citations directly
+                    if not doc_number_map and citations:
+                        doc_number_map = {}
+                        for idx, cit in enumerate(citations, 1):
+                            doc_id = cit.get("doc_id", "")
+                            pdf_path = cit.get("pdf_path", "")
+                            if doc_id:
+                                # Extract file name from pdf_path or doc_id
+                                file_name = doc_id
+                                if pdf_path:
+                                    from pathlib import Path
+
+                                    file_name = Path(pdf_path).name
+                                elif doc_id.startswith("DOCID_"):
+                                    parts = doc_id.split("_")
+                                    file_name = (
+                                        "_".join(parts[1:-1])
+                                        if len(parts) > 2
+                                        else (parts[1] if len(parts) > 1 else doc_id)
+                                    )
+
+                                doc_number_map[str(idx)] = {
+                                    "doc_id": doc_id,
+                                    "pdf_path": pdf_path,
+                                    "file_name": file_name,
+                                }
+                except Exception as e:
+                    # Last resort: build from citations
                     doc_number_map = {}
+                    if citations:
+                        for idx, cit in enumerate(citations, 1):
+                            doc_id = cit.get("doc_id", "")
+                            pdf_path = cit.get("pdf_path", "")
+                            if doc_id:
+                                from pathlib import Path
+
+                                file_name = Path(pdf_path).name if pdf_path else doc_id
+                                doc_number_map[str(idx)] = {
+                                    "doc_id": doc_id,
+                                    "pdf_path": pdf_path,
+                                    "file_name": file_name,
+                                }
 
                 # Check if IEEE-style citations is enabled
                 use_ieee = st.session_state.get("use_ieee_citations", True)

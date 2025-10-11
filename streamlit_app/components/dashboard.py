@@ -27,12 +27,24 @@ def render():
         )
 
     with col2:
-        st.metric("BM25 Docs", st.session_state.get("bm25_docs", "0"), delta=None)
+        # Display appropriate metric based on retriever type
+        retriever_type = st.session_state.get("retriever_type", "faiss")
+        if retriever_type == "weaviate":
+            st.metric("Vector DB", "Weaviate", delta=None)
+        else:
+            st.metric("BM25 Docs", st.session_state.get("bm25_docs", "0"), delta=None)
 
     with col3:
-        st.metric(
-            "FAISS Vectors", st.session_state.get("faiss_vectors", "0"), delta=None
-        )
+        retriever_type = st.session_state.get("retriever_type", "faiss")
+        if retriever_type == "weaviate":
+            weaviate_status = st.session_state.get("weaviate_ready", False)
+            st.metric(
+                "Status", "✅ Ready" if weaviate_status else "⚠️ Not Ready", delta=None
+            )
+        else:
+            st.metric(
+                "Vector Index", st.session_state.get("faiss_vectors", "0"), delta=None
+            )
 
     with col4:
         avg_latency = st.session_state.get("avg_latency", 0)
@@ -113,14 +125,11 @@ def render():
         # System health
         st.subheader("System Health")
 
+        # Build health indicators based on retriever type
+        retriever_type = st.session_state.get("retriever_type", "faiss")
+
         health_indicators = {
             "API Connection": "🟢 Healthy",
-            "BM25 Index": "🟢 Loaded"
-            if st.session_state.get("bm25_ready", False)
-            else "🔴 Not Loaded",
-            "FAISS Index": "🟢 Loaded"
-            if st.session_state.get("faiss_ready", False)
-            else "🔴 Not Loaded",
             "LLM Provider": "🟢 Ready"
             if st.session_state.get("llm_ready", False)
             else "🟡 Unknown",
@@ -128,6 +137,25 @@ def render():
             if st.session_state.get("cache_active", False)
             else "🟡 Unknown",
         }
+
+        # Add retriever-specific indicators
+        if retriever_type == "weaviate":
+            health_indicators["Weaviate DB"] = (
+                "🟢 Connected"
+                if st.session_state.get("weaviate_ready", False)
+                else "🔴 Disconnected"
+            )
+        else:
+            health_indicators["BM25 Index"] = (
+                "🟢 Loaded"
+                if st.session_state.get("bm25_ready", False)
+                else "🔴 Not Loaded"
+            )
+            health_indicators["Vector Index"] = (
+                "🟢 Loaded"
+                if st.session_state.get("faiss_ready", False)
+                else "🔴 Not Loaded"
+            )
 
         for component, status in health_indicators.items():
             st.write(f"{component}: {status}")

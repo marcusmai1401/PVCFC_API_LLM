@@ -1,8 +1,8 @@
 # CRITICAL FIX: Implement File Hash Deduplication
 
-**Priority**: 🔴 **CRITICAL**  
-**File**: `tools/ingest.py`  
-**Time**: ~10 minutes  
+**Priority**: 🔴 **CRITICAL**
+**File**: `tools/ingest.py`
+**Time**: ~10 minutes
 **Impact**: Prevent processing exact duplicate files
 
 ---
@@ -51,10 +51,10 @@ def __init__(
     # Existing init code
     self.content_hash_map = {}
     self.duplicate_groups = {}
-    
+
     # ADD THIS LINE:
     self.file_hash_seen = set()  # Track file hashes to skip exact duplicates
-    
+
     # Locks
     self._dedup_lock = threading.Lock()
     self._quarantine_lock = threading.Lock()
@@ -94,7 +94,7 @@ def __init__(
                 self.stats["duplicates_skipped"] += 1
                 logger.info(f"Skipping exact duplicate (file_hash): {pdf_path.name}")
                 return {"status": "skipped", "reason": "exact_file_duplicate"}
-            
+
             # Mark this file_hash as seen
             self.file_hash_seen.add(file_hash)
         # ===== END FILE HASH DEDUPLICATION =====
@@ -256,7 +256,6 @@ Disk: 475MB artifacts ✅ (5% smaller)
 
 ---
 
-**Created**: 2025-10-07  
-**Status**: Ready to Apply  
+**Created**: 2025-10-07
+**Status**: Ready to Apply
 **Reviewed By**: AI Assistant
-

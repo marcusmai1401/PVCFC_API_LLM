@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-10-10T18:24:49.423157",
+  "weaviate_url": "http://localhost:8080",
+  "weaviate_version": "1.32.11",
+  "ready": true,
+  "live": true,
+  "schema_ok": true,
+  "chunk_collection_exists": true,
+  "properties_ok": true,
+  "vectorizer": "none",
+  "distance": "cosine",
+  "grpc_port_ok": true,
+  "smoke_insert_ok": true,
+  "total_objects_after_insert": 2,
+  "test_search_ok": true,
+  "latency_ms": {
+    "meta": 1.5,
+    "ready": 1.5,
+    "live": 2.12
+  },
+  "notes": [
+    "Infrastructure ready for FAISS \u2192 Weaviate migration"
+  ]
+}

@@ -115,6 +115,7 @@ def main():
                 "👁️ Phase 6: Vision Verification",
                 "🛠️ Phase 7: Debug Tools",
                 "📊 Metrics & Logs",
+                "🔍 Retriever Config",
                 "⚙️ Configuration",
                 "📁 Data Management",
                 "🐛 Debug Console",
@@ -217,6 +218,8 @@ def main():
         show_debug_tools()
     elif page == "📊 Metrics & Logs":
         show_metrics_logs()
+    elif page == "🔍 Retriever Config":
+        show_retriever_config()
     elif page == "⚙️ Configuration":
         show_configuration_page()
     elif page == "📁 Data Management":
@@ -505,6 +508,26 @@ def show_metrics_logs():
             st.error(f"Error loading Metrics & Logs: {str(e)}")
             st.info(
                 "Metrics & Logs component not available. Please check the components directory."
+            )
+
+
+def show_retriever_config():
+    """Show Retriever Configuration interface."""
+    try:
+        from streamlit_app.components.retriever_config import (
+            render as retriever_config_render,
+        )
+
+        retriever_config_render(st.session_state.api_base_url)
+    except ImportError:
+        try:
+            from components.retriever_config import render as retriever_config_render
+
+            retriever_config_render(st.session_state.api_base_url)
+        except Exception as e:
+            st.error(f"Error loading Retriever Configuration: {str(e)}")
+            st.info(
+                "Retriever Configuration component not available. Please check the components directory."
             )
 
 

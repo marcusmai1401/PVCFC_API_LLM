@@ -570,33 +570,76 @@ def render(vision_mode=False):
                 # Retrieval Tab
                 st.markdown("### 🔍 Retrieval Results")
 
-                meta = results.get("meta", {})
-                retrieval_info = meta.get("retrieval", {})
+                # Get retrieval details from response
+                retrieval_details = results.get("retrieval_details", {})
+                retriever_type = retrieval_details.get(
+                    "retriever_type", "faiss"
+                )  # Default to FAISS for backward compat
+                total_retrieved = retrieval_details.get("total_retrieved", 0)
 
-                col_r1, col_r2, col_r3 = st.columns(3)
-                with col_r1:
-                    st.markdown("**BM25 Results**")
-                    bm25_results = retrieval_info.get("bm25_results", [])
-                    st.write(f"Found {len(bm25_results)} documents")
-                    if bm25_results:
-                        for i, doc in enumerate(bm25_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                # Display mode indicator
+                mode_emoji = "🔹" if retriever_type == "weaviate" else "🔸"
+                st.info(
+                    f"{mode_emoji} Retrieval Mode: **{retriever_type.upper()}** | Total Retrieved: **{total_retrieved}**"
+                )
 
-                with col_r2:
-                    st.markdown("**FAISS Results**")
-                    faiss_results = retrieval_info.get("faiss_results", [])
-                    st.write(f"Found {len(faiss_results)} documents")
-                    if faiss_results:
-                        for i, doc in enumerate(faiss_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                if retriever_type == "weaviate":
+                    # Weaviate Mode (Phase 4)
+                    st.markdown("#### Weaviate Vector Search")
+                    weaviate_results = retrieval_details.get("weaviate", [])
 
-                with col_r3:
-                    st.markdown("**RRF Fused Results**")
-                    fused_results = retrieval_info.get("fused_results", [])
-                    st.write(f"Fused to {len(fused_results)} documents")
-                    if fused_results:
-                        for i, doc in enumerate(fused_results[:5], 1):
-                            st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+                    if weaviate_results:
+                        st.write(f"Found **{len(weaviate_results)}** documents")
+
+                        # Display top results
+                        with st.expander("View Top Results", expanded=True):
+                            for i, doc in enumerate(weaviate_results[:8], 1):
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    text_preview = doc.get("text", "")[:150]
+                                    st.markdown(f"**{i}.** {text_preview}...")
+                                    st.caption(
+                                        f"📄 Doc: `{doc.get('doc_id', 'N/A')[:50]}...` | Page: {doc.get('page', 'N/A')}"
+                                    )
+                                with col2:
+                                    score = doc.get("score", 0)
+                                    st.metric("Score", f"{score:.4f}")
+                                st.divider()
+                    else:
+                        st.warning("No results from Weaviate")
+
+                else:
+                    # FAISS Mode (Legacy)
+                    meta = results.get("meta", {})
+                    retrieval_info = meta.get("retrieval", {})
+
+                    col_r1, col_r2, col_r3 = st.columns(3)
+                    with col_r1:
+                        st.markdown("**BM25 Results**")
+                        bm25_results = retrieval_details.get(
+                            "bm25", []
+                        ) or retrieval_info.get("bm25_results", [])
+                        st.write(f"Found {len(bm25_results)} documents")
+                        if bm25_results:
+                            for i, doc in enumerate(bm25_results[:5], 1):
+                                st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+
+                    with col_r2:
+                        st.markdown("**FAISS Results**")
+                        faiss_results = retrieval_details.get(
+                            "faiss", []
+                        ) or retrieval_info.get("faiss_results", [])
+                        st.write(f"Found {len(faiss_results)} documents")
+                        if faiss_results:
+                            for i, doc in enumerate(faiss_results[:5], 1):
+                                st.caption(f"{i}. Score: {doc.get('score', 0):.3f}")
+
+                    with col_r3:
+                        st.markdown("**Total Retrieved**")
+                        st.write(f"Documents {total_retrieved}")
+                        from_cache = retrieval_details.get("from_cache", False)
+                        if from_cache:
+                            st.caption("✅ From cache")
 
             with tab3:
                 # Rerank Tab

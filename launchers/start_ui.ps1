@@ -40,4 +40,20 @@ Write-Host "Starting Streamlit UI..." -ForegroundColor Green
 Write-Host "  Using production app: streamlit_app/app.py" -ForegroundColor Cyan
 Write-Host "  (For debug UI, use: streamlit run streamlit_app/app_debug.py)" -ForegroundColor Gray
 Write-Host ""
-streamlit run "streamlit_app/app.py" --server.port 8502 --server.headless false
+
+# Choose Python interpreter: prefer .venv, fallback to venv
+$pythonCandidates = @(
+    ".\.venv\Scripts\python.exe",
+    ".\venv\Scripts\python.exe"
+)
+$pythonExe = $null
+foreach ($cand in $pythonCandidates) {
+    if (Test-Path $cand) { $pythonExe = $cand; break }
+}
+if (-not $pythonExe) {
+    Write-Host "Virtual environment not found at .\.venv or .\venv" -ForegroundColor Red
+    exit 1
+}
+Write-Host ("Using Python: {0}" -f $pythonExe) -ForegroundColor Gray
+
+& $pythonExe -m streamlit run "streamlit_app/app.py" --server.port 8502 --server.headless false

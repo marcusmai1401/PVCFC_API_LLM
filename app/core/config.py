@@ -110,11 +110,111 @@ class Settings(BaseSettings):
     )
 
     # ========================================
+    # Phase 3 - BGE Reranker Configuration
+    # ========================================
+    enable_bge_rerank: bool = Field(
+        default=False,
+        description="Enable BGE CrossEncoder reranking (Phase 3)",
+    )
+    bge_rerank_candidate_limit: int = Field(
+        default=50,
+        description="Number of candidates to retrieve before BGE reranking (over-retrieve for precision)",
+    )
+    bge_rerank_top_k: int = Field(
+        default=10,
+        description="Final number of results after BGE reranking",
+    )
+    bge_rerank_level: Literal["chunk", "doc", "page"] = Field(
+        default="chunk",
+        description="Reranking granularity: chunk (fastest), doc (aggregate by document), page (aggregate by page)",
+    )
+    bge_rerank_aggregation: Literal["max", "mean", "top3_mean"] = Field(
+        default="max",
+        description="Score aggregation method for doc/page level reranking (max=highest chunk, mean=average, top3_mean=avg of top 3)",
+    )
+
+    # ========================================
     # Index Directory Configuration
     # ========================================
     index_dir: str = Field(
         default="artifacts/index_production",
         description="Directory containing BM25 and FAISS indices",
+    )
+
+    # ========================================
+    # Phase 4 - Weaviate Configuration
+    # ========================================
+    weaviate_enabled: bool = Field(
+        default=False,
+        description="Enable Weaviate vector database for retrieval (Phase 4)",
+    )
+    weaviate_host: str = Field(
+        default="localhost",
+        description="Weaviate server host",
+    )
+    weaviate_port: int = Field(
+        default=8080,
+        description="Weaviate server port (default: 8080 for HTTP, 50051 for gRPC)",
+    )
+    weaviate_grpc_port: Optional[int] = Field(
+        default=50051,
+        description="Weaviate gRPC port (optional, for better performance)",
+    )
+    weaviate_use_grpc: bool = Field(
+        default=True,
+        description="Use gRPC for Weaviate communication (faster than HTTP)",
+    )
+    weaviate_collection: str = Field(
+        default="PVCFCDocuments",
+        description="Weaviate collection name for document chunks",
+    )
+    weaviate_timeout: int = Field(
+        default=30,
+        description="Weaviate query timeout in seconds",
+    )
+    weaviate_retrieval_limit: int = Field(
+        default=50,
+        description="Number of results to retrieve from Weaviate before reranking",
+    )
+
+    # ========================================
+    # Phase 5 - OpenSearch BM25 Configuration
+    # ========================================
+    opensearch_enabled: bool = Field(
+        default=False,
+        description="Enable OpenSearch for BM25 keyword search (replaces offline rank-bm25)",
+    )
+    opensearch_host: str = Field(
+        default="localhost",
+        description="OpenSearch server host",
+    )
+    opensearch_port: int = Field(
+        default=9200,
+        description="OpenSearch server port",
+    )
+    opensearch_index: str = Field(
+        default="rag_chunks",
+        description="OpenSearch index name for RAG chunks",
+    )
+    opensearch_timeout: int = Field(
+        default=30,
+        description="OpenSearch query timeout in seconds",
+    )
+    opensearch_bm25_k1: float = Field(
+        default=1.2,
+        description="BM25 k1 parameter (term frequency saturation)",
+    )
+    opensearch_bm25_b: float = Field(
+        default=0.75,
+        description="BM25 b parameter (length normalization)",
+    )
+
+    # ========================================
+    # Hybrid Retriever Mode Selection
+    # ========================================
+    use_hybrid_modern: bool = Field(
+        default=True,
+        description="Use modern hybrid (Weaviate+OpenSearch) vs legacy (FAISS+BM25 offline). Set to false for legacy fallback.",
     )
 
     model_config = SettingsConfigDict(

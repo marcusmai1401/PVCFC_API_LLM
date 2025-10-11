@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from app.api.endpoints import pdf_renderer
-from app.api.routers import ask, health, locate, report
+from app.api.routers import ask, config, health, locate, report
 from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
 from app.core.metrics import get_metrics, get_metrics_content_type
@@ -38,9 +38,16 @@ async def lifespan(app: FastAPI):
         # Load search indices
         result = await startup_indices(settings)
         if result["status"] == "loaded":
-            logger.info(
-                f"Indices loaded: BM25={result['bm25_ready']}, FAISS={result['faiss_ready']}"
-            )
+            # Log based on retriever type
+            retriever_type = result.get("retriever_type", "unknown")
+            if retriever_type == "weaviate":
+                logger.info(
+                    f"Indices loaded: Weaviate (ready={result.get('retriever_ready', False)})"
+                )
+            else:
+                logger.info(
+                    f"Indices loaded: BM25={result.get('bm25_ready', False)}, FAISS={result.get('faiss_ready', False)}"
+                )
             # Store retriever in app state
             manager = get_index_manager(settings)
             app.state.retriever = manager.get_retriever()
@@ -144,6 +151,9 @@ def create_app() -> FastAPI:
     app.include_router(ask.router, tags=["Query"])
     app.include_router(locate.router, tags=["Location"])
     app.include_router(report.router, tags=["Reports"])
+
+    # Phase 4 router - Configuration management
+    app.include_router(config.router, tags=["Configuration"])
 
     # PDF rendering endpoints
     app.include_router(pdf_renderer.router, tags=["PDF"])

@@ -4,11 +4,20 @@ Write-Host "Server will run on http://localhost:8000" -ForegroundColor Yellow
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host ""
 
-# Check if venv exists
-if (!(Test-Path ".\venv\Scripts\python.exe")) {
-    Write-Host "Virtual environment not found at .\venv" -ForegroundColor Red
+# Choose Python interpreter: prefer .venv, fallback to venv
+$pythonCandidates = @(
+    ".\.venv\Scripts\python.exe",
+    ".\venv\Scripts\python.exe"
+)
+$pythonExe = $null
+foreach ($cand in $pythonCandidates) {
+    if (Test-Path $cand) { $pythonExe = $cand; break }
+}
+if (-not $pythonExe) {
+    Write-Host "Virtual environment not found at .\.venv or .\venv" -ForegroundColor Red
     exit 1
 }
+Write-Host ("Using Python: {0}" -f $pythonExe) -ForegroundColor Gray
 
 # Load environment variables from .env
 if (Test-Path ".\.env") {
@@ -33,4 +42,5 @@ Write-Host ""
 
 # Start the server
 Write-Host "Starting server..." -ForegroundColor Green
-& ".\venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# Note: Removed --reload to prevent restarts when packages are installed
+& $pythonExe -m uvicorn app.main:app --host 127.0.0.1 --port 8000

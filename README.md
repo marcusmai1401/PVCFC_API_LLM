@@ -1,5 +1,5 @@
 
-# PVCFC RAG — README - UPDATE AT 00:52AM - 01/10/2025
+# PVCFC RAG — README - UPDATE AT 10:30AM - 11/10/2025
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
@@ -20,7 +20,7 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 * **Tra cứu thủ công mất thời gian**: khó tìm đúng *trang* và *đoạn* cần; dễ lẫn phiên bản.
 * **Nhu cầu quyết định nhanh & có chứng cứ**: kỹ sư/QA cần **câu trả lời có trích dẫn** để tin cậy và đối chiếu.
 
-**Giải pháp**: chuẩn hoá ingest → lập chỉ mục **lai** (BM25 + FAISS) → **hỏi-đáp có trích dẫn theo trang** (và, khi phù hợp, **multimodal** để nhìn được trang PDF), kèm **báo cáo** và **metadata** chiết xuất tự động.
+**Giải pháp**: chuẩn hoá ingest → lập chỉ mục **lai** (BM25 + Weaviate) → **hỏi-đáp có trích dẫn theo trang** (và, khi phù hợp, **multimodal** để nhìn được trang PDF), kèm **báo cáo** và **metadata** chiết xuất tự động.
 
 ---
 
@@ -29,7 +29,7 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 * **Quét đệ quy** toàn bộ **PDF** dưới root `D:\Data_Raw` (ổ rời), **không phụ thuộc cấu trúc thư mục**.
 * **OCR khi cần** (PDF scan), ngôn ngữ `vie+eng`.
 * **Dedup 100% nội dung**: trùng nội dung chỉ **01 bản đại diện** vào index; near-duplicate **giữ cả hai**.
-* **Truy vấn kết hợp**: BM25 (từ khóa) ∪ FAISS (ngữ nghĩa) + rerank.
+* **Truy vấn kết hợp**: BM25 (từ khóa) ∪ Weaviate (ngữ nghĩa) + BGE rerank.
 * **Câu trả lời có trích dẫn**: tối thiểu `doc_id + page` (1-based). Có `pdf_path` nếu map được.
 * **Báo cáo**: tạo **bản báo cáo tạm** từ ngôn từ AI, xuất định dạng cơ bản (Markdown/Docx) — sẽ tinh chỉnh mẫu sau.
 * **Metadata**: suy luận/điền **equipment_id**, **doc_type** (và trường mở rộng) dựa vào path + nội dung.
@@ -48,12 +48,12 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 3. **Index**:
 
    * **BM25**: chỉ mục từ khóa (nhẹ, dễ bảo trì).
-   * **FAISS**: ngữ nghĩa (embedding 768D), **cache SQLite**, batching.
+   * **Weaviate**: vector database (embedding 768D), production-grade với gRPC.
 
 **Online (Serve):**
 
 1. **Query transform** (HyDE/chuẩn hoá ngôn ngữ — tuỳ chọn).
-2. **Hybrid retrieval** (BM25 ∪ FAISS) → hợp nhất + **rerank**.
+2. **Hybrid retrieval** (BM25 ∪ Weaviate) → hợp nhất + **BGE rerank**.
 3. **Generation**:
 
    * **Text-only** (mặc định).
@@ -90,23 +90,70 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 ---
 
-## 6) Indexing (BM25 & FAISS)
+## 6) Indexing (BM25 & Weaviate)
 
-* **BM25**: engine nhẹ trong repo (đủ cho V1).
-* **FAISS**:
+* **BM25**: engine nhẹ trong repo (rank-bm25), parameters: k1=1.2, b=0.75, epsilon=0.25.
+  * 4,883 chunks indexed
+  * Simple tokenization (lowercase + regex)
+  * Fast keyword search
 
-  * **Embedding**: Tùy config ENV (ví dụ: `gemini-embedding-001` 768D, `intfloat/multilingual-e5-small` 384D, `text-embedding-3-large` 3072D).
-  * **Dimension tự động**: Service auto-detect từ model (không cần chỉ định `EMBED_OUTPUT_DIM` thủ công).
-  * **Cache**: SQLite theo `(model_id, output_dim, content_hash)` — giảm API calls, tăng tốc độ.
-  * **Song song + batching**: concurrency (≈ 8 threads), batch-size (≈ 256 texts/batch) điều chỉnh theo RAM.
-* **Khi mở rộng lớn**: FAISS **IVF-PQ** (nlist/nprobe) cho hàng triệu vectors — **phase sau**.
+* **Weaviate Vector Database** (Production-grade):
+  * **Embedding**: Tùy config ENV (ví dụ: `gemini-embedding-001` 768D, `intfloat/multilingual-e5-small` 384D).
+  * **Dimension tự động**: Service auto-detect từ model.
+  * **gRPC Support**: High-performance communication (port 50051).
+  * **Health Monitoring**: Built-in health checks and statistics.
+  * **Scalability**: Production-ready for millions of vectors.
+  * **Docker Deployment**: Easy setup with docker-compose.
+
+* **BGE Reranking**: BAAI/bge-reranker-base for semantic reranking
+  * Multi-level support: chunk, document, page
+  * Aggregation methods: max, mean, top3_mean
+  * Configurable via `ENABLE_BGE_RERANK=true`
+
+### 6.1) Hybrid Retrieval Modes (Modern vs Legacy)
+
+- `USE_HYBRID_MODERN=true`  → Modern Hybrid: Weaviate (semantic) + OpenSearch BM25 (keyword)
+  - Parallel search → RRF fusion → optional BGE rerank
+  - Health checks: nếu 1 backend lỗi → chạy ở chế độ degraded (backend còn lại)
+- `USE_HYBRID_MODERN=false` → Legacy Hybrid: FAISS (semantic) + Offline BM25 (keyword)
+
+Notes:
+- Weaviate-only mode không còn cần thiết: Modern Hybrid tự degrade nếu OpenSearch không khả dụng.
+- Legacy dùng cho fallback thủ công khi cần.
+
+### 6.2) OpenSearch (BM25 remote)
+
+- Index: `rag_chunks` (hiện có 4,883 documents)
+- BM25 params: `k1=1.2`, `b=0.75`
+- ENV:
+  - `OPENSEARCH_HOST`, `OPENSEARCH_PORT`, `OPENSEARCH_INDEX`
+  - `OPENSEARCH_BM25_K1`, `OPENSEARCH_BM25_B`, `OPENSEARCH_TIMEOUT`
+
+### 6.3) Known limitation (Weaviate filter)
+
+- Một số phiên bản Weaviate SDK không hỗ trợ truyền `where` vào `near_vector()` → lỗi: `... got an unexpected keyword argument 'where'`.
+- Hệ thống đã xử lý degrade: nếu Weaviate lỗi, vẫn dùng được OpenSearch BM25.
+- Cách khắc phục chính thức: nâng cấp `weaviate-client` hoặc điều chỉnh chiến lược áp filter.
 
 ---
 
 ## 7) Truy vấn, Rerank & Trích dẫn theo trang
 
-* **Retrieval k**: Configurable qua request parameter `max_context` (default=8, max=20). Hybrid search lấy nhiều candidates từ BM25 và FAISS, sau đó rerank và chọn top-k.
-* **Rerank**: Cross-encoder (`ms-marco-MiniLM-L-6-v2`) cho **EN**; với **VI** dùng fallback **score-based rerank** để tránh lỗi NaN.
+* **Retrieval k**: Configurable qua request parameter `max_context` (default=8, max=20). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
+
+* **BGE Reranking** (BAAI/bge-reranker-base):
+  * **Khi bật**: `ENABLE_BGE_RERANK=true` trong .env
+  * **Cấu hình**:
+    - `BGE_RERANK_CANDIDATE_LIMIT=50`: Số candidates trước khi rerank
+    - `BGE_RERANK_TOP_K=10`: Số kết quả cuối cùng
+    - `BGE_RERANK_LEVEL=chunk`: Rerank level (chunk/doc/page)
+    - `BGE_RERANK_AGGREGATION=max`: Phương pháp tổng hợp (max/mean/top3_mean)
+  * **Fallback**: Nếu rerank thất bại, sử dụng score-based ranking
+
+* **Legacy Reranking** (khi BGE tắt):
+  * Cross-encoder (`ms-marco-MiniLM-L-6-v2`) cho **EN**
+  * Score-based rerank cho **VI** (tránh NaN)
+
 * **Citations**: trả về tối thiểu `doc_id + page (1-based)`. Có `pdf_path` nếu map được từ `doc_id_map.json`.
 * **Tìm đúng trang**: metadata giữ `page / page_start / page_end` từ ingest → pipeline trả ra trang **được tham chiếu** (không cần bbox ở V1).
 
@@ -165,12 +212,40 @@ LLM_PROVIDER=gemini  # openai|gemini|none
 LLM_MODEL_HEAVY=gemini-2.5-pro
 LLM_MODEL_LIGHT=gemini-2.5-flash
 
-# Embedding (FAISS)
+# Embedding
 EMBEDDING_PROVIDER=gemini  # gemini|openai|local|none
 EMBEDDING_MODEL=gemini-embedding-001  # dimension auto-detect từ model
+EMBED_TASK=retrieval_document  # task type (NO inline comments!)
 # Batching & concurrency (optional, có default hợp lý)
 EMBED_BATCH_SIZE=256  # số texts per internal batch
 EMBED_CONCURRENCY=8   # số concurrent requests
+
+# Retrieval Modes
+USE_HYBRID_MODERN=true  # true: Weaviate+OpenSearch (modern), false: FAISS+BM25 offline (legacy)
+
+# OpenSearch (BM25 remote)
+OPENSEARCH_HOST=localhost
+OPENSEARCH_PORT=9200
+OPENSEARCH_INDEX=rag_chunks
+OPENSEARCH_BM25_K1=1.2
+OPENSEARCH_BM25_B=0.75
+OPENSEARCH_TIMEOUT=10
+
+# Weaviate Vector Database (Phase 4)
+WEAVIATE_ENABLED=true  # Configure Weaviate service (mode selection uses USE_HYBRID_MODERN)
+WEAVIATE_HOST=localhost
+WEAVIATE_PORT=8080  # HTTP port
+WEAVIATE_GRPC_PORT=50051  # gRPC port (faster)
+WEAVIATE_USE_GRPC=true
+WEAVIATE_COLLECTION=PVCFCDocuments
+WEAVIATE_RETRIEVAL_LIMIT=50
+
+# BGE Reranking (Phase 3)
+ENABLE_BGE_RERANK=false  # Enable BGE CrossEncoder reranking
+BGE_RERANK_CANDIDATE_LIMIT=50
+BGE_RERANK_TOP_K=10
+BGE_RERANK_LEVEL=chunk  # chunk|doc|page
+BGE_RERANK_AGGREGATION=max  # max|mean|top3_mean
 
 # Vision (multimodal generation)
 VISION_MODEL=models/gemini-2.5-pro
@@ -201,29 +276,50 @@ python tools\ingest.py `
   --chunk-size 1000 --chunk-overlap 200
 ```
 
-**Build BM25**
+**Build Production Indices**
 
 ```powershell
-python tools\build_bm25_index.py `
-  --chunks-jsonl "artifacts\\ingestion\\chunks\\chunks.jsonl" `
-  --index-dir "artifacts\\index\\bm25"
+# Build both BM25 and FAISS/Weaviate indices
+python tools\\ops\\build_production_indices.py
 ```
 
-**Build FAISS (cache + batching + concurrency)**
+This will:
+- Build BM25 index from chunks (4,883 documents)
+- Build FAISS vector index (if WEAVIATE_ENABLED=false)
+- Output to `artifacts/index_production/`
+
+**OR: Setup Weaviate (Recommended for Production)**
 
 ```powershell
-python tools\build_faiss_local.py `
-  --bm25-dir "artifacts\\index\\bm25" `
-  --faiss-dir "artifacts\\index\\faiss"
+# 1. Start Weaviate with Docker
+docker-compose -f docker-compose-weaviate.yml up -d
+
+# 2. Ingest data to Weaviate
+python scripts\\phase1_index_to_weaviate.py
+
+# 3. Verify data
+python scripts\\weaviate\\test_weaviate_search.py "CO2 compressor"
 ```
 
-> **Lưu ý:** `--bm25-dir` trỏ đến **BM25 index outputs** (chứa `texts.json`/`documents.json` + `metadata.json`), KHÔNG phải `artifacts\ingestion\bm25`.
+> **Lưu ý:** Weaviate là production-ready với gRPC support. FAISS vẫn hoạt động cho local development.
 
 **Chạy API**
 
 ```powershell
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+### Kiểm thử tích hợp (Hybrid Modern)
+
+```powershell
+# Yêu cầu: USE_HYBRID_MODERN=true và OpenSearch + Weaviate đang chạy
+python tests\test_hybrid_modern.py
+```
+
+Kỳ vọng:
+- Health checks: healthy hoặc degraded (không critical)
+- Statistics: OpenSearch ~4,883 documents
+- Search: kết quả từ cả Weaviate và OpenSearch (sau RRF; BGE tuỳ bật/tắt)
 
 ---
 
@@ -316,6 +412,96 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 * Truy vấn trả về **câu trả lời có trích dẫn** (doc_id + page).
 * Khi có tài liệu phù hợp → **có thể** bật multimodal (Vision) để **nâng độ chính xác**; nếu không có, chạy text-only.
 * **SME AcceptableAnswer ≥ 80%** trên golden set nội bộ.
+
+---
+
+## 16) Cấu trúc thư mục dự án
+
+```
+Code - API_LLM_PVCFC/
+├── .env, .env.example          # Configuration files
+├── README.md                   # This file
+├── CHANGELOG.md                # Version history
+├── requirements.txt            # Python dependencies
+├── docker-compose*.yml         # Docker configurations
+├── Makefile                    # Build automation
+│
+├── app/                        # 🎯 Main application code
+│   ├── api/                    # FastAPI routers and endpoints
+│   ├── core/                   # Core configurations, logging, metrics
+│   ├── deps/                   # Dependency injection
+│   ├── ingestion/              # Document processing and ingestion
+│   ├── rag/                    # RAG pipeline (retrieval, generation, reranking)
+│   └── services/               # External services (LLM, embedding, vision)
+│
+├── streamlit_app/              # 🖥️ Streamlit UI
+│   ├── app.py                  # Main Streamlit application
+│   ├── components/             # UI components
+│   └── pages/                  # Multi-page app pages
+│
+├── docs/                       # 📚 Documentation (NEW!)
+│   ├── README.md               # Documentation index
+│   ├── guides/                 # User guides and tutorials
+│   │   ├── WEAVIATE_SETUP_GUIDE.md
+│   │   ├── MANUAL_TESTING_CHECKLIST.md
+│   │   └── question_example.md
+│   ├── analysis/               # Technical analysis reports
+│   │   ├── ROOT_CAUSE_ANALYSIS_REPORT.md
+│   │   └── CODE_REVIEW_IEEE_CITATIONS.md
+│   ├── completion/             # Phase completion reports
+│   │   ├── PHASE1_COMPLETE.md
+│   │   ├── PHASE2_COMPLETE.md
+│   │   ├── PHASE3_COMPLETE.md
+│   │   └── PHASE4_COMPLETION_SUMMARY.md
+│   └── implementation/         # Implementation summaries
+│
+├── scripts/                    # 🔧 Utility scripts (NEW!)
+│   ├── README.md               # Scripts index
+│   ├── diagnostics/            # Diagnostic and debugging scripts
+│   │   ├── check_pdf_pages.py
+│   │   ├── deep_diagnostic.py
+│   │   └── diagnose_pages.py
+│   ├── utilities/              # General utility scripts
+│   │   ├── build_indices_safe.py
+│   │   ├── fix_doc_id_map.py
+│   │   └── validate_reingestion.py
+│   ├── weaviate/               # Weaviate-specific scripts
+│   │   ├── setup_weaviate_embedded.py
+│   │   └── test_weaviate_search.py
+│   ├── phase1_index_to_weaviate.py  # Phase 1 ingestion
+│   └── [other scripts]/        # Test scripts, examples, etc.
+│
+├── tools/                      # 🛠️ Build and maintenance tools
+│   ├── ops/                    # Operations (production index building)
+│   ├── analysis/               # Data analysis tools
+│   └── benchmarks/             # Performance benchmarking
+│
+├── tests/                      # 🧪 Unit and integration tests
+│
+├── artifacts/                  # 📦 Generated artifacts
+│   ├── ingestion_production/   # Ingested chunks and metadata
+│   ├── index_production/       # BM25 and FAISS indices
+│   │   ├── bm25/               # BM25 index files
+│   │   └── faiss/              # FAISS vector index
+│   └── logs/                   # Application logs
+│
+├── data/                       # 📁 Data (gitignored)
+│   └── raw/                    # Raw PDF corpus
+│
+└── config/                     # ⚙️ Additional configurations
+```
+
+**Key directories:**
+- **`docs/`** - All documentation organized by category (guides, analysis, completion)
+- **`scripts/`** - All utility scripts organized by purpose (diagnostics, utilities, weaviate)
+- **`app/`** - Main application code (FastAPI + RAG pipeline)
+- **`tools/`** - Build tools and benchmarks
+- **`artifacts/`** - Generated data (indices, ingestion outputs)
+
+**Quick links:**
+- 📖 Documentation: [`docs/README.md`](docs/README.md)
+- 🔧 Scripts: [`scripts/README.md`](scripts/README.md)
+- 🚀 Getting Started: [`docs/guides/WEAVIATE_QUICKSTART.md`](docs/guides/WEAVIATE_QUICKSTART.md)
 
 ---
 
