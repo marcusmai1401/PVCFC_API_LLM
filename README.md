@@ -1,5 +1,5 @@
 
-# PVCFC RAG — README - UPDATE AT 10:30AM - 11/10/2025
+# PVCFC RAG — README - UPDATE AT 5:30AM - 13/10/2025
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
@@ -209,21 +209,33 @@ LOG_LEVEL=INFO  # DEBUG|INFO|WARNING|ERROR
 
 # Providers & LLM
 LLM_PROVIDER=gemini  # openai|gemini|none
+LLM_TIER=light
+LLM_LIGHT_PROVIDER=gemini
 LLM_MODEL_HEAVY=gemini-2.5-pro
 LLM_MODEL_LIGHT=gemini-2.5-flash
 
 # Embedding
 EMBEDDING_PROVIDER=gemini  # gemini|openai|local|none
+EMBEDDING_LLM=gemini
 EMBEDDING_MODEL=gemini-embedding-001  # dimension auto-detect từ model
+EMBED_OUTPUT_DIM=768
 EMBED_TASK=retrieval_document  # task type (NO inline comments!)
 # Batching & concurrency (optional, có default hợp lý)
 EMBED_BATCH_SIZE=256  # số texts per internal batch
 EMBED_CONCURRENCY=8   # số concurrent requests
+EMBED_MAX_TOKENS_PER_REQ=20000
+EMBED_TPM_CAP=1000000
+EMBED_RPM_CAP=3000
 
 # Retrieval Modes
 USE_HYBRID_MODERN=true  # true: Weaviate+OpenSearch (modern), false: FAISS+BM25 offline (legacy)
+RETRIEVAL_ALLOW_BM25_ONLY_FALLBACK=true
+BM25_K_WHEN_DEGRADE=80
+RERANK_TOP_N_WHEN_DEGRADE=50
+RETRIEVE_CACHE_TTL_MIN=10
 
 # OpenSearch (BM25 remote)
+OPENSEARCH_ENABLED=true
 OPENSEARCH_HOST=localhost
 OPENSEARCH_PORT=9200
 OPENSEARCH_INDEX=rag_chunks
@@ -237,7 +249,7 @@ WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8080  # HTTP port
 WEAVIATE_GRPC_PORT=50051  # gRPC port (faster)
 WEAVIATE_USE_GRPC=true
-WEAVIATE_COLLECTION=PVCFCDocuments
+WEAVIATE_COLLECTION=Chunk
 WEAVIATE_RETRIEVAL_LIMIT=50
 
 # BGE Reranking (Phase 3)
@@ -247,11 +259,9 @@ BGE_RERANK_TOP_K=10
 BGE_RERANK_LEVEL=chunk  # chunk|doc|page
 BGE_RERANK_AGGREGATION=max  # max|mean|top3_mean
 
-# Vision (multimodal generation)
-VISION_MODEL=models/gemini-2.5-pro
-VISION_MAX_PAGES_TOTAL=10
-PDF_RENDER_DPI=200
-PDF_IMAGE_FORMAT=jpeg
+# Vision gating (Phase 2)
+VISION_PAGE_SELECTOR_ENABLED=true
+TEXT_RANGE_SCAN_ENABLED=false
 
 # API keys
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -439,21 +449,20 @@ Code - API_LLM_PVCFC/
 │   ├── components/             # UI components
 │   └── pages/                  # Multi-page app pages
 │
-├── docs/                       # 📚 Documentation (NEW!)
-│   ├── README.md               # Documentation index
-│   ├── guides/                 # User guides and tutorials
-│   │   ├── WEAVIATE_SETUP_GUIDE.md
-│   │   ├── MANUAL_TESTING_CHECKLIST.md
-│   │   └── question_example.md
-│   ├── analysis/               # Technical analysis reports
-│   │   ├── ROOT_CAUSE_ANALYSIS_REPORT.md
-│   │   └── CODE_REVIEW_IEEE_CITATIONS.md
-│   ├── completion/             # Phase completion reports
-│   │   ├── PHASE1_COMPLETE.md
-│   │   ├── PHASE2_COMPLETE.md
-│   │   ├── PHASE3_COMPLETE.md
-│   │   └── PHASE4_COMPLETION_SUMMARY.md
-│   └── implementation/         # Implementation summaries
+├── DOCUMENTS_CHATBOX/
+│   ├── docs/                   # 📚 Documentation
+│   │   ├── README.md           # Documentation index
+│   │   ├── guides/             # User guides and tutorials
+│   │   │   ├── WEAVIATE_SETUP_GUIDE.md
+│   │   │   ├── WEAVIATE_QUICKSTART.md
+│   │   │   ├── MANUAL_TESTING_CHECKLIST.md
+│   │   │   └── question_example.md
+│   │   ├── analysis/
+│   │   ├── completion/
+│   │   ├── implementation/
+│   │   └── PROJECT_MASTERY_GUIDE.md
+│   ├── CHANGLOG_README/
+│   └── reports/
 │
 ├── scripts/                    # 🔧 Utility scripts (NEW!)
 │   ├── README.md               # Scripts index
@@ -492,16 +501,18 @@ Code - API_LLM_PVCFC/
 ```
 
 **Key directories:**
-- **`docs/`** - All documentation organized by category (guides, analysis, completion)
+- **`DOCUMENTS_CHATBOX/docs/`** - All documentation organized by category (guides, analysis, completion)
 - **`scripts/`** - All utility scripts organized by purpose (diagnostics, utilities, weaviate)
 - **`app/`** - Main application code (FastAPI + RAG pipeline)
 - **`tools/`** - Build tools and benchmarks
 - **`artifacts/`** - Generated data (indices, ingestion outputs)
 
 **Quick links:**
-- 📖 Documentation: [`docs/README.md`](docs/README.md)
+- 📖 Documentation: [`DOCUMENTS_CHATBOX/docs/README.md`](DOCUMENTS_CHATBOX/docs/README.md)
+- 🎓 Learning Guide: [`DOCUMENTS_CHATBOX/docs/PROJECT_MASTERY_GUIDE.md`](DOCUMENTS_CHATBOX/docs/PROJECT_MASTERY_GUIDE.md)
+- 🗺️ Documentation Index: [`DOCUMENTS_CHATBOX/docs/DOCUMENTATION_INDEX.md`](DOCUMENTS_CHATBOX/docs/DOCUMENTATION_INDEX.md)
 - 🔧 Scripts: [`scripts/README.md`](scripts/README.md)
-- 🚀 Getting Started: [`docs/guides/WEAVIATE_QUICKSTART.md`](docs/guides/WEAVIATE_QUICKSTART.md)
+- 🚀 Getting Started: [`DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_QUICKSTART.md`](DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_QUICKSTART.md)
 
 ---
 
