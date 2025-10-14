@@ -1,253 +1,228 @@
-# 🚀 RAG Pipeline Demo & Annotation Tool
+# PVCFC RAG Streamlit UI
 
-An interactive Streamlit application for testing RAG queries, creating evaluation datasets, and analyzing pipeline performance.
+Material Design 3 (Expressive) themed interface for the PVCFC RAG system.
 
-## 🌟 Features
+## Quick Start
 
-### 🔍 **RAG Demo**
-- Interactive query testing with real-time responses
-- Detailed pipeline visualization showing retrieval and generation steps
-- Performance metrics and timing breakdowns
-- Citation analysis and quality scoring
-- Configurable model parameters and settings
+### Running the UI
 
-### ✏️ **Data Annotation**
-- Create and edit QA pairs for evaluation datasets
-- Quality validation and scoring system
-- Bulk import/export in multiple formats (JSON, JSONL, CSV, Excel)
-- Advanced filtering and search capabilities
-- Data quality assessment and cleanup tools
+```powershell
+# From project root
+.\launchers\start_ui.ps1
+```
 
-### 📊 **Evaluation Results**
-- Interactive dashboards with performance metrics
-- Detailed analysis with filtering and comparison tools
-- Results browser for individual query inspection
-- Trend analysis and performance tracking
-- Export capabilities for further analysis
-
-### ⚙️ **Configuration**
-- Model settings (GPT-4, Claude, Gemini, etc.)
-- Retrieval configuration (vector DB, embeddings, HyDE, reranking)
-- Evaluation criteria and thresholds
-- Preset configurations for different use cases
-- Import/export configuration files
-
-### 📁 **Data Management**
-- Dataset validation and cleaning utilities
-- Document collection management
-- Batch operations for large-scale processing
-- Backup and restore functionality
-- Integration with popular benchmark datasets
-
-## 🚀 Quick Start
+The UI will be available at `http://localhost:8502`
 
 ### Prerequisites
-- Python 3.8 or higher
-- Required packages listed in `requirements.txt`
+- Python 3.9+
+- Virtual environment with dependencies installed
+- Backend API running at `http://localhost:8000` (or configured URL)
 
-### Installation
+## Features
 
-1. **Clone or download the project**
-   ```bash
-   git clone <repository-url>
-   cd streamlit_app
-   ```
+- **🏠 Home**: System status dashboard with health checks and index statistics
+- **🔬 RAG QA**: Interactive query interface with:
+  - Material Design 3 styled components
+  - Real-time query execution
+  - **Citation side sheet** with PDF page viewer
+  - **Material Symbols** icons (35+ icons)
+  - Performance metrics visualization
+  - Light/Dark/System theme support
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Architecture
 
-3. **Run the application**
-   ```bash
-   streamlit run app.py
-   ```
-
-4. **Open your browser**
-   Navigate to `http://localhost:8501` to access the demo.
-
-## 📖 Usage Guide
-
-### 🏠 Home Page
-- Overview of all features and capabilities
-- Quick statistics and system status
-- Navigation to different modules
-
-### 🔍 Using the RAG Demo
-1. Navigate to the "RAG Demo" tab
-2. Configure model settings in the sidebar
-3. Enter your query in the text area
-4. Click "Generate Answer" to see results
-5. Explore the detailed tabs for process breakdown
-
-### ✏️ Creating Annotations
-1. Go to the "Data Annotation" tab
-2. Fill in the QA pair creation form
-3. Use validation tools to ensure quality
-4. Export your dataset when ready
-
-### 📊 Viewing Evaluation Results
-1. Upload evaluation results in the "Evaluation Results" tab
-2. Use the dashboard for quick insights
-3. Explore detailed analysis with filters
-4. Compare different evaluation runs
-
-### ⚙️ Configuration Management
-1. Visit the "Configuration" tab
-2. Adjust model and retrieval settings
-3. Save configurations for later use
-4. Use presets for common scenarios
-
-## 🏗️ Architecture
-
-### Directory Structure
+### File Structure
 ```
 streamlit_app/
-├── app.py                 # Main application entry point
-├── components/            # UI components
-│   ├── rag_demo.py       # RAG testing interface
-│   ├── annotation.py     # Data annotation tools
-│   ├── evaluation_results.py  # Results analysis
-│   ├── configuration.py  # Settings management
-│   └── data_management.py # Data utilities
-├── utils/                # Utility functions (future)
-├── data/                 # Sample data files
-├── requirements.txt      # Python dependencies
-└── README.md            # This file
+├── app.py                      # Main application entry point
+├── components/
+│   ├── query_lab_improved.py   # RAG QA interface (M3 styled)
+│   ├── system_status.py        # System health component
+│   └── side_sheet.py           # Citation side sheet modal (NEW)
+├── styles/
+│   ├── tokens.json             # M3 design tokens (colors, typography, etc.)
+│   ├── tokens.css              # CSS variables from tokens
+│   ├── m3.css                  # M3 component styles
+│   └── material-symbols.css    # Material Symbols icons (NEW)
+├── utils/
+│   └── theme.py                # Theme management utilities
+├── tests/
+│   └── test_ui_smoke.py        # Automated smoke tests
+├── M3_THEMING_GUIDE.md         # Comprehensive theming documentation
+├── M3_FINAL_FEATURES.md        # Final feature summary (NEW)
+└── README.md                   # This file
 ```
 
-### Key Components
+### Theme System
 
-- **Main App**: Navigation and layout management
-- **RAG Demo**: Interactive testing with mock pipeline simulation
-- **Annotation**: QA pair creation and dataset management
-- **Evaluation Results**: Performance analysis and visualization
-- **Configuration**: Settings management with presets
-- **Data Management**: Import/export and data utilities
+The UI uses Material Design 3 (Material You) with:
+- **Seed Color**: `#0E7B55` (PVCFC brand green)
+- **Light/Dark Themes**: Automatic tonal palette generation
+- **Typography Scale**: 15 semantic type roles
+- **Component Library**: Buttons, Cards, Chips, Text Fields, Side Sheets
+- **Icon System**: Material Symbols (35+ icons, multiple sizes/weights)
+- **Accessibility**: WCAG AA compliant (4.5:1 contrast for text)
 
-## 🎯 Use Cases
+See [M3_THEMING_GUIDE.md](./M3_THEMING_GUIDE.md) for detailed documentation.
 
-### For Developers
-- Test RAG queries interactively
-- Debug pipeline performance issues
-- Compare different configuration settings
-- Create evaluation datasets efficiently
+## Configuration
 
-### For Researchers
-- Analyze evaluation results comprehensively
-- Compare different RAG approaches
-- Create benchmark datasets
-- Export data for research publications
+### Environment Variables
+- `PVCFC_API_BASE_URL`: Backend API endpoint (default: `http://127.0.0.1:8000`)
+- `API_BASE_URL`: Alternative API endpoint variable
 
-### For Product Teams
-- Demonstrate RAG capabilities to stakeholders
-- Create training datasets for specific domains
-- Monitor pipeline performance over time
-- Configure systems for different use cases
+### Runtime Configuration
+- **API URL**: Configurable in sidebar
+- **Theme**: Light/Dark/System (persisted in session)
+- **Language**: Vietnamese/English toggle
 
-## 🔧 Customization
+## Development
 
 ### Adding New Components
-1. Create a new Python file in `components/`
-2. Implement the main interface function
-3. Import and integrate in `app.py`
-4. Add navigation entry in the sidebar
 
-### Extending Data Formats
-- Modify import/export functions in `data_management.py`
-- Add new format options to UI components
-- Update validation logic as needed
+1. **Use M3 Tokens**:
+```python
+st.markdown('''
+<div class="md-card md-card-elevated md-spacing-md">
+    <h2 class="md-typescale-title-large">Component Title</h2>
+    <p class="md-typescale-body-medium">Component content</p>
+</div>
+''', unsafe_allow_html=True)
+```
 
-### Custom Evaluation Metrics
-- Extend evaluation result analysis in `evaluation_results.py`
-- Add new metric calculations and visualizations
-- Update export formats to include new metrics
+2. **Follow Typography Scale**:
+- `headline-medium`: Page titles
+- `title-large`: Section headers
+- `body-large`: Primary content
+- `label-large`: Button/chip labels
 
-## 📋 Requirements
+3. **Use Semantic Colors**:
+- `--md-sys-color-primary`: Primary actions
+- `--md-sys-color-surface-container`: Card backgrounds
+- `--md-sys-color-on-surface`: Text on surfaces
 
-### Core Dependencies
-- `streamlit`: Web app framework
-- `pandas`: Data manipulation and analysis
-- `plotly`: Interactive visualizations
-- `numpy`: Numerical computing
-- `python-dateutil`: Date/time utilities
+### Testing
 
-### Optional Dependencies
-For full RAG pipeline integration:
-- OpenAI API client
-- Vector database libraries (ChromaDB, Pinecone, etc.)
-- Embedding model libraries
-- Document processing libraries
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Application won't start:**
-- Check Python version (3.8+)
-- Ensure all dependencies are installed
-- Verify port 8501 is available
-
-**Import errors:**
-- Make sure you're in the correct directory
-- Check that all required packages are installed
-- Try reinstalling dependencies
-
-**Performance issues:**
-- Large datasets may cause slowdowns
-- Consider using sampling for initial testing
-- Monitor system resources
-
-### Getting Help
-
-1. Check the console output for error messages
-2. Verify all dependencies are properly installed
-3. Ensure you have the latest version of Streamlit
-4. Check the GitHub issues page for known problems
-
-## 🚀 Deployment
-
-### Local Development
+Run the UI smoke test:
 ```bash
-streamlit run app.py
+python streamlit_app/tests/test_ui_smoke.py
 ```
 
-### Streamlit Cloud
-1. Push code to GitHub repository
-2. Connect to Streamlit Cloud
-3. Deploy directly from the repository
+Tests:
+- Theme initialization
+- API connectivity
+- Basic query execution
+- Component rendering
 
-### Docker Deployment
-Create a `Dockerfile`:
+### Debugging
+
+Enable verbose logging in sidebar settings or set:
+```python
+st.session_state.enable_verbose_logging = True
+```
+
+Logs are written to `logs/ui_events/` with structured JSON format.
+
+## Troubleshooting
+
+### Theme Not Loading
+- Ensure `styles/` directory exists with `tokens.css` and `m3.css`
+- Check browser console for CSS loading errors
+- Verify `initialize_m3_theme()` is called after `st.set_page_config()`
+
+### API Connection Issues
+- Verify backend is running: `http://localhost:8000/healthz`
+- Check API URL in sidebar configuration
+- Review launcher script output for connection test results
+
+### Dark Theme Issues
+- Confirm `data-theme="dark"` attribute on `<html>` element
+- Check if custom CSS is overriding M3 tokens
+- Try system theme detection: Settings → Theme → System
+
+## Performance
+
+### Optimization Tips
+- Use `@st.cache_data` for expensive computations
+- Minimize st.rerun() calls
+- Lazy-load heavy components (PDF viewer, charts)
+- Enable query result caching in backend
+
+### Metrics
+- Typical page load: < 1s
+- Query execution: 2-5s (depends on backend)
+- Theme switch: < 100ms
+
+## Accessibility
+
+- **Keyboard Navigation**: Full support (Tab, Enter, Escape)
+- **Focus Indicators**: 2px visible rings on all interactive elements
+- **Screen Readers**: Semantic HTML with ARIA labels
+- **Contrast**: WCAG AA compliant (4.5:1 for text, 3:1 for UI)
+- **Hit Targets**: Minimum 44×44px for buttons/chips
+
+## Browser Support
+
+- **Chrome/Edge**: 90+ (recommended)
+- **Firefox**: 88+
+- **Safari**: 14+
+
+Requires modern CSS support (CSS variables, oklch colors, :focus-visible).
+
+## Deployment
+
+### Production Checklist
+- [ ] Set `PVCFC_API_BASE_URL` to production API
+- [ ] Disable debug features (verbose logging, dev tools)
+- [ ] Test theme switching in both modes
+- [ ] Validate API connectivity
+- [ ] Run smoke tests
+- [ ] Check browser console for errors
+
+### Docker
 ```dockerfile
-FROM python:3.9-slim
+# In Dockerfile
+COPY streamlit_app /app/streamlit_app
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8501
-CMD ["streamlit", "run", "app.py"]
+CMD ["streamlit", "run", "streamlit_app/app.py", "--server.port=8502"]
 ```
 
-## 📄 License
+## Contributing
 
-This project is part of the RAG Pipeline evaluation framework. Please refer to the main project license for terms of use.
+### Code Style
+- Follow M3 design system guidelines
+- Use semantic color roles (not hex values)
+- Apply typography scale consistently
+- Include focus-visible states
+- Test in both light and dark themes
 
-## 🤝 Contributing
+### Pull Request Checklist
+- [ ] M3 tokens used (no hardcoded colors)
+- [ ] Typography roles applied
+- [ ] Accessibility validated (contrast, focus, keyboard)
+- [ ] Tested in light and dark themes
+- [ ] Documentation updated
+- [ ] Smoke tests pass
 
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+## Resources
 
-## 📞 Support
+- [Material Design 3](https://m3.material.io/)
+- [Material Symbols](https://fonts.google.com/icons)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [M3 Theming Guide](./M3_THEMING_GUIDE.md)
+- [M3 Final Features](./M3_FINAL_FEATURES.md)
+- [PVCFC RAG API Docs](../README.md)
 
-For issues, questions, or feature requests:
-- Open an issue on GitHub
-- Check existing documentation
-- Review troubleshooting section above
+## Support
+
+For issues or questions:
+1. Check [M3_THEMING_GUIDE.md](./M3_THEMING_GUIDE.md)
+2. Review browser console for errors
+3. Check `logs/ui_events/` for detailed logs
+4. Consult backend API logs if query issues persist
 
 ---
 
-**Happy RAG Testing!** 🎉
+**Version**: 0.7.0
+**License**: Internal Use
+**Maintained By**: PVCFC RAG Team

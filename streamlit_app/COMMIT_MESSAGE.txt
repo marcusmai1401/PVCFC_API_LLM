@@ -1,0 +1,34 @@
+feat(ui): Simplify Query Lab UI - Always enable Vision & Re-ranking
+
+## Changes:
+- Remove "Enable Vision Generation" checkbox from main UI
+- Remove "Enable Re-ranking" checkbox from Advanced Options
+- Hardcode both features to always enabled (True) for optimal accuracy
+- Change main layout from 3 columns to 2 columns (Language, Max Context)
+- Simplify UI to reduce cognitive load for end users
+
+## Rationale:
+- Vision Generation significantly improves accuracy with images/tables
+- Re-ranking improves result relevance and quality
+- Both features should always be enabled for production use
+- Simplifies UI by reducing user choices while maintaining best performance
+
+## Technical Details:
+- File: streamlit_app/components/query_lab_improved.py
+- Lines modified: 800-822, 837-838
+- Set: enable_vision = True (hardcoded)
+- Set: use_rerank = True (hardcoded)
+
+## Documentation:
+- Added UI_EXPLANATION_VI.md: Detailed Vietnamese explanation of concepts
+- Added THAY_DOI_UI_TOM_TAT.md: Quick summary in Vietnamese
+- Added INDENTATION_FIX.md: Documentation of indentation error fix
+
+## Testing:
+- ✅ Python syntax check passed
+- ✅ Module import successful
+- ✅ Vision and Re-ranking always enabled in background
+- ✅ UI simplified to 2 columns
+
+---
+Related: RAG system UI improvement, Query Lab simplification

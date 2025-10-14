@@ -1,0 +1,624 @@
+/**
+ * Material Design 3 - Component Styles & Utilities
+ * Expressive style with state layers, focus-visible, elevation
+ */
+
+/* ============================================
+   GLOBAL & BASE STYLES
+   ============================================ */
+
+/* Apply tokens globally */
+html, body, .stApp {
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-feature-settings: 'liga' 1, 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography roles */
+.md-typescale-display-large {
+  font-size: var(--md-sys-typescale-display-large-size);
+  line-height: var(--md-sys-typescale-display-large-line-height);
+  font-weight: var(--md-sys-typescale-display-large-weight);
+  letter-spacing: var(--md-sys-typescale-display-large-tracking);
+}
+
+.md-typescale-headline-medium {
+  font-size: var(--md-sys-typescale-headline-medium-size);
+  line-height: var(--md-sys-typescale-headline-medium-line-height);
+  font-weight: var(--md-sys-typescale-headline-medium-weight);
+  letter-spacing: var(--md-sys-typescale-headline-medium-tracking);
+}
+
+.md-typescale-title-large {
+  font-size: var(--md-sys-typescale-title-large-size);
+  line-height: var(--md-sys-typescale-title-large-line-height);
+  font-weight: var(--md-sys-typescale-title-large-weight);
+  letter-spacing: var(--md-sys-typescale-title-large-tracking);
+}
+
+.md-typescale-title-medium {
+  font-size: var(--md-sys-typescale-title-medium-size);
+  line-height: var(--md-sys-typescale-title-medium-line-height);
+  font-weight: var(--md-sys-typescale-title-medium-weight);
+  letter-spacing: var(--md-sys-typescale-title-medium-tracking);
+}
+
+.md-typescale-body-large {
+  font-size: var(--md-sys-typescale-body-large-size);
+  line-height: var(--md-sys-typescale-body-large-line-height);
+  font-weight: var(--md-sys-typescale-body-large-weight);
+  letter-spacing: var(--md-sys-typescale-body-large-tracking);
+}
+
+.md-typescale-body-medium {
+  font-size: var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  font-weight: var(--md-sys-typescale-body-medium-weight);
+  letter-spacing: var(--md-sys-typescale-body-medium-tracking);
+}
+
+.md-typescale-label-large {
+  font-size: var(--md-sys-typescale-label-large-size);
+  line-height: var(--md-sys-typescale-label-large-line-height);
+  font-weight: var(--md-sys-typescale-label-large-weight);
+  letter-spacing: var(--md-sys-typescale-label-large-tracking);
+}
+
+/* ============================================
+   BUTTONS (Filled, Tonal, Outlined, Text)
+   ============================================ */
+
+.md-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  font-size: var(--md-sys-typescale-label-large-size);
+  font-weight: var(--md-sys-typescale-label-large-weight);
+  letter-spacing: var(--md-sys-typescale-label-large-tracking);
+  cursor: pointer;
+  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+  min-width: 44px;
+  box-sizing: border-box;
+}
+
+.md-button:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+.md-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+/* Filled button */
+.md-button-filled {
+  background-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+.md-button-filled:hover:not(:disabled) {
+  box-shadow: var(--md-sys-elevation-level1);
+  background-color: color-mix(in oklch, var(--md-sys-color-primary), var(--md-sys-color-on-primary) calc(var(--md-sys-state-hover-opacity) * 100%));
+}
+
+.md-button-filled:active:not(:disabled) {
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+/* Tonal button */
+.md-button-tonal {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+.md-button-tonal:hover:not(:disabled) {
+  box-shadow: var(--md-sys-elevation-level1);
+  background-color: color-mix(in oklch, var(--md-sys-color-secondary-container), var(--md-sys-color-on-secondary-container) calc(var(--md-sys-state-hover-opacity) * 100%));
+}
+
+/* Outlined button */
+.md-button-outlined {
+  background-color: transparent;
+  color: var(--md-sys-color-primary);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button-outlined:hover:not(:disabled) {
+  background-color: color-mix(in oklch, transparent, var(--md-sys-color-primary) calc(var(--md-sys-state-hover-opacity) * 100%));
+}
+
+/* Text button */
+.md-button-text {
+  background-color: transparent;
+  color: var(--md-sys-color-primary);
+  padding: 0 12px;
+}
+
+.md-button-text:hover:not(:disabled) {
+  background-color: color-mix(in oklch, transparent, var(--md-sys-color-primary) calc(var(--md-sys-state-hover-opacity) * 100%));
+}
+
+/* ============================================
+   CHIPS (Filter, Assist, Suggestion)
+   ============================================ */
+
+.md-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--md-sys-shape-corner-small);
+  font-size: var(--md-sys-typescale-label-large-size);
+  font-weight: var(--md-sys-typescale-label-large-weight);
+  cursor: pointer;
+  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+  border: 1px solid var(--md-sys-color-outline);
+  background-color: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-chip:hover {
+  background-color: color-mix(in oklch, transparent, var(--md-sys-color-on-surface-variant) calc(var(--md-sys-state-hover-opacity) * 100%));
+}
+
+.md-chip:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+.md-chip-selected {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Assist chip (primary action) */
+.md-chip-assist {
+  border-color: var(--md-sys-color-outline);
+}
+
+/* Filter chip */
+.md-chip-filter {
+  border-color: var(--md-sys-color-outline);
+}
+
+.md-chip-filter.md-chip-selected {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+
+.md-card {
+  background-color: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  border-radius: var(--md-sys-shape-corner-medium);
+  padding: 16px;
+  box-shadow: var(--md-sys-elevation-level1);
+  transition: box-shadow var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+}
+
+.md-card-elevated {
+  box-shadow: var(--md-sys-elevation-level1);
+}
+
+.md-card-filled {
+  background-color: var(--md-sys-color-surface-container-high);
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+.md-card-outlined {
+  background-color: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  box-shadow: var(--md-sys-elevation-level0);
+}
+
+.md-card:hover {
+  box-shadow: var(--md-sys-elevation-level2);
+}
+
+/* ============================================
+   TEXT FIELDS
+   ============================================ */
+
+.md-text-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-text-field input,
+.md-text-field textarea {
+  background-color: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  border: none;
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small) var(--md-sys-shape-corner-extra-small) 0 0;
+  padding: 16px 16px 8px;
+  font-size: var(--md-sys-typescale-body-large-size);
+  line-height: var(--md-sys-typescale-body-large-line-height);
+  transition: border-color var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+}
+
+.md-text-field input:focus,
+.md-text-field textarea:focus {
+  outline: none;
+  border-bottom-color: var(--md-sys-color-primary);
+  border-bottom-width: 2px;
+}
+
+.md-text-field input:focus-visible,
+.md-text-field textarea:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   STREAMLIT COMPONENT OVERRIDES
+   ============================================ */
+
+/* Streamlit buttons */
+.stButton > button {
+  background-color: var(--md-sys-color-primary) !important;
+  color: var(--md-sys-color-on-primary) !important;
+  border: none !important;
+  border-radius: var(--md-sys-shape-corner-full) !important;
+  padding: 10px 24px !important;
+  font-size: var(--md-sys-typescale-label-large-size) !important;
+  font-weight: var(--md-sys-typescale-label-large-weight) !important;
+  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard) !important;
+  box-shadow: var(--md-sys-elevation-level0) !important;
+  min-height: 40px !important;
+}
+
+.stButton > button:hover {
+  box-shadow: var(--md-sys-elevation-level1) !important;
+  background-color: color-mix(in oklch, var(--md-sys-color-primary), var(--md-sys-color-on-primary) calc(var(--md-sys-state-hover-opacity) * 100%)) !important;
+}
+
+.stButton > button:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Streamlit text inputs */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+  background-color: var(--md-sys-color-surface-container-high) !important;
+  color: var(--md-sys-color-on-surface) !important;
+  border: 1px solid var(--md-sys-color-outline) !important;
+  border-radius: var(--md-sys-shape-corner-extra-small) !important;
+  font-size: var(--md-sys-typescale-body-large-size) !important;
+  line-height: var(--md-sys-typescale-body-large-line-height) !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+  border-color: var(--md-sys-color-primary) !important;
+  border-width: 2px !important;
+  outline: none !important;
+}
+
+.stTextInput > div > div > input:focus-visible,
+.stTextArea > div > div > textarea:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Streamlit selectbox */
+.stSelectbox > div > div {
+  background-color: var(--md-sys-color-surface-container-high) !important;
+  border: 1px solid var(--md-sys-color-outline) !important;
+  border-radius: var(--md-sys-shape-corner-extra-small) !important;
+  color: var(--md-sys-color-on-surface) !important;
+}
+
+/* Streamlit tabs */
+.stTabs [data-baseweb="tab-list"] {
+  background-color: var(--md-sys-color-surface-container) !important;
+  border-radius: var(--md-sys-shape-corner-medium) !important;
+  padding: 4px !important;
+  gap: 4px !important;
+}
+
+.stTabs [data-baseweb="tab"] {
+  background-color: transparent !important;
+  color: var(--md-sys-color-on-surface-variant) !important;
+  border-radius: var(--md-sys-shape-corner-small) !important;
+  padding: 8px 16px !important;
+  font-weight: var(--md-sys-typescale-label-large-weight) !important;
+  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard) !important;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+  background-color: color-mix(in oklch, transparent, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover-opacity) * 100%)) !important;
+}
+
+.stTabs [aria-selected="true"] {
+  background-color: var(--md-sys-color-secondary-container) !important;
+  color: var(--md-sys-color-on-secondary-container) !important;
+}
+
+/* Streamlit metrics */
+[data-testid="metric-container"] {
+  background-color: var(--md-sys-color-surface-container) !important;
+  border: 1px solid var(--md-sys-color-outline-variant) !important;
+  border-radius: var(--md-sys-shape-corner-medium) !important;
+  padding: 16px !important;
+  box-shadow: var(--md-sys-elevation-level1) !important;
+}
+
+/* Streamlit expander */
+.streamlit-expanderHeader {
+  background-color: var(--md-sys-color-surface-container) !important;
+  border: 1px solid var(--md-sys-color-outline-variant) !important;
+  border-radius: var(--md-sys-shape-corner-medium) !important;
+  color: var(--md-sys-color-on-surface) !important;
+  font-weight: var(--md-sys-typescale-title-medium-weight) !important;
+}
+
+/* Streamlit dataframe */
+.stDataFrame {
+  border-radius: var(--md-sys-shape-corner-medium) !important;
+  overflow: hidden !important;
+}
+
+/* ============================================
+   FOCUS-VISIBLE (A11Y)
+   ============================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+/* Remove focus outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================
+   STATE LAYERS (hover, pressed, focus)
+   ============================================ */
+
+.md-state-layer {
+  position: relative;
+  overflow: hidden;
+}
+
+.md-state-layer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: currentColor;
+  opacity: 0;
+  transition: opacity var(--md-sys-motion-duration-short1) var(--md-sys-motion-easing-standard);
+  pointer-events: none;
+}
+
+.md-state-layer:hover::before {
+  opacity: var(--md-sys-state-hover-opacity);
+}
+
+.md-state-layer:active::before {
+  opacity: var(--md-sys-state-pressed-opacity);
+}
+
+/* ============================================
+   UTILITIES
+   ============================================ */
+
+/* Spacing (8dp grid) */
+.md-spacing-xs { padding: 4px; }
+.md-spacing-sm { padding: 8px; }
+.md-spacing-md { padding: 16px; }
+.md-spacing-lg { padding: 24px; }
+.md-spacing-xl { padding: 32px; }
+
+.md-gap-xs { gap: 4px; }
+.md-gap-sm { gap: 8px; }
+.md-gap-md { gap: 16px; }
+.md-gap-lg { gap: 24px; }
+
+/* Elevation helpers */
+.md-elevation-0 { box-shadow: var(--md-sys-elevation-level0); }
+.md-elevation-1 { box-shadow: var(--md-sys-elevation-level1); }
+.md-elevation-2 { box-shadow: var(--md-sys-elevation-level2); }
+.md-elevation-3 { box-shadow: var(--md-sys-elevation-level3); }
+.md-elevation-4 { box-shadow: var(--md-sys-elevation-level4); }
+.md-elevation-5 { box-shadow: var(--md-sys-elevation-level5); }
+
+/* Surface containers */
+.md-surface { background-color: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); }
+.md-surface-variant { background-color: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant); }
+.md-surface-container { background-color: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); }
+.md-surface-container-high { background-color: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); }
+
+/* ============================================
+   LOADING & PROGRESS (Expressive motion)
+   ============================================ */
+
+.md-progress-circular {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--md-sys-color-surface-variant);
+  border-top-color: var(--md-sys-color-primary);
+  border-radius: 50%;
+  animation: md-spin var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized) infinite;
+}
+
+@keyframes md-spin {
+  to { transform: rotate(360deg); }
+}
+
+.md-progress-linear {
+  position: relative;
+  height: 4px;
+  background-color: var(--md-sys-color-surface-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  overflow: hidden;
+}
+
+.md-progress-linear::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 30%;
+  background-color: var(--md-sys-color-primary);
+  border-radius: var(--md-sys-shape-corner-full);
+  animation: md-progress-slide var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized) infinite;
+}
+
+@keyframes md-progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ============================================
+   SIDE SHEET (for citations)
+   ============================================ */
+
+.md-side-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(480px, 90vw);
+  height: 100vh;
+  background-color: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-level3);
+  transform: translateX(100%);
+  transition: transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+  z-index: 1000;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-side-sheet.md-side-sheet-open {
+  transform: translateX(0);
+}
+
+.md-side-sheet-header {
+  position: sticky;
+  top: 0;
+  background-color: var(--md-sys-color-surface-container-low);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1;
+}
+
+.md-side-sheet-header-title {
+  font-size: var(--md-sys-typescale-title-large-size);
+  font-weight: var(--md-sys-typescale-title-large-weight);
+  line-height: var(--md-sys-typescale-title-large-line-height);
+  color: var(--md-sys-color-on-surface);
+  margin: 0;
+  flex: 1;
+}
+
+.md-side-sheet-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.md-side-sheet-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
+  z-index: 999;
+}
+
+.md-side-sheet-scrim.md-side-sheet-scrim-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Side sheet animations */
+@keyframes md-side-sheet-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes md-side-sheet-slide-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Citation list in side sheet */
+.md-citation-item {
+  background-color: var(--md-sys-color-surface-container);
+  border-radius: var(--md-sys-shape-corner-medium);
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--md-sys-color-primary);
+  transition: background-color var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+}
+
+.md-citation-item:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+}
+
+.md-citation-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.md-citation-item-title {
+  font-size: var(--md-sys-typescale-title-small-size);
+  font-weight: var(--md-sys-typescale-title-small-weight);
+  color: var(--md-sys-color-on-surface);
+}
+
+.md-citation-item-meta {
+  font-size: var(--md-sys-typescale-label-small-size);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-citation-item-text {
+  font-size: var(--md-sys-typescale-body-small-size);
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.4;
+  margin-top: 8px;
+}

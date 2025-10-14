@@ -768,17 +768,36 @@ def normalize_api_response(results: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def render(vision_mode=False):
-    """Render improved query lab component with enhanced citations"""
+    """Render query lab component with Material Design 3 styling"""
 
-    if vision_mode:
-        st.header("👁️ Vision-Assisted Query Lab")
-        st.caption("Query Lab with vision verification features enabled")
-    else:
-        st.header("🔍 Query Lab (Improved)")
-        st.caption("Test and debug RAG pipeline with enhanced citation display")
+    # M3 Header with proper typography
+    st.markdown(
+        """
+    <div class="md-card md-card-filled md-spacing-lg" style="margin-bottom: 24px;">
+        <h1 class="md-typescale-headline-medium" style="margin: 0;">RAG Question Answering</h1>
+        <p class="md-typescale-body-medium" style="margin: 8px 0 0 0; color: var(--md-sys-color-on-surface-variant);">
+            Enterprise-grade document search and question answering system
+        </p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Initialize logger
     logger = get_logger(verbose=st.session_state.get("enable_verbose_logging", False))
+
+    # Inject side sheet JS (once per render)
+    try:
+        from streamlit_app.components.side_sheet import render_side_sheet_js
+
+        render_side_sheet_js()
+    except ImportError:
+        try:
+            from components.side_sheet import render_side_sheet_js
+
+            render_side_sheet_js()
+        except:
+            pass
 
     # Initialize session state
     if "query_results" not in st.session_state:
@@ -790,522 +809,504 @@ def render(vision_mode=False):
     if "run_id" not in st.session_state:
         st.session_state.run_id = None
 
-    # Main layout
-    col1, col2 = st.columns([1, 2])
+    # Query input with M3 styling
+    st.markdown(
+        '<div class="md-typescale-title-medium" style="margin-bottom: 8px;">Query Input</div>',
+        unsafe_allow_html=True,
+    )
+    query = st.text_area(
+        "Enter your question",
+        placeholder="Enter your question here...\nExample: What are the operating specifications for ammonia storage tanks?",
+        height=120,
+        help="Enter technical questions about your documents",
+        key="query_input",
+        label_visibility="collapsed",
+    )
+
+    # Settings with M3 chips/segmented controls
+    st.markdown(
+        '<div class="md-typescale-title-medium" style="margin: 24px 0 8px 0;">Configuration</div>',
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
-        st.subheader("Query Configuration")
-
-        # Notice about production mode
-        st.info("ℹ️ All queries will use **production mode** for optimal results")
-
-        # API Base URL configuration
-        with st.expander("API Configuration", expanded=False):
-            old_api_url = st.session_state.get("api_base_url", "")
-            st.session_state.api_base_url = st.text_input(
-                "API Base URL",
-                value=st.session_state.api_base_url,
-                help="Base URL of the RAG API server",
-                key="api_base_url_input",
-            )
-
-            # Log API URL change
-            if old_api_url and old_api_url != st.session_state.api_base_url:
-                logger.log_state_change(
-                    "api_base_url", old_api_url, st.session_state.api_base_url
-                )
-
-            if st.button(
-                "Test Connection", use_container_width=True, key="test_connection_btn"
-            ):
-                logger.log_button_click(
-                    "test_connection", {"api_url": st.session_state.api_base_url}
-                )
-
-                try:
-                    test_url = f"{st.session_state.api_base_url}/healthz"
-                    logger.log_event(
-                        EventType.INFO,
-                        f"Testing connection to {test_url}",
-                        {"url": test_url},
-                    )
-
-                    response = requests.get(test_url, timeout=5)
-
-                    if response.status_code == 200:
-                        st.success("✓ API is reachable")
-                        logger.log_event(
-                            EventType.INFO,
-                            "API connection test successful",
-                            {"status_code": response.status_code},
-                        )
-                    else:
-                        st.error(f"API returned status {response.status_code}")
-                        logger.log_event(
-                            EventType.WARNING,
-                            f"API connection test failed with status {response.status_code}",
-                            {
-                                "status_code": response.status_code,
-                                "response": response.text[:200],
-                            },
-                        )
-                except Exception as e:
-                    st.error("✗ Cannot reach API")
-                    logger.log_error(
-                        "API connection test failed",
-                        exception=e,
-                        context={"url": st.session_state.api_base_url},
-                    )
-
-        # Query input
-        query = st.text_area(
-            "Query",
-            placeholder="Enter your question here...",
-            height=100,
-            help="Natural language query to test",
-            key="query_input",
+        st.markdown(
+            '<div class="md-typescale-label-large" style="margin-bottom: 4px;">Language</div>',
+            unsafe_allow_html=True,
         )
-
-        # Quick presets (but execution mode will always be production)
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            if st.button("Cost Optimized", use_container_width=True, key="preset_cost"):
-                st.session_state.preset = "cost"
-                logger.log_button_click("preset_cost")
-        with col_p2:
+        # Use chips for language selection
+        lang_col1, lang_col2 = st.columns(2)
+        with lang_col1:
             if st.button(
-                "Accuracy Focus", use_container_width=True, key="preset_accuracy"
+                "🇻🇳 Vietnamese",
+                key="lang_vi",
+                use_container_width=True,
+                type="primary"
+                if st.session_state.get("selected_lang", "vi") == "vi"
+                else "secondary",
             ):
-                st.session_state.preset = "accuracy"
-                logger.log_button_click("preset_accuracy")
-        with col_p3:
-            if st.button("Debug Mode", use_container_width=True, key="preset_debug"):
-                st.session_state.preset = "debug"
-                logger.log_button_click("preset_debug")
+                st.session_state.selected_lang = "vi"
+        with lang_col2:
+            if st.button(
+                "🇬🇧 English",
+                key="lang_en",
+                use_container_width=True,
+                type="primary"
+                if st.session_state.get("selected_lang", "vi") == "en"
+                else "secondary",
+            ):
+                st.session_state.selected_lang = "en"
 
-        # Apply presets if selected (but execution_mode stays production)
-        preset = st.session_state.get("preset", None)
-        if preset == "cost":
-            default_k_bm25 = 30
-            default_k_faiss = 30
-            default_top_k = 5
-            default_hyde = False
-        elif preset == "accuracy":
-            default_k_bm25 = 100
-            default_k_faiss = 100
-            default_top_k = 12
-            default_hyde = True
-        elif preset == "debug":
-            default_k_bm25 = 50
-            default_k_faiss = 50
-            default_top_k = 8
-            default_hyde = True
-        else:
-            default_k_bm25 = 50
-            default_k_faiss = 50
-            default_top_k = 8
-            default_hyde = True
-
-        # Execution mode - DISABLED, always production
-        st.selectbox(
-            "Execution Mode",
-            options=["production"],
-            index=0,
-            help="Fixed to production mode for optimal results",
-            disabled=True,
-        )
-        execution_mode = "production"  # Always production
-
-        # HyDE settings
-        with st.expander("HyDE Settings", expanded=False):
-            enable_hyde = st.checkbox(
-                "Enable HyDE",
-                value=default_hyde,
-                key="enable_hyde",
-            )
-            hyde_count = st.number_input(
-                "HyDE Queries",
-                min_value=1,
-                max_value=5,
-                value=2,
-                key="hyde_count",
-            )
-
-        # Retrieval settings
-        with st.expander("Retrieval Settings", expanded=False):
-            k_bm25 = st.slider("BM25 Top-K", 10, 100, default_k_bm25)
-            k_faiss = st.slider("FAISS Top-K", 10, 100, default_k_faiss)
-            rrf_k = st.slider("RRF Constant", 10, 100, 60)
-            expand_parent = st.checkbox("Expand Parent Context", value=True)
-
-        # Reranker settings
-        with st.expander("Reranker Settings", expanded=False):
-            reranker_method = st.selectbox(
-                "Reranker Method",
-                options=["cross_encoder", "score_based", "llm", "hybrid"],
-                index=0,
-            )
-            top_k_context = st.slider("Final Top-K", 1, 20, default_top_k)
-
-        # Language
-        language = st.radio("Language", ["vi", "en"], horizontal=True)
-
-        # Citation style toggle
-        with st.expander("Citation Settings", expanded=False):
-            use_ieee_citations = st.checkbox(
-                "Use IEEE-style Citations",
-                value=True,
-                key="use_ieee_citations",
-                help="Convert citations from [Doc X, p.Y] to [1], [2] with references section",
-            )
-
-        # Run button
-        if st.button(
-            "🚀 Run Query", type="primary", use_container_width=True, key="run_query_btn"
-        ):
-            if query:
-                # Start a new run
-                st.session_state.run_id = logger.start_new_run()
-
-                logger.log_button_click(
-                    "run_query",
-                    {
-                        "query_length": len(query),
-                        "execution_mode": "production",  # Always production
-                        "language": language,
-                    },
-                )
-
-                logger.log_event(
-                    EventType.INFO,
-                    "Starting query execution",
-                    {
-                        "query": query[:200],  # Log first 200 chars
-                        "run_id": st.session_state.run_id,
-                        "parameters": {
-                            "execution_mode": "production",  # Always production
-                            "hyde": enable_hyde,
-                            "language": language,
-                            "max_context": top_k_context,
-                        },
-                    },
-                    performance_key="query_execution",
-                )
-
-                with st.spinner("Processing query..."):
-                    # Prepare parameters
-                    params = {
-                        "max_context": top_k_context,
-                        "execution_mode": "production",  # Force production
-                        "language": language,
-                        "hyde": enable_hyde,
-                    }
-
-                    # Call API with logger
-                    result = call_ask_api(
-                        query, st.session_state.api_base_url, params, logger
-                    )
-
-                    if result["success"]:
-                        st.session_state.query_results = result["data"]
-
-                        # Log successful completion
-                        logger.log_event(
-                            EventType.INFO,
-                            "Query completed successfully",
-                            {
-                                "run_id": st.session_state.run_id,
-                                "total_latency_ms": result["data"].get(
-                                    "total_latency_ms", 0
-                                ),
-                                "answer_length": len(result["data"].get("answer", "")),
-                                "citations_count": len(
-                                    result["data"].get("citations", [])
-                                ),
-                                "confidence": result["data"].get("confidence", 0),
-                            },
-                            performance_key="query_execution",
-                        )
-
-                        st.success("✓ Query completed successfully")
-                        st.rerun()
-                    else:
-                        # Log failure
-                        logger.log_error(
-                            "Query execution failed",
-                            context={
-                                "run_id": st.session_state.run_id,
-                                "error": result["error"],
-                            },
-                        )
-
-                        st.error(f"Error: {result['error']}")
-                        st.session_state.query_results = None
-            else:
-                logger.log_event(
-                    EventType.WARNING,
-                    "Query execution attempted without query text",
-                    {},
-                )
-                st.warning("Please enter a query")
+        language = st.session_state.get("selected_lang", "vi")
 
     with col2:
-        st.subheader("Results")
+        st.markdown(
+            '<div class="md-typescale-label-large" style="margin-bottom: 4px;">Context Chunks</div>',
+            unsafe_allow_html=True,
+        )
+        max_context = st.number_input(
+            "Context Chunks",
+            min_value=1,
+            max_value=20,
+            value=8,
+            help="Number of document chunks to retrieve",
+            label_visibility="collapsed",
+        )
 
-        if st.session_state.query_results:
-            results = st.session_state.query_results
+    with col3:
+        st.markdown(
+            '<div class="md-card md-card-outlined md-spacing-sm" style="margin-top: 24px; text-align: center;">'
+            '<div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant);">ACTIVE FEATURES</div>'
+            '<div class="md-typescale-body-small" style="margin-top: 4px;">Vision + Reranking</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
-            # Normalize API response for consistent UI rendering
-            ui = normalize_api_response(results)
-            # Keep meta available for metrics and timeline tabs
-            meta = results.get("meta", {})
+    # Vision and Re-ranking are ALWAYS enabled (hardcoded)
+    enable_vision = True
+    use_rerank = True
 
-            # Result tabs with actual data
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
-                [
-                    "Overview",
-                    "Retrieval",
-                    "Rerank",
-                    "Generation",
-                    "Vision Verify",
-                    "Metrics",
-                    "Raw Data",
-                ]
+    # Advanced options - minimal
+    with st.expander("Advanced Options", expanded=False):
+        st.markdown("**Citation Format**")
+        use_ieee_citations = st.checkbox(
+            "Use IEEE-style Citations",
+            value=True,
+            help="Numbered citation format [1], [2] with references section",
+        )
+        st.caption("Standard academic citation style")
+
+        st.divider()
+
+        st.markdown("**System Information**")
+        st.caption("Retrieval: Weaviate (semantic) + OpenSearch (keyword)")
+        st.caption("Reranking: BGE Cross-Encoder")
+        st.caption("Vision: Gemini Multimodal")
+
+    # Set defaults for hidden parameters
+    execution_mode = "production"  # Always production
+    top_k_context = max_context
+
+    # Run button with M3 styling
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Add loading indicator if processing
+    if st.session_state.get("query_processing", False):
+        st.markdown('<div class="md-progress-linear"></div>', unsafe_allow_html=True)
+
+    if st.button(
+        "🚀 Run Query", type="primary", use_container_width=True, key="run_query_btn"
+    ):
+        if query:
+            # Start a new run
+            st.session_state.run_id = logger.start_new_run()
+
+            logger.log_button_click(
+                "run_query",
+                {
+                    "query_length": len(query),
+                    "execution_mode": "production",  # Always production
+                    "language": language,
+                },
             )
 
-            with tab1:
-                # Overview Tab
-                st.markdown("### 📝 Answer")
-                answer_text = results.get("answer", "")
-                citations = results.get("citations", [])
-                # Fetch doc_number_map from the correct location
-                # Prefer generation_details.metadata.doc_number_map, fallback to meta.doc_number_map
-                # CRITICAL FIX: Also check vision_generation paths for Vision-enabled answers
-                doc_number_map = {}
-                try:
-                    # Priority 1: generation_details.metadata.doc_number_map
-                    gen_meta = (
-                        results.get("generation_details", {})
-                        .get("metadata", {})
-                        .get("doc_number_map")
+            logger.log_event(
+                EventType.INFO,
+                "Starting query execution",
+                {
+                    "query": query[:200],  # Log first 200 chars
+                    "run_id": st.session_state.run_id,
+                    "parameters": {
+                        "execution_mode": "production",  # Always production
+                        "hyde": True,
+                        "language": language,
+                        "max_context": top_k_context,
+                    },
+                },
+                performance_key="query_execution",
+            )
+
+            with st.spinner("Processing query..."):
+                # Prepare parameters
+                params = {
+                    "max_context": top_k_context,
+                    "execution_mode": "production",  # Force production
+                    "language": language,
+                    "hyde": True,
+                }
+
+                # Call API with logger
+                result = call_ask_api(
+                    query, st.session_state.api_base_url, params, logger
+                )
+
+                if result["success"]:
+                    st.session_state.query_results = result["data"]
+
+                    # Log successful completion
+                    logger.log_event(
+                        EventType.INFO,
+                        "Query completed successfully",
+                        {
+                            "run_id": st.session_state.run_id,
+                            "total_latency_ms": result["data"].get(
+                                "total_latency_ms", 0
+                            ),
+                            "answer_length": len(result["data"].get("answer", "")),
+                            "citations_count": len(result["data"].get("citations", [])),
+                            "confidence": result["data"].get("confidence", 0),
+                        },
+                        performance_key="query_execution",
                     )
-                    if gen_meta:
-                        doc_number_map = gen_meta
-                    # Priority 2: generation_details.metadata.vision_generation.doc_number_map
-                    elif (
+
+                    st.success("✓ Query completed successfully")
+                    st.rerun()
+                else:
+                    # Log failure
+                    logger.log_error(
+                        "Query execution failed",
+                        context={
+                            "run_id": st.session_state.run_id,
+                            "error": result["error"],
+                        },
+                    )
+
+                    st.error(f"Error: {result['error']}")
+                    st.session_state.query_results = None
+        else:
+            logger.log_event(
+                EventType.WARNING,
+                "Query execution attempted without query text",
+                {},
+            )
+            st.warning("Please enter a query")
+
+    # Results section with M3 styling
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        '<div class="md-typescale-title-large" style="margin-bottom: 16px;">Results</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.query_results:
+        results = st.session_state.query_results
+
+        # Normalize API response for consistent UI rendering
+        ui = normalize_api_response(results)
+        # Keep meta available for metrics and timeline tabs
+        meta = results.get("meta", {})
+
+        # Result tabs - clean
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+            [
+                "Overview",
+                "Retrieval",
+                "Rerank",
+                "Generation",
+                "Vision",
+                "Metrics",
+                "Raw Data",
+            ]
+        )
+
+        with tab1:
+            # Overview Tab
+            st.markdown("### Answer")
+
+            answer_text = results.get("answer", "")
+            citations = results.get("citations", [])
+            # Fetch doc_number_map from the correct location
+            # Prefer generation_details.metadata.doc_number_map, fallback to meta.doc_number_map
+            # CRITICAL FIX: Also check vision_generation paths for Vision-enabled answers
+            doc_number_map = {}
+            try:
+                # Priority 1: generation_details.metadata.doc_number_map
+                gen_meta = (
+                    results.get("generation_details", {})
+                    .get("metadata", {})
+                    .get("doc_number_map")
+                )
+                if gen_meta:
+                    doc_number_map = gen_meta
+                # Priority 2: generation_details.metadata.vision_generation.doc_number_map
+                elif (
+                    results.get("generation_details", {})
+                    .get("metadata", {})
+                    .get("vision_generation", {})
+                    .get("doc_number_map")
+                ):
+                    doc_number_map = (
                         results.get("generation_details", {})
                         .get("metadata", {})
                         .get("vision_generation", {})
                         .get("doc_number_map")
-                    ):
-                        doc_number_map = (
-                            results.get("generation_details", {})
-                            .get("metadata", {})
-                            .get("vision_generation", {})
-                            .get("doc_number_map")
-                        )
-                    # Priority 3: meta.doc_number_map
-                    elif results.get("meta", {}).get("doc_number_map"):
-                        doc_number_map = results.get("meta", {}).get("doc_number_map")
-                    # Priority 4: meta.vision_generation.doc_number_map
-                    elif (
+                    )
+                # Priority 3: meta.doc_number_map
+                elif results.get("meta", {}).get("doc_number_map"):
+                    doc_number_map = results.get("meta", {}).get("doc_number_map")
+                # Priority 4: meta.vision_generation.doc_number_map
+                elif (
+                    results.get("meta", {})
+                    .get("vision_generation", {})
+                    .get("doc_number_map")
+                ):
+                    doc_number_map = (
                         results.get("meta", {})
                         .get("vision_generation", {})
                         .get("doc_number_map")
-                    ):
-                        doc_number_map = (
-                            results.get("meta", {})
-                            .get("vision_generation", {})
-                            .get("doc_number_map")
-                        )
+                    )
 
-                    # FALLBACK: If still empty, build from citations directly
-                    if not doc_number_map and citations:
-                        doc_number_map = {}
-                        for idx, cit in enumerate(citations, 1):
-                            doc_id = cit.get("doc_id", "")
-                            pdf_path = cit.get("pdf_path", "")
-                            if doc_id:
-                                # Extract file name from pdf_path or doc_id
-                                file_name = doc_id
-                                if pdf_path:
-                                    from pathlib import Path
-
-                                    file_name = Path(pdf_path).name
-                                elif doc_id.startswith("DOCID_"):
-                                    parts = doc_id.split("_")
-                                    file_name = (
-                                        "_".join(parts[1:-1])
-                                        if len(parts) > 2
-                                        else (parts[1] if len(parts) > 1 else doc_id)
-                                    )
-
-                                doc_number_map[str(idx)] = {
-                                    "doc_id": doc_id,
-                                    "pdf_path": pdf_path,
-                                    "file_name": file_name,
-                                }
-                except Exception as e:
-                    # Last resort: build from citations
+                # FALLBACK: If still empty, build from citations directly
+                if not doc_number_map and citations:
                     doc_number_map = {}
-                    if citations:
-                        for idx, cit in enumerate(citations, 1):
-                            doc_id = cit.get("doc_id", "")
-                            pdf_path = cit.get("pdf_path", "")
-                            if doc_id:
+                    for idx, cit in enumerate(citations, 1):
+                        doc_id = cit.get("doc_id", "")
+                        pdf_path = cit.get("pdf_path", "")
+                        if doc_id:
+                            # Extract file name from pdf_path or doc_id
+                            file_name = doc_id
+                            if pdf_path:
                                 from pathlib import Path
 
-                                file_name = Path(pdf_path).name if pdf_path else doc_id
-                                doc_number_map[str(idx)] = {
-                                    "doc_id": doc_id,
-                                    "pdf_path": pdf_path,
-                                    "file_name": file_name,
-                                }
+                                file_name = Path(pdf_path).name
+                            elif doc_id.startswith("DOCID_"):
+                                parts = doc_id.split("_")
+                                file_name = (
+                                    "_".join(parts[1:-1])
+                                    if len(parts) > 2
+                                    else (parts[1] if len(parts) > 1 else doc_id)
+                                )
 
-                # Check if IEEE-style citations is enabled
-                use_ieee = st.session_state.get("use_ieee_citations", True)
-
-                # DEBUG: Log raw data
-                with st.expander("🔍 DEBUG: Raw Data", expanded=False):
-                    st.json(
-                        {
-                            "answer_text_preview": answer_text[:500]
-                            if answer_text
-                            else None,
-                            "citations_count": len(citations),
-                            "citations_sample": [
-                                {
-                                    "doc_id": c.get("doc_id"),
-                                    "page": c.get("page"),
-                                    "pdf_path": c.get("pdf_path", "")[:80] + "..."
-                                    if c.get("pdf_path")
-                                    else None,
-                                }
-                                for c in citations[:3]
-                            ],
-                            "doc_number_map_keys": list(doc_number_map.keys())
-                            if doc_number_map
-                            else [],
-                            "doc_number_map_sample": {
-                                k: v for k, v in list(doc_number_map.items())[:3]
+                            doc_number_map[str(idx)] = {
+                                "doc_id": doc_id,
+                                "pdf_path": pdf_path,
+                                "file_name": file_name,
                             }
-                            if doc_number_map
-                            else {},
-                        }
-                    )
+            except Exception as e:
+                # Last resort: build from citations
+                doc_number_map = {}
+                if citations:
+                    for idx, cit in enumerate(citations, 1):
+                        doc_id = cit.get("doc_id", "")
+                        pdf_path = cit.get("pdf_path", "")
+                        if doc_id:
+                            from pathlib import Path
 
-                # Check if answer is empty or too short
-                if not answer_text or len(answer_text.strip()) < 10:
-                    st.warning(
-                        "⚠️ The system could not generate a complete answer. This may be due to:"
-                    )
-                    st.markdown(
-                        """
+                            file_name = Path(pdf_path).name if pdf_path else doc_id
+                            doc_number_map[str(idx)] = {
+                                "doc_id": doc_id,
+                                "pdf_path": pdf_path,
+                                "file_name": file_name,
+                            }
+
+            # Check if IEEE-style citations is enabled
+            use_ieee = st.session_state.get("use_ieee_citations", True)
+
+            # DEBUG: Log raw data
+            with st.expander("🔍 DEBUG: Raw Data", expanded=False):
+                st.json(
+                    {
+                        "answer_text_preview": answer_text[:500]
+                        if answer_text
+                        else None,
+                        "citations_count": len(citations),
+                        "citations_sample": [
+                            {
+                                "doc_id": c.get("doc_id"),
+                                "page": c.get("page"),
+                                "pdf_path": c.get("pdf_path", "")[:80] + "..."
+                                if c.get("pdf_path")
+                                else None,
+                            }
+                            for c in citations[:3]
+                        ],
+                        "doc_number_map_keys": list(doc_number_map.keys())
+                        if doc_number_map
+                        else [],
+                        "doc_number_map_sample": {
+                            k: v for k, v in list(doc_number_map.items())[:3]
+                        }
+                        if doc_number_map
+                        else {},
+                    }
+                )
+
+            # Check if answer is empty or too short
+            if not answer_text or len(answer_text.strip()) < 10:
+                st.warning(
+                    "⚠️ The system could not generate a complete answer. This may be due to:"
+                )
+                st.markdown(
+                    """
                     - The question may need to be rephrased
                     - Relevant documents might not be indexed
                     - There might be a temporary processing issue
 
                     Please check the citations below for relevant documents, or try rephrasing your question.
                     """
+                )
+
+                # Show partial content if available
+                if results.get("context_used"):
+                    st.info(
+                        f"Found {len(results.get('context_used', []))} relevant document chunks. See Citations tab for details."
                     )
-
-                    # Show partial content if available
-                    if results.get("context_used"):
-                        st.info(
-                            f"Found {len(results.get('context_used', []))} relevant document chunks. See Citations tab for details."
-                        )
+            else:
+                # Convert to IEEE style if enabled
+                if use_ieee and citations:
+                    converted_answer, ieee_citation_list = convert_to_ieee_style(
+                        answer_text, citations, doc_number_map
+                    )
+                    st.markdown(converted_answer)
                 else:
-                    # Convert to IEEE style if enabled
-                    if use_ieee and citations:
-                        converted_answer, ieee_citation_list = convert_to_ieee_style(
-                            answer_text, citations, doc_number_map
-                        )
-                        st.markdown(converted_answer)
-                    else:
-                        st.markdown(answer_text)
+                    st.markdown(answer_text)
 
-                # Display confidence and warnings
-                col_m1, col_m2, col_m3 = st.columns(3)
-                with col_m1:
-                    confidence = results.get("confidence", 0.0)
-                    st.metric("Confidence", f"{confidence:.2%}")
-                with col_m2:
-                    num_citations = len(results.get("citations", []))
-                    st.metric("Citations", num_citations)
-                with col_m3:
-                    total_latency = results.get("total_latency_ms", 0)
-                    st.metric("Total Latency", f"{total_latency:.0f}ms")
+            # Display metrics cards with M3 styling
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_m1, col_m2, col_m3 = st.columns(3)
 
-                # Warnings
-                warnings = results.get("warnings", [])
-                if warnings:
-                    st.warning("⚠️ Warnings:")
-                    for warn in warnings:
-                        st.write(f"- {warn}")
+            with col_m1:
+                confidence = results.get("confidence", 0.0)
+                # Use M3 color roles for semantic meaning
+                if confidence > 0.7:
+                    conf_color = "var(--md-sys-color-tertiary)"
+                elif confidence > 0.5:
+                    conf_color = "var(--md-sys-color-secondary)"
+                else:
+                    conf_color = "var(--md-sys-color-error)"
 
-                # References section - IEEE style or traditional
-                if citations:
-                    st.markdown("---")
+                st.markdown(
+                    f"""
+                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
+                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">CONFIDENCE</div>
+                        <div class="md-typescale-headline-small" style="color: {conf_color};">{confidence:.0%}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                    if use_ieee and "ieee_citation_list" in locals():
-                        # IEEE-style references
-                        st.markdown("### 📚 References")
+            with col_m2:
+                num_citations = len(results.get("citations", []))
+                st.markdown(
+                    f"""
+                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
+                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">CITATIONS</div>
+                        <div class="md-typescale-headline-small" style="color: var(--md-sys-color-primary);">{num_citations}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                        from urllib.parse import urlencode
+            with col_m3:
+                total_latency = results.get("total_latency_ms", 0)
+                # Semantic color for latency
+                if total_latency < 3000:
+                    latency_color = "var(--md-sys-color-tertiary)"
+                elif total_latency < 5000:
+                    latency_color = "var(--md-sys-color-secondary)"
+                else:
+                    latency_color = "var(--md-sys-color-error)"
 
-                        for idx, ref in enumerate(ieee_citation_list, 1):
-                            file_name = ref.get("file_name", "Unknown")
-                            pages = ref.get("pages", [])
-                            pdf_path = ref.get("pdf_path", "")
+                st.markdown(
+                    f"""
+                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
+                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">LATENCY</div>
+                        <div class="md-typescale-headline-small" style="color: {latency_color};">{total_latency:.0f}<span class="md-typescale-body-small" style="color: var(--md-sys-color-on-surface-variant);">ms</span></div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                            # Display reference number and file name
-                            st.markdown(f"**[{idx}]** {file_name}")
+            # Warnings
+            warnings = results.get("warnings", [])
+            if warnings:
+                st.warning("⚠️ Warnings:")
+                for warn in warnings:
+                    st.write(f"- {warn}")
 
-                            # Display pages with links
-                            if pages and pdf_path:
-                                page_links = []
-                                for page in pages:
-                                    # Try to build PDF link with fallback to image
-                                    try:
-                                        # Check if PDF file exists
-                                        import os
-                                        from pathlib import Path
+            # References section with Side Sheet option
+            if citations:
+                st.markdown("<br>", unsafe_allow_html=True)
 
-                                        pdf_exists = (
-                                            os.path.exists(pdf_path)
-                                            if pdf_path
-                                            else False
+                col_ref1, col_ref2 = st.columns([4, 1])
+                with col_ref1:
+                    st.markdown("### References")
+                with col_ref2:
+                    # Button to open side sheet with all citations
+                    if st.button(
+                        "📋 View in Panel",
+                        key="open_ref_sheet",
+                        use_container_width=True,
+                        help="Open citations in side panel",
+                    ):
+                        st.session_state.show_citations_sheet = True
+                        st.rerun()
+
+                if use_ieee and "ieee_citation_list" in locals():
+                    # IEEE-style references
+
+                    from urllib.parse import urlencode
+
+                    for idx, ref in enumerate(ieee_citation_list, 1):
+                        file_name = ref.get("file_name", "Unknown")
+                        pages = ref.get("pages", [])
+                        pdf_path = ref.get("pdf_path", "")
+
+                        # Display reference number and file name
+                        st.markdown(f"**[{idx}]** {file_name}")
+
+                        # Display pages with links
+                        if pages and pdf_path:
+                            page_links = []
+                            for page in pages:
+                                # Try to build PDF link with fallback to image
+                                try:
+                                    # Check if PDF file exists
+                                    import os
+                                    from pathlib import Path
+
+                                    pdf_exists = (
+                                        os.path.exists(pdf_path) if pdf_path else False
+                                    )
+
+                                    if pdf_exists:
+                                        # Build URL for PDF open endpoint (native PDF viewing)
+                                        # We need both: page query param for API and #page=N fragment for browser
+                                        # The #page=N fragment tells browser's PDF viewer where to scroll to
+                                        params = {
+                                            "pdf_path": pdf_path,
+                                            "page": str(page),
+                                        }
+                                        params_str = urlencode(params)
+                                        # Add #page=N fragment for browser PDF viewer to auto-scroll
+                                        pdf_url = f"{st.session_state.api_base_url}/api/pdf/open?{params_str}#page={page}"
+                                        page_links.append(
+                                            f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px;" title="Open PDF at page {page}">p.{page}</a>'
                                         )
-
-                                        if pdf_exists:
-                                            # Build URL for PDF open endpoint (native PDF viewing)
-                                            # We need both: page query param for API and #page=N fragment for browser
-                                            # The #page=N fragment tells browser's PDF viewer where to scroll to
-                                            params = {
-                                                "pdf_path": pdf_path,
-                                                "page": str(page),
-                                            }
-                                            params_str = urlencode(params)
-                                            # Add #page=N fragment for browser PDF viewer to auto-scroll
-                                            pdf_url = f"{st.session_state.api_base_url}/api/pdf/open?{params_str}#page={page}"
-                                            page_links.append(
-                                                f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px;" title="Open PDF at page {page}">p.{page}</a>'
-                                            )
-                                        else:
-                                            # Fallback to image render endpoint
-                                            params = {
-                                                "pdf_path": pdf_path,
-                                                "page_num": str(page),
-                                                "dpi": "200",
-                                                "format": "png",
-                                            }
-                                            params_str = urlencode(params)
-                                            img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
-                                            page_links.append(
-                                                f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">⚠️ p.{page}</a>'
-                                            )
-                                    except Exception as e:
-                                        # If any error, provide image fallback
+                                    else:
+                                        # Fallback to image render endpoint
                                         params = {
                                             "pdf_path": pdf_path,
                                             "page_num": str(page),
@@ -1315,264 +1316,277 @@ def render(vision_mode=False):
                                         params_str = urlencode(params)
                                         img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
                                         page_links.append(
-                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">⚠️ p.{page}</a>'
+                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">⚠️ p.{page}</a>'
                                         )
+                                except Exception as e:
+                                    # If any error, provide image fallback
+                                    params = {
+                                        "pdf_path": pdf_path,
+                                        "page_num": str(page),
+                                        "dpi": "200",
+                                        "format": "png",
+                                    }
+                                    params_str = urlencode(params)
+                                    img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
+                                    page_links.append(
+                                        f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">⚠️ p.{page}</a>'
+                                    )
 
-                                st.markdown(
-                                    "&nbsp;&nbsp;&nbsp;&nbsp;" + " ".join(page_links),
-                                    unsafe_allow_html=True,
-                                )
-                            elif pages:
-                                # No PDF path, just show page numbers
-                                pages_str = ", ".join([f"p.{p}" for p in pages])
-                                st.caption(f"    {pages_str}")
-                    else:
-                        # Traditional sources section
-                        st.markdown("### 📚 Referenced Sources")
-
-                        # Extract unique doc_ids with their details
-                        unique_sources = {}
-                        for cit in citations:
-                            doc_id = cit.get("doc_id", "Unknown")
-                            if doc_id not in unique_sources:
-                                # Try to get file_name from doc_id (parse the readable part)
-                                # Format: DOCID_<readable_part>_<hash>
-                                file_name = doc_id
-                                if doc_id.startswith("DOCID_"):
-                                    parts = doc_id.split("_")
-                                    if len(parts) > 1:
-                                        # Join all parts except the last hash part
-                                        file_name = (
-                                            "_".join(parts[1:-1])
-                                            if len(parts) > 2
-                                            else parts[1]
-                                        )
-
-                                unique_sources[doc_id] = {
-                                    "file_name": file_name,
-                                    "pages": set(),
-                                }
-
-                            # Collect all pages referenced from this document
-                            page = cit.get("page")
-                            if page:
-                                unique_sources[doc_id]["pages"].add(page)
-
-                        # Display each unique source
-                        for idx, (doc_id, info) in enumerate(unique_sources.items(), 1):
-                            pages_list = sorted(list(info["pages"]))
-                            pages_str = (
-                                ", ".join([f"p.{p}" for p in pages_list])
-                                if pages_list
-                                else "N/A"
+                            st.markdown(
+                                "&nbsp;&nbsp;&nbsp;&nbsp;" + " ".join(page_links),
+                                unsafe_allow_html=True,
                             )
-
-                            with st.expander(
-                                f"📄 {idx}. {info['file_name']}", expanded=False
-                            ):
-                                st.caption(f"**Document ID:** `{doc_id}`")
-                                st.caption(f"**Referenced Pages:** {pages_str}")
-
-                                # Show snippet from first citation of this document
-                                first_cit = next(
-                                    (c for c in citations if c.get("doc_id") == doc_id),
-                                    None,
-                                )
-                                if first_cit and first_cit.get("text_snippet"):
-                                    st.text(first_cit["text_snippet"][:200] + "...")
-
-            with tab2:
-                # Retrieval Tab
-                st.markdown("### 🔍 Retrieval Results")
-
-                retrieval_info = ui["retrieval"]
-
-                col_r1, col_r2, col_r3 = st.columns(3)
-                with col_r1:
-                    st.markdown("**BM25 Results**")
-                    bm25_results = retrieval_info.get("bm25", [])
-                    st.write(f"Found {len(bm25_results)} documents")
-                    if bm25_results:
-                        for i, doc in enumerate(bm25_results[:5], 1):
-                            st.caption(
-                                f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
-                            )
-
-                with col_r2:
-                    st.markdown("**FAISS Results**")
-                    faiss_results = retrieval_info.get("faiss", [])
-                    st.write(f"Found {len(faiss_results)} documents")
-                    if faiss_results:
-                        for i, doc in enumerate(faiss_results[:5], 1):
-                            st.caption(
-                                f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
-                            )
-
-                with col_r3:
-                    st.markdown("**Total Retrieved**")
-                    total = retrieval_info.get("total_retrieved", 0)
-                    from_cache = retrieval_info.get("from_cache", False)
-                    st.metric("Documents", total)
-                    if from_cache:
-                        st.caption("✓ From cache")
-
-            with tab3:
-                # Rerank Tab
-                st.markdown("### 📊 Reranking Details")
-
-                rerank_info = ui["rerank"]
-
-                col_rr1, col_rr2, col_rr3 = st.columns(3)
-                with col_rr1:
-                    input_count = rerank_info.get("input_count", 0)
-                    st.metric("Input", f"{input_count} docs")
-                with col_rr2:
-                    output_count = rerank_info.get("output_count", 0)
-                    st.metric("Output", f"{output_count} docs")
-                with col_rr3:
-                    method = rerank_info.get("method", "unknown")
-                    st.metric("Method", method)
-
-                # Show reranked results
-                st.markdown("**Top Reranked Results:**")
-                reranked = rerank_info.get("results", [])
-                if reranked:
-                    for result in reranked[:10]:
-                        rank = result.get("rank", 0)
-                        doc_id = result.get("doc_id", "Unknown")[:50]
-                        score = result.get("score", 0)
-                        page = result.get("page", "N/A")
-                        text_preview = result.get("text", "")[:80]
-                        st.caption(f"{rank}. {doc_id} (p.{page}) - Score: {score:.4f}")
-                        if text_preview:
-                            st.text(f"   {text_preview}...")
+                        elif pages:
+                            # No PDF path, just show page numbers
+                            pages_str = ", ".join([f"p.{p}" for p in pages])
+                            st.caption(f"    {pages_str}")
                 else:
-                    st.info("No reranking results available")
+                    # Traditional sources section
+                    st.markdown("### 📚 Referenced Sources")
 
-            with tab4:
-                # Generation Tab
-                st.markdown("### 🤖 Generation Details")
+                    # Extract unique doc_ids with their details
+                    unique_sources = {}
+                    for cit in citations:
+                        doc_id = cit.get("doc_id", "Unknown")
+                        if doc_id not in unique_sources:
+                            # Try to get file_name from doc_id (parse the readable part)
+                            # Format: DOCID_<readable_part>_<hash>
+                            file_name = doc_id
+                            if doc_id.startswith("DOCID_"):
+                                parts = doc_id.split("_")
+                                if len(parts) > 1:
+                                    # Join all parts except the last hash part
+                                    file_name = (
+                                        "_".join(parts[1:-1])
+                                        if len(parts) > 2
+                                        else parts[1]
+                                    )
 
-                gen_info = ui["generation"]
+                            unique_sources[doc_id] = {
+                                "file_name": file_name,
+                                "pages": set(),
+                            }
 
-                col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-                with col_g1:
-                    model = gen_info.get("model", "Unknown")
-                    st.metric("Model", model)
-                with col_g2:
-                    latency = gen_info.get("latency_ms", 0)
-                    st.metric("Latency", f"{latency:.0f}ms")
-                with col_g3:
-                    tokens = gen_info.get("total_tokens", 0)
-                    st.metric("Total Tokens", tokens if tokens > 0 else "N/A")
-                with col_g4:
-                    cost = gen_info.get("estimated_cost", 0)
-                    st.metric("Est. Cost", f"${cost:.4f}" if cost > 0 else "N/A")
+                        # Collect all pages referenced from this document
+                        page = cit.get("page")
+                        if page:
+                            unique_sources[doc_id]["pages"].add(page)
 
-                # Additional generation info
-                col_g5, col_g6 = st.columns(2)
-                with col_g5:
-                    tier = gen_info.get("tier", "unknown")
-                    st.caption(f"**Tier:** {tier}")
-                with col_g6:
-                    language = gen_info.get("language", "unknown")
-                    st.caption(f"**Language:** {language}")
-
-                # Prompt snapshot (redacted)
-                st.markdown("**Prompt Structure**")
-                prompt_info = gen_info.get("prompt_info", {})
-                if prompt_info:
-                    st.json(prompt_info)
-                else:
-                    st.info("Prompt info not available")
-
-            with tab5:
-                # Vision Verify Tab - Check if vision was actually used in generation
-                vision_info = ui["vision"]
-
-                if vision_info.get("enabled", False):
-                    st.markdown("### 👁️ Vision Generation Used")
-
-                    pages_used = vision_info.get("pages_used", [])
-                    pages_failed = vision_info.get("pages_failed", [])
-
-                    if pages_used or pages_failed:
-                        col_v1, col_v2, col_v3 = st.columns(3)
-                        with col_v1:
-                            st.metric("PDF Pages Used", len(pages_used))
-                        with col_v2:
-                            st.metric("Pages Failed", len(pages_failed))
-                        with col_v3:
-                            total_pages = len(pages_used) + len(pages_failed)
-                            success_rate = (
-                                (len(pages_used) / total_pages * 100)
-                                if total_pages > 0
-                                else 0
-                            )
-                            st.metric("Success Rate", f"{success_rate:.1f}%")
-
-                        # Show page details
-                        if pages_used:
-                            st.markdown("**PDF Pages Processed:**")
-                            for page_info in pages_used:
-                                page_num = page_info.get("page", "N/A")
-                                pdf_path = page_info.get("pdf_path", "Unknown")
-                                # Extract filename from path
-                                import os
-
-                                filename = (
-                                    os.path.basename(pdf_path)
-                                    if pdf_path != "Unknown"
-                                    else "Unknown"
-                                )
-                                st.write(f"- Page {page_num} from {filename[:60]}...")
-                    else:
-                        st.info(
-                            "✅ Vision generation was enabled but no detailed metadata available"
-                        )
-                else:
-                    # Check if vision is enabled in settings
-                    if st.session_state.get("enable_vision", False):
-                        st.info(
-                            "👁️ Vision is enabled in settings, but was not used for this query.\n"
-                            "This could mean the answer was generated from text only."
-                        )
-                    else:
-                        st.warning(
-                            "Vision features are disabled. Enable 'Vision Features' in sidebar settings to use vision generation."
+                    # Display each unique source
+                    for idx, (doc_id, info) in enumerate(unique_sources.items(), 1):
+                        pages_list = sorted(list(info["pages"]))
+                        pages_str = (
+                            ", ".join([f"p.{p}" for p in pages_list])
+                            if pages_list
+                            else "N/A"
                         )
 
-            with tab6:
-                # Metrics Tab
-                st.markdown("### 📈 Performance Metrics")
+                        with st.expander(
+                            f"📄 {idx}. {info['file_name']}", expanded=False
+                        ):
+                            st.caption(f"**Document ID:** `{doc_id}`")
+                            st.caption(f"**Referenced Pages:** {pages_str}")
 
-                # Latency breakdown
-                breakdown = meta.get("breakdown", {})
-                if breakdown:
-                    fig = create_timeline_chart(breakdown)
-                    st.plotly_chart(fig, use_container_width=True)
+                            # Show snippet from first citation of this document
+                            first_cit = next(
+                                (c for c in citations if c.get("doc_id") == doc_id),
+                                None,
+                            )
+                            if first_cit and first_cit.get("text_snippet"):
+                                st.text(first_cit["text_snippet"][:200] + "...")
 
-                # Additional metrics
-                col_mt1, col_mt2, col_mt3 = st.columns(3)
-                with col_mt1:
-                    cache_hits = meta.get("cache_hits", 0)
-                    st.metric("Cache Hits", cache_hits)
-                with col_mt2:
-                    index_size = meta.get("index_size", 0)
-                    st.metric("Index Size", f"{index_size:,}")
-                with col_mt3:
-                    request_id = meta.get("request_id", "N/A")
-                    st.metric("Request ID", request_id)
+        with tab2:
+            # Retrieval Tab
+            st.markdown("### 🔍 Retrieval Results")
 
-            with tab7:
-                # Raw Data Tab
-                st.markdown("### 📜 Raw Response Data")
-                st.json(results)
+            retrieval_info = ui["retrieval"]
 
-        else:
-            # No results yet - show placeholders
-            st.info("📝 Results will appear here after running a query")
-            st.caption("Enter a query and click 'Run Query' to see results")
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                st.markdown("**BM25 Results**")
+                bm25_results = retrieval_info.get("bm25", [])
+                st.write(f"Found {len(bm25_results)} documents")
+                if bm25_results:
+                    for i, doc in enumerate(bm25_results[:5], 1):
+                        st.caption(
+                            f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
+                        )
+
+            with col_r2:
+                st.markdown("**FAISS Results**")
+                faiss_results = retrieval_info.get("faiss", [])
+                st.write(f"Found {len(faiss_results)} documents")
+                if faiss_results:
+                    for i, doc in enumerate(faiss_results[:5], 1):
+                        st.caption(
+                            f"{i}. {doc.get('doc_id', 'N/A')[:30]}... - Score: {doc.get('score', 0):.3f}"
+                        )
+
+            with col_r3:
+                st.markdown("**Total Retrieved**")
+                total = retrieval_info.get("total_retrieved", 0)
+                from_cache = retrieval_info.get("from_cache", False)
+                st.metric("Documents", total)
+                if from_cache:
+                    st.caption("✓ From cache")
+
+        with tab3:
+            # Rerank Tab
+            st.markdown("### 📊 Reranking Details")
+
+            rerank_info = ui["rerank"]
+
+            col_rr1, col_rr2, col_rr3 = st.columns(3)
+            with col_rr1:
+                input_count = rerank_info.get("input_count", 0)
+                st.metric("Input", f"{input_count} docs")
+            with col_rr2:
+                output_count = rerank_info.get("output_count", 0)
+                st.metric("Output", f"{output_count} docs")
+            with col_rr3:
+                method = rerank_info.get("method", "unknown")
+                st.metric("Method", method)
+
+            # Show reranked results
+            st.markdown("**Top Reranked Results:**")
+            reranked = rerank_info.get("results", [])
+            if reranked:
+                for result in reranked[:10]:
+                    rank = result.get("rank", 0)
+                    doc_id = result.get("doc_id", "Unknown")[:50]
+                    score = result.get("score", 0)
+                    page = result.get("page", "N/A")
+                    text_preview = result.get("text", "")[:80]
+                    st.caption(f"{rank}. {doc_id} (p.{page}) - Score: {score:.4f}")
+                    if text_preview:
+                        st.text(f"   {text_preview}...")
+            else:
+                st.info("No reranking results available")
+
+        with tab4:
+            # Generation Tab
+            st.markdown("### 🤖 Generation Details")
+
+            gen_info = ui["generation"]
+
+            col_g1, col_g2, col_g3, col_g4 = st.columns(4)
+            with col_g1:
+                model = gen_info.get("model", "Unknown")
+                st.metric("Model", model)
+            with col_g2:
+                latency = gen_info.get("latency_ms", 0)
+                st.metric("Latency", f"{latency:.0f}ms")
+            with col_g3:
+                tokens = gen_info.get("total_tokens", 0)
+                st.metric("Total Tokens", tokens if tokens > 0 else "N/A")
+            with col_g4:
+                cost = gen_info.get("estimated_cost", 0)
+                st.metric("Est. Cost", f"${cost:.4f}" if cost > 0 else "N/A")
+
+            # Additional generation info
+            col_g5, col_g6 = st.columns(2)
+            with col_g5:
+                tier = gen_info.get("tier", "unknown")
+                st.caption(f"**Tier:** {tier}")
+            with col_g6:
+                language = gen_info.get("language", "unknown")
+                st.caption(f"**Language:** {language}")
+
+            # Prompt snapshot (redacted)
+            st.markdown("**Prompt Structure**")
+            prompt_info = gen_info.get("prompt_info", {})
+            if prompt_info:
+                st.json(prompt_info)
+            else:
+                st.info("Prompt info not available")
+
+        with tab5:
+            # Vision Verify Tab - Check if vision was actually used in generation
+            vision_info = ui["vision"]
+
+            if vision_info.get("enabled", False):
+                st.markdown("### 👁️ Vision Generation Used")
+
+                pages_used = vision_info.get("pages_used", [])
+                pages_failed = vision_info.get("pages_failed", [])
+
+                if pages_used or pages_failed:
+                    col_v1, col_v2, col_v3 = st.columns(3)
+                    with col_v1:
+                        st.metric("PDF Pages Used", len(pages_used))
+                    with col_v2:
+                        st.metric("Pages Failed", len(pages_failed))
+                    with col_v3:
+                        total_pages = len(pages_used) + len(pages_failed)
+                        success_rate = (
+                            (len(pages_used) / total_pages * 100)
+                            if total_pages > 0
+                            else 0
+                        )
+                        st.metric("Success Rate", f"{success_rate:.1f}%")
+
+                    # Show page details
+                    if pages_used:
+                        st.markdown("**PDF Pages Processed:**")
+                        for page_info in pages_used:
+                            page_num = page_info.get("page", "N/A")
+                            pdf_path = page_info.get("pdf_path", "Unknown")
+                            # Extract filename from path
+                            import os
+
+                            filename = (
+                                os.path.basename(pdf_path)
+                                if pdf_path != "Unknown"
+                                else "Unknown"
+                            )
+                            st.write(f"- Page {page_num} from {filename[:60]}...")
+                else:
+                    st.info(
+                        "✅ Vision generation was enabled but no detailed metadata available"
+                    )
+            else:
+                # Check if vision is enabled in settings
+                if st.session_state.get("enable_vision", False):
+                    st.info(
+                        "👁️ Vision is enabled in settings, but was not used for this query.\n"
+                        "This could mean the answer was generated from text only."
+                    )
+                else:
+                    st.warning(
+                        "Vision features are disabled. Enable 'Vision Features' in sidebar settings to use vision generation."
+                    )
+
+        with tab6:
+            # Metrics Tab
+            st.markdown("### 📈 Performance Metrics")
+
+            # Latency breakdown
+            breakdown = meta.get("breakdown", {})
+            if breakdown:
+                fig = create_timeline_chart(breakdown)
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Additional metrics
+            col_mt1, col_mt2, col_mt3 = st.columns(3)
+            with col_mt1:
+                cache_hits = meta.get("cache_hits", 0)
+                st.metric("Cache Hits", cache_hits)
+            with col_mt2:
+                index_size = meta.get("index_size", 0)
+                st.metric("Index Size", f"{index_size:,}")
+            with col_mt3:
+                request_id = meta.get("request_id", "N/A")
+                st.metric("Request ID", request_id)
+
+        with tab7:
+            # Raw Data Tab
+            st.markdown("### 📜 Raw Response Data")
+            st.json(results)
+
+    else:
+        # No results yet - show placeholders
+        st.info("📝 Results will appear here after running a query")
+        st.caption("Enter a query and click 'Run Query' to see results")
 
     # Timeline visualization at bottom
     if st.session_state.query_results:
@@ -1595,3 +1609,34 @@ def render(vision_mode=False):
                 st.caption(f"{stage}: {time_ms:.0f}ms ({percentage:.1f}%)")
         else:
             st.info("No timing data available for this query")
+
+    # Render citations side sheet if opened
+    if (
+        st.session_state.get("show_citations_sheet", False)
+        and st.session_state.query_results
+    ):
+        results = st.session_state.query_results
+        citations = results.get("citations", [])
+
+        if citations:
+            try:
+                from streamlit_app.components.side_sheet import (
+                    render_citation_side_sheet,
+                )
+
+                render_citation_side_sheet(
+                    citations=citations,
+                    api_base_url=st.session_state.api_base_url,
+                    selected_citation_idx=0,
+                )
+            except ImportError:
+                try:
+                    from components.side_sheet import render_citation_side_sheet
+
+                    render_citation_side_sheet(
+                        citations=citations,
+                        api_base_url=st.session_state.api_base_url,
+                        selected_citation_idx=0,
+                    )
+                except Exception as e:
+                    st.error(f"Could not load side sheet: {e}")

@@ -2,7 +2,6 @@
 🚀 PVCFC RAG System - Simplified UI
 
 Production-grade retrieval-augmented question answering with citations.
-Material Design 3 (Expressive) themed interface.
 """
 
 import os
@@ -24,15 +23,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Initialize Material Design 3 theme
-try:
-    from streamlit_app.utils.theme import initialize_m3_theme
-
-    initialize_m3_theme()
-except ImportError:
-    from utils.theme import initialize_m3_theme
-
-    initialize_m3_theme()
+# Custom CSS
+st.markdown(
+    """
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 
 def initialize_session_state():
@@ -76,42 +87,76 @@ def _get_first(d: dict, keys: list, default: str = "—") -> str:
 
 
 def show_home():
-    """Render the Home page with M3-styled system status."""
-    # Use M3 typography for header
-    st.markdown(
-        '<h1 class="md-typescale-headline-medium">PVCFC RAG System</h1>',
-        unsafe_allow_html=True,
-    )
+    """Render the Home page with real API stats."""
+    st.title("PVCFC RAG System")
     st.caption(
         "Production-grade retrieval-augmented question answering with citations and document grounding."
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
 
-    # Use system_status component for consistency
-    try:
-        from streamlit_app.components.system_status import render_system_status
+    base = st.session_state.api_base_url
 
-        render_system_status(st.session_state.api_base_url)
-    except ImportError:
-        try:
-            from components.system_status import render_system_status
+    # Check health
+    health_ok = fetch_health(base)
 
-            render_system_status(st.session_state.api_base_url)
-        except Exception as e:
-            # Fallback to simple display
-            st.error(f"Could not load system status: {str(e)}")
+    # Fetch index stats
+    stats = None
+    stats_ok = False
+    if health_ok:
+        with st.spinner("Loading index statistics..."):
+            stats = fetch_index_stats(base)
+            stats_ok = stats is not None
 
-            base = st.session_state.api_base_url
-            health_ok = fetch_health(base)
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
 
-            if health_ok:
-                st.success("✅ Backend API is healthy")
-            else:
-                st.error(
-                    f"❌ Backend API is not reachable at `{base}`. "
-                    "Please verify the service is running."
-                )
+    with col1:
+        backend_status = "✅ Healthy" if health_ok else "❌ Unreachable"
+        st.metric("Backend Status", backend_status)
+
+    with col2:
+        if stats_ok:
+            # Try various possible keys for document count
+            doc_count = _get_first(
+                stats,
+                [
+                    "document_count",
+                    "total_documents",
+                    "num_documents",
+                    "bm25_num_docs",
+                    "faiss_num_vectors",
+                ],
+            )
+        else:
+            doc_count = "—"
+        st.metric("Documents Indexed", doc_count)
+
+    with col3:
+        if stats_ok:
+            retriever_type = _get_first(
+                stats,
+                ["retriever_type", "retriever", "index_type", "mode"],
+            )
+        else:
+            retriever_type = "—"
+        st.metric("Retriever Type", retriever_type)
+
+    st.markdown("---")
+
+    # Show more details if available
+    if stats_ok and stats:
+        with st.expander("📊 Detailed Statistics", expanded=False):
+            st.json(stats)
+
+    if not health_ok:
+        st.info(
+            f"⚠️ The backend API is not reachable at `{base}`. "
+            "Please verify the service is running and the URL is correct."
+        )
+        st.caption(
+            "You can start the API with: `uvicorn app.main:app --host 127.0.0.1 --port 8000`"
+        )
 
 
 def show_query_lab():
@@ -139,12 +184,9 @@ def main():
     # Initialize session state
     initialize_session_state()
 
-    # Sidebar navigation with M3 styling
+    # Sidebar navigation
     with st.sidebar:
-        st.markdown(
-            '<h2 class="md-typescale-title-large">🤖 PVCFC RAG</h2>',
-            unsafe_allow_html=True,
-        )
+        st.markdown("# 🤖 PVCFC RAG")
         st.markdown("---")
 
         # Simple navigation - only 2 pages
@@ -158,41 +200,8 @@ def main():
 
         st.markdown("---")
 
-        # Theme switcher
-        try:
-            from streamlit_app.utils.theme import render_theme_switcher
-
-            st.caption("**Theme**")
-            render_theme_switcher()
-        except ImportError:
-            try:
-                from utils.theme import render_theme_switcher
-
-                st.caption("**Theme**")
-                render_theme_switcher()
-            except:
-                pass
-
-        st.markdown("---")
-
-        # API Configuration
-        st.caption("**API Configuration**")
-        new_api_url = st.text_input(
-            "API Base URL",
-            value=st.session_state.api_base_url,
-            key="api_url_input",
-            label_visibility="collapsed",
-            help="Backend API endpoint",
-        )
-
-        if new_api_url != st.session_state.api_base_url:
-            st.session_state.api_base_url = new_api_url
-            st.success("✅ API URL updated")
-            st.rerun()
-
         # Minimal backend status indicator
-        st.markdown("---")
-        st.caption("**Backend Status**")
+        st.caption("**Backend**")
         base = st.session_state.api_base_url
         is_healthy = fetch_health(base, timeout=2)
 
@@ -201,11 +210,13 @@ def main():
         else:
             st.warning("⚠️ Unreachable")
 
+        st.caption(f"API: `{base}`")
+
         st.markdown("---")
 
         # Footer
-        st.caption("PVCFC RAG System v0.7.0")
-        st.caption("Material Design 3")
+        st.caption("PVCFC RAG System v0.6.1")
+        st.caption("Simplified UI")
 
     # Route to selected page
     if page == "🏠 Home":

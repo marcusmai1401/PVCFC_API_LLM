@@ -94,7 +94,7 @@ def render_system_status(api_base_url: str = None):
     if api_base_url is None:
         api_base_url = st.session_state.get("api_base_url", "http://localhost:8000")
 
-    st.markdown("### 📟 System Status")
+    st.markdown("### System Status")
 
     # Create refresh button
     col1, col2, col3 = st.columns([2, 1, 3])
@@ -128,7 +128,7 @@ def render_system_status(api_base_url: str = None):
         st.caption(f"Last updated: {cache_time}")
 
     # Display Health Status
-    st.markdown("#### 🏥 API Health")
+    st.markdown("#### API Health")
 
     if health_result.get("success"):
         health_data = health_result["data"]
@@ -179,7 +179,7 @@ def render_system_status(api_base_url: str = None):
     st.markdown("---")
 
     # Display Index Statistics
-    st.markdown("#### 📊 Index Statistics")
+    st.markdown("#### Index Statistics")
 
     if index_result.get("success"):
         stats_data = index_result.get("data", {})
@@ -216,60 +216,78 @@ def render_system_status(api_base_url: str = None):
                 st.caption(f"HyDE: {config.get('use_hyde', False)}")
 
         elif "bm25" in stats_data or "faiss" in stats_data or "weaviate" in stats_data:
-            # Using index manager format - support both FAISS and Weaviate
+            # Using index manager format - support Weaviate, Legacy FAISS, and Hybrid Modern
             retriever_type = stats_data.get("retriever_type", "unknown")
 
-            if retriever_type == "weaviate":
+            if retriever_type == "hybrid_modern":
+                # Modern Hybrid mode (Weaviate + OpenSearch)
+                st.write("Hybrid Retrieval: Weaviate + OpenSearch")
+
+                weaviate_stats = stats_data.get("weaviate", {})
+                opensearch_stats = stats_data.get("opensearch", {})
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    status = weaviate_stats.get("status", "unknown")
+                    collection = weaviate_stats.get("collection", "N/A")
+                    ready = weaviate_stats.get("ready", False)
+                    st.metric("Weaviate Status", status)
+                    st.metric("Collection", collection)
+                    st.metric("Ready", "Yes" if ready else "No")
+
+                with col2:
+                    index_name = opensearch_stats.get("index_name", "N/A")
+                    num_docs = opensearch_stats.get("num_documents", 0)
+                    store_size = opensearch_stats.get("store_size_human", "N/A")
+                    st.metric("OpenSearch Index", index_name)
+                    st.metric("Documents", f"{num_docs:,}")
+                    st.metric("Store Size", store_size)
+
+            elif retriever_type == "weaviate":
                 # Weaviate mode (Phase 4)
-                st.info("🔷 **Vector Database: Weaviate** (Phase 4)")
+                st.write("Vector Database: Weaviate")
 
                 weaviate_stats = stats_data.get("weaviate", {})
                 if weaviate_stats.get("loaded"):
-                    st.success("✅ Weaviate Connected")
                     col1, col2 = st.columns(2)
                     with col1:
                         st.metric("Collection", weaviate_stats.get("collection", "N/A"))
                     with col2:
-                        ready = (
-                            "✅ Ready" if weaviate_stats.get("ready") else "⚠️ Not Ready"
-                        )
+                        ready = "Ready" if weaviate_stats.get("ready") else "Not Ready"
                         st.metric("Status", ready)
                 else:
-                    st.warning("⚠️ Weaviate Not Connected")
+                    st.warning("Weaviate Not Connected")
                     st.caption("Weaviate is not available")
 
             elif retriever_type == "faiss":
                 # FAISS mode (Legacy)
-                st.info("📊 **Retrieval: Hybrid BM25 + FAISS** (Legacy)")
+                st.write("Retrieval: Hybrid BM25 + FAISS (Legacy)")
                 col1, col2 = st.columns(2)
 
                 # BM25 Stats
                 with col1:
                     bm25_stats = stats_data.get("bm25", {})
                     if bm25_stats.get("loaded"):
-                        st.success("✅ BM25 Index Loaded")
                         doc_count = bm25_stats.get("doc_count", 0)
                         chunk_count = bm25_stats.get("chunk_count", 0)
                         st.metric("Documents", f"{doc_count:,}")
                         st.metric("Chunks", f"{chunk_count:,}")
                     else:
-                        st.warning("⚠️ BM25 Index Not Loaded")
-                        st.caption("No BM25 index available")
+                        st.caption("BM25 index not loaded")
 
                 # FAISS Stats
                 with col2:
                     faiss_stats = stats_data.get("faiss", {})
                     if faiss_stats.get("loaded"):
-                        st.success("✅ Vector Index Loaded")
                         vector_count = faiss_stats.get("vector_count", 0)
                         dimension = faiss_stats.get("dimension", 0)
                         st.metric("Vectors", f"{vector_count:,}")
                         st.metric("Dimension", dimension)
                     else:
-                        st.warning("⚠️ Vector Index Not Loaded")
-                        st.caption("No vector index available")
+                        st.caption("Vector index not loaded")
             else:
-                st.warning(f"⚠️ Unknown retriever type: {retriever_type}")
+                st.caption(f"Retriever type: {retriever_type}")
 
             # Metadata if available
             metadata = stats_data.get("metadata", {})

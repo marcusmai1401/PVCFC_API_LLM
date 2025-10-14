@@ -1,0 +1,235 @@
+/**
+ * Material Design 3 - Design Tokens
+ * Generated from tokens.json with seed color #0E7B55
+ * Supports light and dark themes with color roles
+ */
+
+/* Light theme tokens */
+:root,
+:root[data-theme="light"] {
+  /* Primary */
+  --md-sys-color-primary: oklch(48% 0.15 160);
+  --md-sys-color-on-primary: oklch(100% 0 0);
+  --md-sys-color-primary-container: oklch(88% 0.12 160);
+  --md-sys-color-on-primary-container: oklch(15% 0.15 160);
+
+  /* Secondary */
+  --md-sys-color-secondary: oklch(52% 0.08 200);
+  --md-sys-color-on-secondary: oklch(100% 0 0);
+  --md-sys-color-secondary-container: oklch(88% 0.06 200);
+  --md-sys-color-on-secondary-container: oklch(18% 0.08 200);
+
+  /* Tertiary */
+  --md-sys-color-tertiary: oklch(58% 0.12 280);
+  --md-sys-color-on-tertiary: oklch(100% 0 0);
+  --md-sys-color-tertiary-container: oklch(92% 0.08 280);
+  --md-sys-color-on-tertiary-container: oklch(22% 0.12 280);
+
+  /* Error */
+  --md-sys-color-error: oklch(58% 0.22 25);
+  --md-sys-color-on-error: oklch(100% 0 0);
+  --md-sys-color-error-container: oklch(92% 0.15 25);
+  --md-sys-color-on-error-container: oklch(25% 0.22 25);
+
+  /* Surface */
+  --md-sys-color-surface: oklch(98% 0.005 160);
+  --md-sys-color-on-surface: oklch(20% 0.02 160);
+  --md-sys-color-surface-variant: oklch(92% 0.01 160);
+  --md-sys-color-on-surface-variant: oklch(42% 0.02 160);
+
+  /* Outline */
+  --md-sys-color-outline: oklch(58% 0.02 160);
+  --md-sys-color-outline-variant: oklch(78% 0.01 160);
+
+  /* Inverse */
+  --md-sys-color-inverse-surface: oklch(24% 0.02 160);
+  --md-sys-color-inverse-on-surface: oklch(95% 0.01 160);
+  --md-sys-color-inverse-primary: oklch(78% 0.15 160);
+
+  /* Surface containers */
+  --md-sys-color-surface-dim: oklch(88% 0.01 160);
+  --md-sys-color-surface-bright: oklch(98% 0.005 160);
+  --md-sys-color-surface-container-lowest: oklch(100% 0 0);
+  --md-sys-color-surface-container-low: oklch(96% 0.005 160);
+  --md-sys-color-surface-container: oklch(94% 0.01 160);
+  --md-sys-color-surface-container-high: oklch(92% 0.01 160);
+  --md-sys-color-surface-container-highest: oklch(90% 0.01 160);
+}
+
+/* Dark theme tokens */
+:root[data-theme="dark"] {
+  /* Primary */
+  --md-sys-color-primary: oklch(78% 0.15 160);
+  --md-sys-color-on-primary: oklch(22% 0.15 160);
+  --md-sys-color-primary-container: oklch(35% 0.15 160);
+  --md-sys-color-on-primary-container: oklch(88% 0.12 160);
+
+  /* Secondary */
+  --md-sys-color-secondary: oklch(78% 0.08 200);
+  --md-sys-color-on-secondary: oklch(28% 0.08 200);
+  --md-sys-color-secondary-container: oklch(38% 0.08 200);
+  --md-sys-color-on-secondary-container: oklch(88% 0.06 200);
+
+  /* Tertiary */
+  --md-sys-color-tertiary: oklch(82% 0.12 280);
+  --md-sys-color-on-tertiary: oklch(32% 0.12 280);
+  --md-sys-color-tertiary-container: oklch(42% 0.12 280);
+  --md-sys-color-on-tertiary-container: oklch(92% 0.08 280);
+
+  /* Error */
+  --md-sys-color-error: oklch(80% 0.22 25);
+  --md-sys-color-on-error: oklch(32% 0.22 25);
+  --md-sys-color-error-container: oklch(42% 0.22 25);
+  --md-sys-color-on-error-container: oklch(92% 0.15 25);
+
+  /* Surface */
+  --md-sys-color-surface: oklch(15% 0.02 160);
+  --md-sys-color-on-surface: oklch(90% 0.01 160);
+  --md-sys-color-surface-variant: oklch(28% 0.02 160);
+  --md-sys-color-on-surface-variant: oklch(75% 0.02 160);
+
+  /* Outline */
+  --md-sys-color-outline: oklch(60% 0.02 160);
+  --md-sys-color-outline-variant: oklch(35% 0.02 160);
+
+  /* Inverse */
+  --md-sys-color-inverse-surface: oklch(90% 0.01 160);
+  --md-sys-color-inverse-on-surface: oklch(24% 0.02 160);
+  --md-sys-color-inverse-primary: oklch(48% 0.15 160);
+
+  /* Surface containers */
+  --md-sys-color-surface-dim: oklch(15% 0.02 160);
+  --md-sys-color-surface-bright: oklch(32% 0.02 160);
+  --md-sys-color-surface-container-lowest: oklch(10% 0.02 160);
+  --md-sys-color-surface-container-low: oklch(18% 0.02 160);
+  --md-sys-color-surface-container: oklch(22% 0.02 160);
+  --md-sys-color-surface-container-high: oklch(26% 0.02 160);
+  --md-sys-color-surface-container-highest: oklch(30% 0.02 160);
+}
+
+/* Typography scale */
+:root {
+  /* Display */
+  --md-sys-typescale-display-large-size: 57px;
+  --md-sys-typescale-display-large-line-height: 64px;
+  --md-sys-typescale-display-large-weight: 400;
+  --md-sys-typescale-display-large-tracking: -0.25px;
+
+  --md-sys-typescale-display-medium-size: 45px;
+  --md-sys-typescale-display-medium-line-height: 52px;
+  --md-sys-typescale-display-medium-weight: 400;
+  --md-sys-typescale-display-medium-tracking: 0;
+
+  --md-sys-typescale-display-small-size: 36px;
+  --md-sys-typescale-display-small-line-height: 44px;
+  --md-sys-typescale-display-small-weight: 400;
+  --md-sys-typescale-display-small-tracking: 0;
+
+  /* Headline */
+  --md-sys-typescale-headline-large-size: 32px;
+  --md-sys-typescale-headline-large-line-height: 40px;
+  --md-sys-typescale-headline-large-weight: 400;
+  --md-sys-typescale-headline-large-tracking: 0;
+
+  --md-sys-typescale-headline-medium-size: 28px;
+  --md-sys-typescale-headline-medium-line-height: 36px;
+  --md-sys-typescale-headline-medium-weight: 400;
+  --md-sys-typescale-headline-medium-tracking: 0;
+
+  --md-sys-typescale-headline-small-size: 24px;
+  --md-sys-typescale-headline-small-line-height: 32px;
+  --md-sys-typescale-headline-small-weight: 400;
+  --md-sys-typescale-headline-small-tracking: 0;
+
+  /* Title */
+  --md-sys-typescale-title-large-size: 22px;
+  --md-sys-typescale-title-large-line-height: 28px;
+  --md-sys-typescale-title-large-weight: 500;
+  --md-sys-typescale-title-large-tracking: 0;
+
+  --md-sys-typescale-title-medium-size: 16px;
+  --md-sys-typescale-title-medium-line-height: 24px;
+  --md-sys-typescale-title-medium-weight: 500;
+  --md-sys-typescale-title-medium-tracking: 0.15px;
+
+  --md-sys-typescale-title-small-size: 14px;
+  --md-sys-typescale-title-small-line-height: 20px;
+  --md-sys-typescale-title-small-weight: 500;
+  --md-sys-typescale-title-small-tracking: 0.1px;
+
+  /* Label */
+  --md-sys-typescale-label-large-size: 14px;
+  --md-sys-typescale-label-large-line-height: 20px;
+  --md-sys-typescale-label-large-weight: 500;
+  --md-sys-typescale-label-large-tracking: 0.1px;
+
+  --md-sys-typescale-label-medium-size: 12px;
+  --md-sys-typescale-label-medium-line-height: 16px;
+  --md-sys-typescale-label-medium-weight: 500;
+  --md-sys-typescale-label-medium-tracking: 0.5px;
+
+  --md-sys-typescale-label-small-size: 11px;
+  --md-sys-typescale-label-small-line-height: 16px;
+  --md-sys-typescale-label-small-weight: 500;
+  --md-sys-typescale-label-small-tracking: 0.5px;
+
+  /* Body */
+  --md-sys-typescale-body-large-size: 16px;
+  --md-sys-typescale-body-large-line-height: 24px;
+  --md-sys-typescale-body-large-weight: 400;
+  --md-sys-typescale-body-large-tracking: 0.5px;
+
+  --md-sys-typescale-body-medium-size: 14px;
+  --md-sys-typescale-body-medium-line-height: 20px;
+  --md-sys-typescale-body-medium-weight: 400;
+  --md-sys-typescale-body-medium-tracking: 0.25px;
+
+  --md-sys-typescale-body-small-size: 12px;
+  --md-sys-typescale-body-small-line-height: 16px;
+  --md-sys-typescale-body-small-weight: 400;
+  --md-sys-typescale-body-small-tracking: 0.4px;
+}
+
+/* Shape scale */
+:root {
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+}
+
+/* Elevation */
+:root {
+  --md-sys-elevation-level0: none;
+  --md-sys-elevation-level1: 0px 1px 2px 0px rgba(0,0,0,0.3), 0px 1px 3px 1px rgba(0,0,0,0.15);
+  --md-sys-elevation-level2: 0px 1px 2px 0px rgba(0,0,0,0.3), 0px 2px 6px 2px rgba(0,0,0,0.15);
+  --md-sys-elevation-level3: 0px 4px 8px 3px rgba(0,0,0,0.15), 0px 1px 3px 0px rgba(0,0,0,0.3);
+  --md-sys-elevation-level4: 0px 6px 10px 4px rgba(0,0,0,0.15), 0px 2px 3px 0px rgba(0,0,0,0.3);
+  --md-sys-elevation-level5: 0px 8px 12px 6px rgba(0,0,0,0.15), 0px 4px 4px 0px rgba(0,0,0,0.3);
+}
+
+/* Motion */
+:root {
+  --md-sys-motion-duration-short1: 50ms;
+  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-medium1: 250ms;
+  --md-sys-motion-duration-medium2: 300ms;
+  --md-sys-motion-duration-long1: 400ms;
+  --md-sys-motion-duration-long2: 500ms;
+
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+}
+
+/* State layer opacity */
+:root {
+  --md-sys-state-hover-opacity: 0.08;
+  --md-sys-state-focus-opacity: 0.12;
+  --md-sys-state-pressed-opacity: 0.12;
+  --md-sys-state-dragged-opacity: 0.16;
+}
