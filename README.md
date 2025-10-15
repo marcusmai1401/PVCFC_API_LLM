@@ -501,18 +501,19 @@ Code - API_LLM_PVCFC/
 ```
 
 **Key directories:**
-- **`DOCUMENTS_CHATBOX/docs/`** - All documentation organized by category (guides, analysis, completion)
+- **`docs/guides/`** - Operational guides and runbooks for this repo (Quick Start, Pre-Launch, Design UI, Vision strategy)
+- **`DOCUMENTS_CHATBOX/docs/`** - Long-form project documentation (architecture, broader project guides)
 - **`scripts/`** - All utility scripts organized by purpose (diagnostics, utilities, weaviate)
 - **`app/`** - Main application code (FastAPI + RAG pipeline)
 - **`tools/`** - Build tools and benchmarks
 - **`artifacts/`** - Generated data (indices, ingestion outputs)
 
 **Quick links:**
-- 📖 Documentation: [`DOCUMENTS_CHATBOX/docs/README.md`](DOCUMENTS_CHATBOX/docs/README.md)
-- 🎓 Learning Guide: [`DOCUMENTS_CHATBOX/docs/PROJECT_MASTERY_GUIDE.md`](DOCUMENTS_CHATBOX/docs/PROJECT_MASTERY_GUIDE.md)
-- 🗺️ Documentation Index: [`DOCUMENTS_CHATBOX/docs/DOCUMENTATION_INDEX.md`](DOCUMENTS_CHATBOX/docs/DOCUMENTATION_INDEX.md)
+- 📖 Documentation index (long-form): [`DOCUMENTS_CHATBOX/docs/README.md`](DOCUMENTS_CHATBOX/docs/README.md)
+- 📚 Operational guides index: [`docs/guides/README.md`](docs/guides/README.md)
 - 🔧 Scripts: [`scripts/README.md`](scripts/README.md)
-- 🚀 Getting Started: [`DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_QUICKSTART.md`](DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_QUICKSTART.md)
+- 🚀 Getting Started: [`docs/guides/QUICK_START.md`](docs/guides/QUICK_START.md)
+- ✅ Pre-launch checklist: [`docs/guides/PRE_LAUNCH_CHECKLIST.md`](docs/guides/PRE_LAUNCH_CHECKLIST.md)
 
 ---
 
