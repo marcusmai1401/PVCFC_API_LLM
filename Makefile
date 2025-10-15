@@ -42,7 +42,7 @@ lint: ## Kiểm tra code quality (placeholder)
 
 smoke: ## Test kết nối LLM (nếu có key)
 	@echo "Running smoke tests..."
-	$(PYTHON_VENV) tools/smoke_test.py || echo "Smoke test skipped - no LLM keys configured"
+	@echo "Use pytest tests/ or manual API tests"
 
 clean: ## Xóa cache và temp files
 	@echo "Cleaning up..."
@@ -59,9 +59,9 @@ ingest-pilot: ## Ingest pilot documents (Phase 1)
 	@echo "Ingesting pilot documents..."
 	$(PYTHON_VENV) tools/extract_pilot.py
 
-build-index: ## Build search indices (Phase 1)
-	@echo "Building BM25 search index..."
-	$(PYTHON_VENV) tools/demo_pipeline.py
+build-index: ## Build search indices
+	@echo "Building production indices..."
+	$(PYTHON_VENV) tools/ops/build_production_indices.py
 
 qa-extraction: ## Run QA on extracted documents
 	@echo "Running extraction quality analysis..."

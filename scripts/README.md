@@ -6,10 +6,16 @@ Utility and diagnostic scripts organized by purpose.
 
 ```
 scripts/
-├── diagnostics/         # Diagnostic and debugging scripts
-├── utilities/           # General utility scripts
-├── weaviate/           # Weaviate-specific setup and testing
-└── [existing]/         # phase1_index_to_weaviate.py, verify_weaviate_data.py, etc.
+├── debug/              # Debug scripts
+├── diagnostics/        # Diagnostic and debugging scripts
+├── eval_bge_rerank/    # BGE reranker evaluation suite
+├── examples/           # Usage examples
+├── ingestion/          # Ingestion entry points
+├── opensearch/         # OpenSearch utilities
+├── test/               # Test scripts
+├── utilities/          # General utility scripts
+├── weaviate/           # Weaviate setup and testing
+└── README.md           # This file
 ```
 
 ## 🔍 Diagnostics (`diagnostics/`)

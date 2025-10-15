@@ -36,8 +36,7 @@ def main():
 
     files_to_fix = [
         ("app/main.py", r"\*{9}", "127.0.0.1"),
-        ("scripts/run.ps1", r"\*{9}", "127.0.0.1"),
-        ("start_api.ps1", r"\*{9}", "127.0.0.1"),
+        ("launchers/start_api.ps1", r"\*{9}", "127.0.0.1"),
         ("QUICKSTART.md", r"\*{9}", "127.0.0.1"),
     ]
 
@@ -57,8 +56,7 @@ def main():
     print("\nChecking for 0.0.0.0 references...")
     files_to_check = [
         "app/main.py",
-        "scripts/run.ps1",
-        "start_api.ps1",
+        "launchers/start_api.ps1",
         "Dockerfile",
         "Makefile",
     ]

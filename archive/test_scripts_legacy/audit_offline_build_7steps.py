@@ -124,7 +124,9 @@ class OfflineBuildAuditor:
 
         # Verify test data exists
         if not self.test_data_dir.exists():
-            raise FileNotFoundError(f"Test data directory not found: {self.test_data_dir}")
+            raise FileNotFoundError(
+                f"Test data directory not found: {self.test_data_dir}"
+            )
 
         pdf_count = len(list(self.test_data_dir.glob("*.pdf")))
         logger.info(f"✓ Found {pdf_count} test PDFs in {self.test_data_dir}")
@@ -136,7 +138,7 @@ class OfflineBuildAuditor:
     def audit_step1_scan(self):
         """
         Audit Step 1: Scan PDFs recursively
-        
+
         Checks:
         - rglob works correctly
         - Only .pdf files collected
@@ -156,33 +158,67 @@ class OfflineBuildAuditor:
             # Check 1: rglob works
             if len(pdf_files) > 0:
                 findings.append(
-                    {"check": "rglob_functional", "status": "PASS", "value": len(pdf_files)}
+                    {
+                        "check": "rglob_functional",
+                        "status": "PASS",
+                        "value": len(pdf_files),
+                    }
                 )
             else:
-                findings.append({"check": "rglob_functional", "status": "FAIL", "issue": "No PDFs found"})
+                findings.append(
+                    {
+                        "check": "rglob_functional",
+                        "status": "FAIL",
+                        "issue": "No PDFs found",
+                    }
+                )
 
             # Check 2: Only PDF files
-            non_pdf = [f for f in self.test_data_dir.rglob("*") if f.is_file() and f.suffix.lower() != ".pdf"]
+            non_pdf = [
+                f
+                for f in self.test_data_dir.rglob("*")
+                if f.is_file() and f.suffix.lower() != ".pdf"
+            ]
             if non_pdf:
                 logger.info(f"Found {len(non_pdf)} non-PDF files (should be ignored)")
                 details["non_pdf_files"] = len(non_pdf)
-                findings.append({"check": "filter_non_pdf", "status": "PASS", "note": "Non-PDF files correctly ignored"})
-            
+                findings.append(
+                    {
+                        "check": "filter_non_pdf",
+                        "status": "PASS",
+                        "note": "Non-PDF files correctly ignored",
+                    }
+                )
+
             # Check 3: Unicode paths
             unicode_pdfs = [f for f in pdf_files if any(ord(c) > 127 for c in str(f))]
             if unicode_pdfs:
                 logger.info(f"Found {len(unicode_pdfs)} PDFs with Unicode paths")
                 details["unicode_paths"] = len(unicode_pdfs)
-                findings.append({"check": "unicode_support", "status": "NEEDS_TEST", "note": "Unicode paths present, need to verify processing"})
+                findings.append(
+                    {
+                        "check": "unicode_support",
+                        "status": "NEEDS_TEST",
+                        "note": "Unicode paths present, need to verify processing",
+                    }
+                )
             else:
                 details["unicode_paths"] = 0
 
             # Check 4: Path length (Windows MAX_PATH issue)
             long_paths = [f for f in pdf_files if len(str(f)) > 200]
             if long_paths:
-                logger.warning(f"Found {len(long_paths)} PDFs with long paths (>200 chars)")
+                logger.warning(
+                    f"Found {len(long_paths)} PDFs with long paths (>200 chars)"
+                )
                 details["long_paths"] = len(long_paths)
-                findings.append({"check": "long_paths", "status": "WARNING", "count": len(long_paths)})
+                findings.append(
+                    {
+                        "check": "long_paths",
+                        "status": "WARNING",
+                        "count": len(long_paths),
+                    }
+                )
             else:
                 details["long_paths"] = 0
                 findings.append({"check": "long_paths", "status": "PASS"})
@@ -228,20 +264,24 @@ class OfflineBuildAuditor:
             # Check 1: min_text_length threshold
             # Review code: checks if char_count < 40 for OCR decision
             threshold = 40  # From pdf_processor.py line 256
-            findings.append({
-                "check": "ocr_threshold",
-                "status": "INFO",
-                "value": threshold,
-                "note": "Pages with < 40 chars trigger OCR"
-            })
+            findings.append(
+                {
+                    "check": "ocr_threshold",
+                    "status": "INFO",
+                    "value": threshold,
+                    "note": "Pages with < 40 chars trigger OCR",
+                }
+            )
 
             # Check 2: source_format logic (lines 207-212)
             # Logic: scanned_pages==0 → vector; vector_pages==0 → scan; else → mixed
-            findings.append({
-                "check": "source_format_logic",
-                "status": "PASS",
-                "note": "Correct 3-way classification: vector/scan/mixed"
-            })
+            findings.append(
+                {
+                    "check": "source_format_logic",
+                    "status": "PASS",
+                    "note": "Correct 3-way classification: vector/scan/mixed",
+                }
+            )
 
             # Check 3: Test with actual PDFs
             processor = PDFProcessor(enable_ocr=False)
@@ -254,20 +294,24 @@ class OfflineBuildAuditor:
                         f"  {pdf_path.name}: {pdf_doc.source_format} "
                         f"({pdf_doc.num_pages} pages, {pdf_doc.total_chars} chars)"
                     )
-                    details.setdefault("detected_formats", []).append({
-                        "file": pdf_path.name,
-                        "format": pdf_doc.source_format,
-                        "pages": pdf_doc.num_pages,
-                        "chars": pdf_doc.total_chars
-                    })
+                    details.setdefault("detected_formats", []).append(
+                        {
+                            "file": pdf_path.name,
+                            "format": pdf_doc.source_format,
+                            "pages": pdf_doc.num_pages,
+                            "chars": pdf_doc.total_chars,
+                        }
+                    )
                 except Exception as e:
                     logger.error(f"  {pdf_path.name}: FAILED - {e}")
-                    findings.append({
-                        "check": "processing_test",
-                        "status": "FAIL",
-                        "file": pdf_path.name,
-                        "error": str(e)
-                    })
+                    findings.append(
+                        {
+                            "check": "processing_test",
+                            "status": "FAIL",
+                            "file": pdf_path.name,
+                            "error": str(e),
+                        }
+                    )
 
             self.test_results["step2_detect"] = {
                 "status": "PASS",
@@ -310,56 +354,68 @@ class OfflineBuildAuditor:
             # Check 1: OCR availability
             ocr_status = get_ocr_status()
             details["ocr_available"] = ocr_status.get("ocr_enabled", False)
-            findings.append({
-                "check": "ocr_availability",
-                "status": "PASS" if details["ocr_available"] else "WARNING",
-                "value": details["ocr_available"]
-            })
+            findings.append(
+                {
+                    "check": "ocr_availability",
+                    "status": "PASS" if details["ocr_available"] else "WARNING",
+                    "value": details["ocr_available"],
+                }
+            )
 
             # Check 2: DPI/zoom setting
             # From pdf_processor.py line 359: mat = fitz.Matrix(2, 2) → 2x zoom
             dpi_note = "2x zoom matrix (approx 144 DPI from 72 base)"
-            findings.append({
-                "check": "ocr_dpi",
-                "status": "INFO",
-                "value": "2x zoom",
-                "note": dpi_note,
-                "recommendation": "Consider adaptive DPI 3x-4x for low-res scans"
-            })
+            findings.append(
+                {
+                    "check": "ocr_dpi",
+                    "status": "INFO",
+                    "value": "2x zoom",
+                    "note": dpi_note,
+                    "recommendation": "Consider adaptive DPI 3x-4x for low-res scans",
+                }
+            )
 
             # Check 3: Confidence threshold
             # From pdf_processor.py line 381-383: ocr_min_confidence default 30.0
-            findings.append({
-                "check": "ocr_confidence",
-                "status": "PASS",
-                "value": "30%",
-                "note": "Reasonable threshold for technical docs"
-            })
+            findings.append(
+                {
+                    "check": "ocr_confidence",
+                    "status": "PASS",
+                    "value": "30%",
+                    "note": "Reasonable threshold for technical docs",
+                }
+            )
 
             # Check 4: Multi-language support
             # ocr_language parameter supports "vie+eng"
-            findings.append({
-                "check": "multilingual_ocr",
-                "status": "PASS",
-                "value": "vie+eng supported",
-                "note": "PaddleOCR supports Vietnamese + English"
-            })
+            findings.append(
+                {
+                    "check": "multilingual_ocr",
+                    "status": "PASS",
+                    "value": "vie+eng supported",
+                    "note": "PaddleOCR supports Vietnamese + English",
+                }
+            )
 
             # Check 5: Cache mechanism
             # Lines 262-273 show OCR caching logic
-            findings.append({
-                "check": "ocr_cache",
-                "status": "PASS",
-                "note": "Cache by (pdf_path, page_num) exists"
-            })
+            findings.append(
+                {
+                    "check": "ocr_cache",
+                    "status": "PASS",
+                    "note": "Cache by (pdf_path, page_num) exists",
+                }
+            )
 
             # Check 6: Error handling
             # Need to verify quarantine for corrupt/password PDFs
-            findings.append({
-                "check": "error_handling",
-                "status": "NEEDS_TEST",
-                "note": "Need to test with corrupt/password PDFs"
-            })
+            findings.append(
+                {
+                    "check": "error_handling",
+                    "status": "NEEDS_TEST",
+                    "note": "Need to test with corrupt/password PDFs",
+                }
+            )
 
             self.test_results["step3_parse_ocr"] = {
                 "status": "PASS",
@@ -403,13 +459,15 @@ class OfflineBuildAuditor:
                 "Lowercase conversion",
                 "Line-ending hyphen removal",
                 "Whitespace collapse",
-                "Trim whitespace"
+                "Trim whitespace",
             ]
-            findings.append({
-                "check": "normalization_steps",
-                "status": "PASS",
-                "steps": normalization_steps
-            })
+            findings.append(
+                {
+                    "check": "normalization_steps",
+                    "status": "PASS",
+                    "steps": normalization_steps,
+                }
+            )
 
             # Check 2: Unit preservation - CRITICAL
             # Need to verify units are NOT removed
@@ -420,8 +478,8 @@ class OfflineBuildAuditor:
                 ("Voltage: 220V AC", "voltage: 220v ac"),  # Electrical unit
             ]
 
-            import unicodedata
             import re
+            import unicodedata
 
             unit_preservation_ok = True
             for original, expected_normalized in test_strings:
@@ -434,35 +492,43 @@ class OfflineBuildAuditor:
                 # Check critical characters
                 if "°" in original and "°" not in normalized:
                     unit_preservation_ok = False
-                    findings.append({
-                        "check": "unit_preservation",
-                        "status": "FAIL",
-                        "issue": f"Degree symbol lost: '{original}' → '{normalized}'"
-                    })
+                    findings.append(
+                        {
+                            "check": "unit_preservation",
+                            "status": "FAIL",
+                            "issue": f"Degree symbol lost: '{original}' → '{normalized}'",
+                        }
+                    )
                 if "%" in original and "%" not in normalized:
                     unit_preservation_ok = False
-                    findings.append({
-                        "check": "unit_preservation",
-                        "status": "FAIL",
-                        "issue": f"Percent symbol lost: '{original}' → '{normalized}'"
-                    })
+                    findings.append(
+                        {
+                            "check": "unit_preservation",
+                            "status": "FAIL",
+                            "issue": f"Percent symbol lost: '{original}' → '{normalized}'",
+                        }
+                    )
 
             if unit_preservation_ok:
-                findings.append({
-                    "check": "unit_preservation",
-                    "status": "PASS",
-                    "note": "Units (°, %, bar) preserved in normalization"
-                })
+                findings.append(
+                    {
+                        "check": "unit_preservation",
+                        "status": "PASS",
+                        "note": "Units (°, %, bar) preserved in normalization",
+                    }
+                )
 
             # Check 3: Markdown converter
             from app.rag.converters.markdown_converter import MarkdownConverter
 
             converter = MarkdownConverter()
-            findings.append({
-                "check": "markdown_converter",
-                "status": "PASS",
-                "note": "Converter initialized successfully"
-            })
+            findings.append(
+                {
+                    "check": "markdown_converter",
+                    "status": "PASS",
+                    "note": "Converter initialized successfully",
+                }
+            )
 
             self.test_results["step4_normalize"] = {
                 "status": "PASS",
@@ -507,50 +573,74 @@ class OfflineBuildAuditor:
             details["chunk_overlap"] = chunker.chunk_overlap
 
             if chunker.max_chunk_size == 1000:
-                findings.append({"check": "chunk_size", "status": "PASS", "value": 1000})
+                findings.append(
+                    {"check": "chunk_size", "status": "PASS", "value": 1000}
+                )
             else:
-                findings.append({
-                    "check": "chunk_size",
-                    "status": "FAIL",
-                    "expected": 1000,
-                    "actual": chunker.max_chunk_size
-                })
+                findings.append(
+                    {
+                        "check": "chunk_size",
+                        "status": "FAIL",
+                        "expected": 1000,
+                        "actual": chunker.max_chunk_size,
+                    }
+                )
 
             if chunker.chunk_overlap == 200:
-                findings.append({"check": "chunk_overlap", "status": "PASS", "value": 200})
+                findings.append(
+                    {"check": "chunk_overlap", "status": "PASS", "value": 200}
+                )
             else:
-                findings.append({
-                    "check": "chunk_overlap",
-                    "status": "WARNING",
-                    "expected": 200,
-                    "actual": chunker.chunk_overlap
-                })
+                findings.append(
+                    {
+                        "check": "chunk_overlap",
+                        "status": "WARNING",
+                        "expected": 200,
+                        "actual": chunker.chunk_overlap,
+                    }
+                )
 
             # Check 2: Test chunking with sample text
-            test_markdown = "# Test Document\n\n" + ("This is a test paragraph. " * 200)  # ~4000 chars
+            test_markdown = "# Test Document\n\n" + (
+                "This is a test paragraph. " * 200
+            )  # ~4000 chars
             chunks = chunker.chunk_markdown(test_markdown, doc_id="TEST_001")
 
             details["test_chunks_created"] = len(chunks)
-            logger.info(f"  Test: {len(chunks)} chunks created from ~4000 char document")
+            logger.info(
+                f"  Test: {len(chunks)} chunks created from ~4000 char document"
+            )
 
             # Verify chunk metadata
             if chunks:
                 first_chunk = chunks[0]
-                metadata_fields = ["chunk_id", "doc_id", "page_start", "page_end", "char_count"]
-                missing_fields = [f for f in metadata_fields if not hasattr(first_chunk, f)]
+                metadata_fields = [
+                    "chunk_id",
+                    "doc_id",
+                    "page_start",
+                    "page_end",
+                    "char_count",
+                ]
+                missing_fields = [
+                    f for f in metadata_fields if not hasattr(first_chunk, f)
+                ]
 
                 if not missing_fields:
-                    findings.append({
-                        "check": "chunk_metadata",
-                        "status": "PASS",
-                        "fields": metadata_fields
-                    })
+                    findings.append(
+                        {
+                            "check": "chunk_metadata",
+                            "status": "PASS",
+                            "fields": metadata_fields,
+                        }
+                    )
                 else:
-                    findings.append({
-                        "check": "chunk_metadata",
-                        "status": "FAIL",
-                        "missing_fields": missing_fields
-                    })
+                    findings.append(
+                        {
+                            "check": "chunk_metadata",
+                            "status": "FAIL",
+                            "missing_fields": missing_fields,
+                        }
+                    )
 
                 # Check chunk ID uniqueness
                 chunk_ids = [c.chunk_id for c in chunks]
@@ -558,11 +648,13 @@ class OfflineBuildAuditor:
                 if len(chunk_ids) == len(unique_ids):
                     findings.append({"check": "chunk_id_unique", "status": "PASS"})
                 else:
-                    findings.append({
-                        "check": "chunk_id_unique",
-                        "status": "FAIL",
-                        "duplicates": len(chunk_ids) - len(unique_ids)
-                    })
+                    findings.append(
+                        {
+                            "check": "chunk_id_unique",
+                            "status": "FAIL",
+                            "duplicates": len(chunk_ids) - len(unique_ids),
+                        }
+                    )
 
             self.test_results["step5_chunking"] = {
                 "status": "PASS",
@@ -606,22 +698,26 @@ class OfflineBuildAuditor:
                 "doc_id_map.json",
                 "quarantine.jsonl",
                 "manifests/corpus_manifest.jsonl",
-                "manifests/checksums_manifest.jsonl"
+                "manifests/checksums_manifest.jsonl",
             ]
 
-            findings.append({
-                "check": "expected_artifacts",
-                "status": "INFO",
-                "files": expected_artifacts
-            })
+            findings.append(
+                {
+                    "check": "expected_artifacts",
+                    "status": "INFO",
+                    "files": expected_artifacts,
+                }
+            )
 
             # Check: Locks for concurrency
             # tools/ingest.py uses _dedup_lock, _quarantine_lock
-            findings.append({
-                "check": "concurrency_safety",
-                "status": "PASS",
-                "note": "Uses locks for dedup_lock, quarantine_lock"
-            })
+            findings.append(
+                {
+                    "check": "concurrency_safety",
+                    "status": "PASS",
+                    "note": "Uses locks for dedup_lock, quarantine_lock",
+                }
+            )
 
             self.test_results["step6_artifacts"] = {
                 "status": "PASS",
@@ -663,48 +759,66 @@ class OfflineBuildAuditor:
                 content = f.read()
 
             # Check if content dedup is commented out
-            if "# CONTENT DEDUPLICATION DISABLED" in content or "# ===== CONTENT DEDUPLICATION DISABLED =====" in content:
-                findings.append({
-                    "check": "content_dedup_disabled",
-                    "status": "PASS",
-                    "note": "Content deduplication is correctly disabled"
-                })
+            if (
+                "# CONTENT DEDUPLICATION DISABLED" in content
+                or "# ===== CONTENT DEDUPLICATION DISABLED =====" in content
+            ):
+                findings.append(
+                    {
+                        "check": "content_dedup_disabled",
+                        "status": "PASS",
+                        "note": "Content deduplication is correctly disabled",
+                    }
+                )
                 details["content_dedup_status"] = "DISABLED"
-            elif "if content_hash in self.content_hash_map:" in content and "return {\"status\": \"duplicate\"}" in content:
-                findings.append({
-                    "check": "content_dedup_disabled",
-                    "status": "FAIL",
-                    "issue": "Content dedup appears to still be active!"
-                })
+            elif (
+                "if content_hash in self.content_hash_map:" in content
+                and 'return {"status": "duplicate"}' in content
+            ):
+                findings.append(
+                    {
+                        "check": "content_dedup_disabled",
+                        "status": "FAIL",
+                        "issue": "Content dedup appears to still be active!",
+                    }
+                )
                 details["content_dedup_status"] = "ACTIVE (SHOULD BE DISABLED)"
             else:
-                findings.append({
-                    "check": "content_dedup_disabled",
-                    "status": "UNCLEAR",
-                    "note": "Cannot determine dedup status from code"
-                })
+                findings.append(
+                    {
+                        "check": "content_dedup_disabled",
+                        "status": "UNCLEAR",
+                        "note": "Cannot determine dedup status from code",
+                    }
+                )
 
             # Check 2: File hash dedup
             if "file_hash" in content and "self.file_hash_map" in content:
-                findings.append({
-                    "check": "file_hash_dedup",
-                    "status": "INFO",
-                    "note": "File hash tracking present (need to verify skip logic)"
-                })
+                findings.append(
+                    {
+                        "check": "file_hash_dedup",
+                        "status": "INFO",
+                        "note": "File hash tracking present (need to verify skip logic)",
+                    }
+                )
             else:
-                findings.append({
-                    "check": "file_hash_dedup",
-                    "status": "WARNING",
-                    "issue": "File hash dedup may not be implemented",
-                    "recommendation": "Add file_hash check to skip exact file duplicates"
-                })
+                findings.append(
+                    {
+                        "check": "file_hash_dedup",
+                        "status": "WARNING",
+                        "issue": "File hash dedup may not be implemented",
+                        "recommendation": "Add file_hash check to skip exact file duplicates",
+                    }
+                )
 
             # Check 3: Would need actual test with duplicates
-            findings.append({
-                "check": "dedup_behavior_test",
-                "status": "NEEDS_TEST",
-                "note": "Need to run test with: 1 original + 1 exact copy + 1 near-duplicate (95%)"
-            })
+            findings.append(
+                {
+                    "check": "dedup_behavior_test",
+                    "status": "NEEDS_TEST",
+                    "note": "Need to run test with: 1 original + 1 exact copy + 1 near-duplicate (95%)",
+                }
+            )
 
             self.test_results["step6b_dedup"] = {
                 "status": "PASS",
@@ -744,63 +858,79 @@ class OfflineBuildAuditor:
             # Check 1: BM25 builder exists
             bm25_script = PROJECT_ROOT / "tools" / "build_bm25_index.py"
             if bm25_script.exists():
-                findings.append({
-                    "check": "bm25_builder_exists",
-                    "status": "PASS",
-                    "path": str(bm25_script)
-                })
+                findings.append(
+                    {
+                        "check": "bm25_builder_exists",
+                        "status": "PASS",
+                        "path": str(bm25_script),
+                    }
+                )
             else:
-                findings.append({
-                    "check": "bm25_builder_exists",
-                    "status": "FAIL",
-                    "issue": "BM25 builder script not found"
-                })
+                findings.append(
+                    {
+                        "check": "bm25_builder_exists",
+                        "status": "FAIL",
+                        "issue": "BM25 builder script not found",
+                    }
+                )
 
             # Check 2: FAISS builder exists
             faiss_script = PROJECT_ROOT / "tools" / "build_faiss_local.py"
             if faiss_script.exists():
-                findings.append({
-                    "check": "faiss_builder_exists",
-                    "status": "PASS",
-                    "path": str(faiss_script)
-                })
+                findings.append(
+                    {
+                        "check": "faiss_builder_exists",
+                        "status": "PASS",
+                        "path": str(faiss_script),
+                    }
+                )
             else:
                 # Try alternative name
                 faiss_script_alt = PROJECT_ROOT / "tools" / "build_faiss_from_chunks.py"
                 if faiss_script_alt.exists():
-                    findings.append({
-                        "check": "faiss_builder_exists",
-                        "status": "PASS",
-                        "path": str(faiss_script_alt)
-                    })
+                    findings.append(
+                        {
+                            "check": "faiss_builder_exists",
+                            "status": "PASS",
+                            "path": str(faiss_script_alt),
+                        }
+                    )
                 else:
-                    findings.append({
-                        "check": "faiss_builder_exists",
-                        "status": "WARNING",
-                        "issue": "FAISS builder script not found at expected location"
-                    })
+                    findings.append(
+                        {
+                            "check": "faiss_builder_exists",
+                            "status": "WARNING",
+                            "issue": "FAISS builder script not found at expected location",
+                        }
+                    )
 
             # Check 3: Embedding dimension auto-detect
             # Should read from config or model
-            findings.append({
-                "check": "embedding_dimension",
-                "status": "NEEDS_TEST",
-                "note": "Need to verify dimension matches EMBEDDING_MODEL from .env"
-            })
+            findings.append(
+                {
+                    "check": "embedding_dimension",
+                    "status": "NEEDS_TEST",
+                    "note": "Need to verify dimension matches EMBEDDING_MODEL from .env",
+                }
+            )
 
             # Check 4: Cache mechanism
-            findings.append({
-                "check": "embedding_cache",
-                "status": "NEEDS_TEST",
-                "note": "Need to verify SQLite cache at artifacts/cache/"
-            })
+            findings.append(
+                {
+                    "check": "embedding_cache",
+                    "status": "NEEDS_TEST",
+                    "note": "Need to verify SQLite cache at artifacts/cache/",
+                }
+            )
 
             # Check 5: Alignment check
-            findings.append({
-                "check": "bm25_faiss_alignment",
-                "status": "NEEDS_TEST",
-                "note": "Need to verify doc_id and page alignment between BM25 and FAISS"
-            })
+            findings.append(
+                {
+                    "check": "bm25_faiss_alignment",
+                    "status": "NEEDS_TEST",
+                    "note": "Need to verify doc_id and page alignment between BM25 and FAISS",
+                }
+            )
 
             self.test_results["step7_indexing"] = {
                 "status": "PASS",
@@ -840,32 +970,36 @@ class OfflineBuildAuditor:
             cmd = [
                 sys.executable,
                 str(PROJECT_ROOT / "tools" / "ingest.py"),
-                "--source-dir", str(self.test_data_dir),
-                "--output-dir", str(self.test_output_dir),
-                "--chunk-size", "1000",
-                "--chunk-overlap", "200",
+                "--source-dir",
+                str(self.test_data_dir),
+                "--output-dir",
+                str(self.test_output_dir),
+                "--chunk-size",
+                "1000",
+                "--chunk-overlap",
+                "200",
                 "--enable-ocr",  # Enable OCR for complete test
-                "--ocr-lang", "vie+eng",
+                "--ocr-lang",
+                "vie+eng",
             ]
 
             logger.info(f"  Command: {' '.join(cmd)}")
 
             result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minutes max
+                cmd, capture_output=True, text=True, timeout=300  # 5 minutes max
             )
 
             details["exit_code"] = result.returncode
             details["stdout_lines"] = len(result.stdout.splitlines())
 
             if result.returncode == 0:
-                findings.append({
-                    "check": "ingestion_success",
-                    "status": "PASS",
-                    "note": "Ingestion completed without errors"
-                })
+                findings.append(
+                    {
+                        "check": "ingestion_success",
+                        "status": "PASS",
+                        "note": "Ingestion completed without errors",
+                    }
+                )
 
                 # Check outputs
                 chunks_file = self.test_output_dir / "chunks" / "chunks.jsonl"
@@ -875,41 +1009,51 @@ class OfflineBuildAuditor:
                     # Count chunks
                     chunk_count = sum(1 for _ in open(chunks_file, encoding="utf-8"))
                     details["total_chunks"] = chunk_count
-                    findings.append({
-                        "check": "chunks_created",
-                        "status": "PASS",
-                        "count": chunk_count
-                    })
+                    findings.append(
+                        {
+                            "check": "chunks_created",
+                            "status": "PASS",
+                            "count": chunk_count,
+                        }
+                    )
                 else:
-                    findings.append({
-                        "check": "chunks_created",
-                        "status": "FAIL",
-                        "issue": "chunks.jsonl not found"
-                    })
+                    findings.append(
+                        {
+                            "check": "chunks_created",
+                            "status": "FAIL",
+                            "issue": "chunks.jsonl not found",
+                        }
+                    )
 
                 if doc_id_map_file.exists():
                     with open(doc_id_map_file, encoding="utf-8") as f:
                         doc_id_map = json.load(f)
                     details["doc_id_map_entries"] = len(doc_id_map)
-                    findings.append({
-                        "check": "doc_id_map_created",
-                        "status": "PASS",
-                        "entries": len(doc_id_map)
-                    })
+                    findings.append(
+                        {
+                            "check": "doc_id_map_created",
+                            "status": "PASS",
+                            "entries": len(doc_id_map),
+                        }
+                    )
                 else:
-                    findings.append({
-                        "check": "doc_id_map_created",
-                        "status": "FAIL",
-                        "issue": "doc_id_map.json not found"
-                    })
+                    findings.append(
+                        {
+                            "check": "doc_id_map_created",
+                            "status": "FAIL",
+                            "issue": "doc_id_map.json not found",
+                        }
+                    )
 
             else:
-                findings.append({
-                    "check": "ingestion_success",
-                    "status": "FAIL",
-                    "exit_code": result.returncode,
-                    "stderr": result.stderr[:500]
-                })
+                findings.append(
+                    {
+                        "check": "ingestion_success",
+                        "status": "FAIL",
+                        "exit_code": result.returncode,
+                        "stderr": result.stderr[:500],
+                    }
+                )
 
             self.test_results["integration"] = {
                 "status": "PASS" if result.returncode == 0 else "FAIL",
@@ -955,18 +1099,31 @@ class OfflineBuildAuditor:
 
         # Detailed results
         for step_name, result in self.test_results.items():
-            status_icon = "✅" if result["status"] == "PASS" else "❌" if result["status"] == "FAIL" else "⏳"
+            status_icon = (
+                "✅"
+                if result["status"] == "PASS"
+                else "❌"
+                if result["status"] == "FAIL"
+                else "⏳"
+            )
             logger.info(f"{status_icon} {step_name}: {result['status']}")
 
             if "findings" in result:
                 for finding in result["findings"]:
                     if finding["status"] in ["FAIL", "WARNING"]:
-                        logger.warning(f"    - {finding['check']}: {finding.get('issue', finding.get('note', ''))}")
+                        logger.warning(
+                            f"    - {finding['check']}: {finding.get('issue', finding.get('note', ''))}"
+                        )
 
         logger.info("=" * 80)
 
         # Save detailed report
-        report_path = PROJECT_ROOT / "reports" / "test_results" / f"OFFLINE_BUILD_AUDIT_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        report_path = (
+            PROJECT_ROOT
+            / "reports"
+            / "test_results"
+            / f"OFFLINE_BUILD_AUDIT_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
         report_path.parent.mkdir(parents=True, exist_ok=True)
 
         report_data = {
@@ -977,10 +1134,10 @@ class OfflineBuildAuditor:
                 "passed": passed,
                 "failed": failed,
                 "pending": pending,
-                "total": len(self.test_results)
+                "total": len(self.test_results),
             },
             "results": self.test_results,
-            "metrics": self.metrics
+            "metrics": self.metrics,
         }
 
         with open(report_path, "w", encoding="utf-8") as f:
@@ -1012,4 +1169,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
