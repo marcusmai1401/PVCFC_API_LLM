@@ -168,6 +168,58 @@ class TextChunker:
             elif page_nums and "page" not in chunk_metadata:
                 chunk_metadata["page"] = page_nums[0]
 
+            # NEW: Extract equipment tags from chunk text and add to metadata
+            try:
+                from app.rag.normalizers.tag_normalizer import TagNormalizer
+
+                _tn = TagNormalizer()
+                _tags = _tn.extract_tags(chunk_text or "")
+                if _tags:
+                    # Store normalized and raw tags for exact matching and diagnostics
+                    normalized_tags = [
+                        t.get("normalized") for t in _tags if t.get("normalized")
+                    ]
+                    raw_tags = [t.get("original") for t in _tags if t.get("original")]
+                    if normalized_tags:
+                        # Deduplicate while preserving order
+                        seen = set()
+                        norm_dedup = []
+                        for t in normalized_tags:
+                            if t not in seen:
+                                seen.add(t)
+                                norm_dedup.append(t)
+                        chunk_metadata["tags"] = norm_dedup
+                    if raw_tags:
+                        # Keep short preview to avoid bloating metadata
+                        preview = []
+                        seen_raw = set()
+                        for r in raw_tags:
+                            r_str = str(r)
+                            if r_str not in seen_raw:
+                                seen_raw.add(r_str)
+                                preview.append(r_str)
+                            if len(preview) >= 20:
+                                break
+                        chunk_metadata["tags_raw"] = preview
+            except Exception as e:
+                logger.debug(f"Tag extraction skipped/failed: {e}")
+
+            # Detect simple document type hints for downstream boosting (non-breaking)
+            try:
+                doc_type = chunk_metadata.get("doc_type")
+                if not doc_type:
+                    src_hint = (chunk_metadata.get("source") or "") + " " + doc_id
+                    if "Instrument" in src_hint:
+                        doc_type = "instrument_list"
+                    elif "Manual" in src_hint or "Operating Manual" in src_hint:
+                        doc_type = "manual"
+                    elif any(k in src_hint.upper() for k in ["P&ID", "P_ID", "PID"]):
+                        doc_type = "pid"
+                    if doc_type:
+                        chunk_metadata["doc_type"] = doc_type
+            except Exception:
+                pass
+
             # Normalize metadata to ensure page field exists
             chunk_metadata = normalize_page_metadata(chunk_metadata)
 

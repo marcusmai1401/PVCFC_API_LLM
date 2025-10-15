@@ -1,0 +1,50 @@
+# ============================================================================
+# INGESTION ENVIRONMENT - PaddleOCR + protobuf 3.20.3
+# Use: python -m venv venv_ingest && venv_ingest\Scripts\activate
+# Then: pip install -r requirements_ingest.txt
+# ============================================================================
+
+# ===== CORE PROTOBUF (must be first) =====
+protobuf==3.20.2
+
+# ===== OCR & PDF Processing =====
+paddlepaddle-gpu==2.6.2
+paddleocr==2.7.3
+pytesseract==0.3.10
+Pillow==10.3.0
+PyMuPDF==1.24.5
+
+# ===== Document Processing =====
+pypdf==4.2.0
+pdfplumber==0.11.1
+pdf2image==1.17.0
+
+# ===== Text Processing =====
+tiktoken==0.7.0
+langdetect==1.0.9
+nltk==3.8.1
+
+# ===== Data & Storage =====
+numpy==1.26.4
+pandas==2.2.2
+pyarrow==16.1.0
+
+# ===== Configuration & Logging =====
+loguru==0.7.2
+pydantic==2.7.4
+python-dotenv==1.0.1
+pyyaml==6.0.1
+
+# ===== OpenSearch (needed for indexing after ingestion) =====
+opensearch-py==2.5.0
+
+# ===== Utilities =====
+tqdm==4.66.4
+requests==2.32.3
+urllib3==1.26.18  # Pinned <2 to satisfy opensearch-py 2.5.0
+colorama==0.4.6
+
+# ===== Optional: LLM for classification =====
+google-generativeai==0.7.0
+
+# NOTE: NO Weaviate in this environment (protobuf conflict)

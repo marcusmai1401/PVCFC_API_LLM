@@ -25,7 +25,7 @@ sys.path.append(PROJECT_ROOT)
 from loguru import logger
 
 from app.ingestion.document_classifier import DocumentClassifier
-from app.ingestion.ocr_config import get_ocr_status
+from app.ingestion.paddle_ocr_config import get_ocr_status
 from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 from app.storage.manifest_writer import ManifestWriter
@@ -238,7 +238,7 @@ class IngestionPipeline:
                             self.stats["vector_pages"] += counts.get("vector_pages", 0)
                             if counts.get("used_ocr", False):
                                 self.stats["ocr_count"] += 1
-                            
+
                             # Track chunk size distribution for analytics
                             if "chunk_sizes" not in self.stats:
                                 self.stats["chunk_sizes"] = []
@@ -251,7 +251,9 @@ class IngestionPipeline:
                             )
                         elif result["status"] == "skipped":
                             # Already counted in duplicates_skipped
-                            logger.debug(f"Skipped: {pdf_path.name} - {result.get('reason', 'unknown')}")
+                            logger.debug(
+                                f"Skipped: {pdf_path.name} - {result.get('reason', 'unknown')}"
+                            )
                         elif result["status"] == "duplicate":
                             self.stats["duplicates_collapsed"] += 1
                             logger.info(f"Skipped duplicate: {pdf_path.name}")
@@ -290,12 +292,14 @@ class IngestionPipeline:
         logger.info(f"Total PDFs: {self.stats['total_pdfs']}")
         logger.info(f"Processed: {self.stats['processed']}")
         logger.info(f"Failed: {self.stats['failed']}")
-        logger.info(f"Duplicates skipped (exact files): {self.stats['duplicates_skipped']}")
+        logger.info(
+            f"Duplicates skipped (exact files): {self.stats['duplicates_skipped']}"
+        )
         logger.info(f"Duplicates collapsed: {self.stats['duplicates_collapsed']}")
         logger.info(f"Quarantined: {self.stats['quarantine_count']}")
         logger.info(f"Used OCR: {self.stats['ocr_count']}")
         logger.info(f"Total chunks: {self.stats['total_chunks']}")
-        
+
         # Chunk size analytics
         if "chunk_sizes" in self.stats and self.stats["chunk_sizes"]:
             chunk_sizes = self.stats["chunk_sizes"]
@@ -305,7 +309,7 @@ class IngestionPipeline:
             logger.info(
                 f"Chunk sizes: min={min_size}, max={max_size}, avg={avg_size:.0f}"
             )
-        
+
         logger.info(f"Duration: {duration:.2f} seconds")
         if self.stats["processed"] > 0:
             logger.info(
@@ -421,9 +425,11 @@ class IngestionPipeline:
                 if file_hash in self.file_hash_seen:
                     # This is an exact duplicate file
                     self.stats["duplicates_skipped"] += 1
-                    logger.info(f"Skipping exact duplicate (file_hash): {pdf_path.name}")
+                    logger.info(
+                        f"Skipping exact duplicate (file_hash): {pdf_path.name}"
+                    )
                     return {"status": "skipped", "reason": "exact_file_duplicate"}
-                
+
                 # Mark this file_hash as seen
                 self.file_hash_seen.add(file_hash)
             # ===== END FILE HASH DEDUPLICATION =====
@@ -568,7 +574,9 @@ class IngestionPipeline:
                 "scanned_pages": scanned_count,
                 "vector_pages": vector_count,
                 "used_ocr": used_ocr,
-                "chunk_sizes": [chunk.get("char_count", 0) for chunk in chunks],  # For analytics
+                "chunk_sizes": [
+                    chunk.get("char_count", 0) for chunk in chunks
+                ],  # For analytics
             }
 
             return {
@@ -776,6 +784,59 @@ class IngestionPipeline:
             chunk_dict = chunk.to_dict()
             # Ensure all metadata is present
             chunk_dict["metadata"].update(metadata)
+
+            # NEW: Enrich with equipment tags using TagNormalizer (additive, safe)
+            try:
+                from app.rag.normalizers.tag_normalizer import TagNormalizer
+
+                _tn = TagNormalizer()
+                _tags = _tn.extract_tags(chunk_dict.get("text") or "")
+                if _tags:
+                    normalized_tags = [
+                        t.get("normalized") for t in _tags if t.get("normalized")
+                    ]
+                    raw_tags = [t.get("original") for t in _tags if t.get("original")]
+                    if normalized_tags:
+                        seen = set()
+                        norm_dedup = []
+                        for t in normalized_tags:
+                            if t not in seen:
+                                seen.add(t)
+                                norm_dedup.append(t)
+                        chunk_dict["metadata"]["tags"] = norm_dedup
+                    if raw_tags:
+                        preview = []
+                        seen_raw = set()
+                        for r in raw_tags:
+                            r_str = str(r)
+                            if r_str not in seen_raw:
+                                seen_raw.add(r_str)
+                                preview.append(r_str)
+                            if len(preview) >= 20:
+                                break
+                        chunk_dict["metadata"]["tags_raw"] = preview
+            except Exception as e:
+                # Non-fatal; proceed without tags
+                pass
+
+            # Ensure doc_type exists (best-effort heuristic)
+            try:
+                if "doc_type" not in chunk_dict["metadata"] or not chunk_dict[
+                    "metadata"
+                ].get("doc_type"):
+                    src_hint = f"{chunk_dict['metadata'].get('file_name', '')} {doc_id}"
+                    doc_type = None
+                    if "Instrument" in src_hint:
+                        doc_type = "instrument_list"
+                    elif "Manual" in src_hint or "Operating Manual" in src_hint:
+                        doc_type = "manual"
+                    elif any(k in src_hint.upper() for k in ["P&ID", "P_ID", "PID"]):
+                        doc_type = "pid"
+                    if doc_type:
+                        chunk_dict["metadata"]["doc_type"] = doc_type
+            except Exception:
+                pass
+
             chunk_dicts.append(chunk_dict)
 
         return chunk_dicts
@@ -1180,23 +1241,20 @@ def main():
         logger.error(f"Source directory does not exist: {args.source_dir}")
         sys.exit(1)
 
-    # Check OCR availability if requested
+    # Check OCR availability if requested (PaddleOCR)
     if args.enable_ocr:
-        from app.ingestion.ocr_config import get_ocr_status
+        from app.ingestion.paddle_ocr_config import get_ocr_status as get_paddle_status
 
-        ocr_status = get_ocr_status()
+        ocr_status = get_paddle_status()
         if not ocr_status["ocr_enabled"]:
-            logger.warning("OCR requested but not available:")
             logger.warning(
-                f"  Tesseract available: {ocr_status['tesseract_available']}"
+                "OCR requested but PaddleOCR is not available. Continuing without OCR..."
             )
-            logger.warning(
-                f"  pytesseract installed: {ocr_status['pytesseract_installed']}"
-            )
-            logger.warning("Continuing without OCR...")
             args.enable_ocr = False
         else:
-            logger.info(f"OCR enabled with Tesseract {ocr_status['tesseract_version']}")
+            engine = ocr_status.get("ocr_engine", "PaddleOCR")
+            gpu = ocr_status.get("gpu_available", False)
+            logger.info(f"OCR enabled using {engine} (GPU: {gpu})")
 
     # Check for unstructured.io if requested
     if args.parser == "unstructured":

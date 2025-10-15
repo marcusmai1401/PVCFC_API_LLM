@@ -44,6 +44,9 @@ class TransformedQuery:
     hyde_queries: Optional[List[str]] = None
     language: str = "en"
     metadata: Dict[str, Any] = None
+    # NEW: Tag enhancement fields for Week 2
+    detected_tags: Optional[List[str]] = None  # Equipment tags found in query
+    expanded_query: Optional[str] = None  # Query with tag variants for better recall
 
 
 class QueryTransformer:
@@ -182,6 +185,15 @@ class QueryTransformer:
         if self.enable_hyde and intent in [QueryIntent.ASK, QueryIntent.EXPLAIN]:
             hyde_queries = self.generate_hyde(query, intent, language)
 
+        # NEW Week 2: Detect and expand equipment tags
+        detected_tags = self.detect_equipment_tags(query)
+        expanded_query = None
+        if detected_tags:
+            expanded_query = self.expand_tag_query(normalized, detected_tags)
+            logger.info(
+                f"Detected {len(detected_tags)} equipment tag(s): {detected_tags}"
+            )
+
         result = TransformedQuery(
             original=query,
             normalized=normalized,
@@ -193,12 +205,17 @@ class QueryTransformer:
                 "word_count": len(query.split()),
                 "has_technical_terms": self._has_technical_terms(query),
                 "translated_from": translated_from,
+                "has_tags": bool(detected_tags),
+                "tag_count": len(detected_tags) if detected_tags else 0,
             },
+            detected_tags=detected_tags,
+            expanded_query=expanded_query,
         )
 
         logger.info(
             f"Transformation complete. Intent: {intent.value}, "
-            f"HyDE: {len(hyde_queries) if hyde_queries else 0}"
+            f"HyDE: {len(hyde_queries) if hyde_queries else 0}, "
+            f"Tags: {len(detected_tags) if detected_tags else 0}"
         )
 
         return result
@@ -484,6 +501,128 @@ Passages:"""
                 cleaned.append(line)
 
         return cleaned
+
+    def detect_equipment_tags(self, query: str) -> Optional[List[str]]:
+        """
+        Detect equipment tags in query (Week 2: Day 1-2)
+
+        Detects patterns like:
+        - 06-TE-0256 (full prefix with dashes)
+        - 06TE0256 (no dashes)
+        - TE-0256 (partial, no prefix)
+        - P-101A (with suffix)
+
+        Args:
+            query: User query text
+
+        Returns:
+            List of detected equipment tags, or None if no tags found
+        """
+        # Equipment tag patterns (ordered by specificity)
+        patterns = [
+            # Full tag with optional prefix: 06-TE-0256, 06-TE-0256A/B
+            r"\b(\d{2,3}[-_]?[A-Z]{1,3}[-_]?\d{3,5}[A-Z]?(?:/[A-Z])?)\b",
+            # Partial tag without prefix: TE-0256, PI-0103A
+            r"\b([A-Z]{1,3}[-_]?\d{3,5}[A-Z]?)\b",
+            # Common equipment prefixes: P-101, V-303, E-404
+            r"\b([PVETHKFC][-_]\d{2,5}[A-Z]?)\b",
+        ]
+
+        detected = set()  # Use set to avoid duplicates
+        query_upper = query.upper()
+
+        for pattern in patterns:
+            matches = re.findall(pattern, query_upper)
+            for match in matches:
+                # Filter out false positives (too short, all letters, etc.)
+                if len(match) >= 4 and re.search(
+                    r"\d", match
+                ):  # Must have at least one digit
+                    # Normalize separators to dash
+                    normalized = match.replace("_", "-")
+                    detected.add(normalized)
+
+        return sorted(list(detected)) if detected else None
+
+    def expand_tag_query(self, normalized_query: str, detected_tags: List[str]) -> str:
+        """
+        Expand query with tag variants for better recall (Week 2: Day 3)
+
+        For each tag like "06-TE-0256", generate variants:
+        - 06-TE-0256 (original with dashes)
+        - 06 TE 0256 (spaces)
+        - 06TE0256 (no separators)
+        - TE-0256 (partial, no prefix)
+        - TE0256 (partial, no separators)
+
+        Args:
+            normalized_query: Normalized query text
+            detected_tags: List of detected equipment tags
+
+        Returns:
+            Expanded query string with all tag variants
+        """
+        if not detected_tags:
+            return normalized_query
+
+        # Generate variants for each tag
+        all_variants = []
+        for tag in detected_tags:
+            variants = self._generate_tag_variants(tag)
+            all_variants.extend(variants)
+
+        # Combine original query with tag variants
+        # Format: "original_query (variant1 OR variant2 OR variant3 ...)"
+        variants_str = " OR ".join(all_variants)
+        expanded = f"{normalized_query} ({variants_str})"
+
+        return expanded
+
+    def _generate_tag_variants(self, tag: str) -> List[str]:
+        """
+        Generate all variants of an equipment tag for search expansion
+
+        Examples:
+        - Input: "06-TE-0256"
+        - Output: ["06-TE-0256", "06 TE 0256", "06TE0256", "TE-0256", "TE0256"]
+
+        Args:
+            tag: Equipment tag (e.g., "06-TE-0256")
+
+        Returns:
+            List of tag variants
+        """
+        variants = set([tag])  # Start with original
+
+        # Variant 1: Replace dashes/underscores with spaces
+        space_variant = tag.replace("-", " ").replace("_", " ")
+        variants.add(space_variant)
+
+        # Variant 2: Remove all separators
+        no_sep_variant = tag.replace("-", "").replace("_", "").replace(" ", "")
+        variants.add(no_sep_variant)
+
+        # Variant 3: Try to extract partial tag (remove prefix if present)
+        # Pattern: "06-TE-0256" -> "TE-0256", "TE0256"
+        prefix_match = re.match(r"^\d{2,3}[-_]?([A-Z]{1,3}[-_]?\d{3,5}[A-Z]?)", tag)
+        if prefix_match:
+            partial = prefix_match.group(1)
+            variants.add(partial)
+            variants.add(partial.replace("-", "").replace("_", ""))
+
+        # Variant 4: Try to extract just the letters+numbers (most generic)
+        # "06-TE-0256" -> "TE0256", "0256"
+        letters_numbers = re.findall(r"[A-Z]+|\d+", tag)
+        if len(letters_numbers) >= 2:
+            # Combine letter prefix with last number group
+            letter_parts = [p for p in letters_numbers if p.isalpha()]
+            number_parts = [p for p in letters_numbers if p.isdigit()]
+            if letter_parts and number_parts:
+                generic = f"{letter_parts[-1]}{number_parts[-1]}"
+                variants.add(generic)
+                variants.add(f"{letter_parts[-1]}-{number_parts[-1]}")
+
+        return sorted(list(variants))
 
 
 # Convenience function

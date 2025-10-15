@@ -26,6 +26,48 @@ UNCERTAINTY_PATTERNS = [
 ]
 
 
+# -------- Debug helpers for safe, concise logging --------
+
+
+def _safe_truncate(text: Optional[str], limit: int = 1200) -> str:
+    """Return a safely truncated preview string for logs."""
+    try:
+        if not text:
+            return ""
+        t = str(text)
+        return t[:limit] + ("..." if len(t) > limit else "")
+    except Exception:
+        return ""
+
+
+def _summarize_doc_mapping(doc_mapping: Dict[int, "RetrievalResult"]) -> List[str]:
+    """Produce one-line summaries per [Doc N] for logging."""
+    lines: List[str] = []
+    for num, r in (doc_mapping or {}).items():
+        meta = r.metadata or {}
+        pdf_path = meta.get("pdf_path")
+        page_start = meta.get("page_start")
+        page_end = meta.get("page_end")
+        rng = f", range={page_start}-{page_end}" if page_start and page_end else ""
+        score = getattr(r, "score", None)
+        score_txt = f"{float(score):.4f}" if isinstance(score, (int, float)) else "n/a"
+        lines.append(
+            f"Doc {num}: doc_id={r.doc_id or 'unknown'}, source={r.source}, page={r.page or '?'}, "
+            f"score={score_txt}, pdf_path={'yes' if pdf_path else 'no'}{rng}"
+        )
+    return lines
+
+
+def _format_citations_for_log(citations: List["Citation"]) -> List[str]:
+    """Human-friendly citation lines for logs."""
+    out: List[str] = []
+    for i, c in enumerate(citations or [], 1):
+        out.append(
+            f"[{i}] doc_id={c.doc_id}, page={c.page}, pdf_path={'yes' if c.pdf_path else 'no'}, source={c.source}"
+        )
+    return out
+
+
 def _get_doc_id_map() -> Dict[str, str]:
     global _DOC_ID_MAP_CACHE
     if _DOC_ID_MAP_CACHE is not None:
@@ -731,6 +773,19 @@ class ResponseGenerator:
                 doc_number_map = self._build_doc_number_map(doc_mapping)
             metadata_extra["doc_number_map"] = doc_number_map
 
+            # Debug log the doc_number_map for frontend citation rendering
+            try:
+                if isinstance(doc_number_map, dict) and doc_number_map:
+                    lines = []
+                    for k in sorted(doc_number_map.keys()):
+                        v = doc_number_map[k]
+                        lines.append(
+                            f"Doc {k}: doc_id={v.get('doc_id')}, file={v.get('file_name')}, pdf_path={'present' if v.get('pdf_path') else 'missing'}"
+                        )
+                    logger.debug("doc_number_map built:\n" + "\n".join(lines[:50]))
+            except Exception as e:
+                logger.debug(f"Logging doc_number_map failed: {e}")
+
             return GeneratedAnswer(
                 query=query.original,
                 answer=final_answer,
@@ -775,6 +830,18 @@ class ResponseGenerator:
         # Truncate total context if too long
         if len(context) > self.config.max_context_length:
             context = context[: self.config.max_context_length] + "..."
+
+        # Log context and mapping for diagnostics
+        try:
+            logger.info(
+                f"Prepared LLM context: docs={len(docs)}, combined_len={len(context)}, max_context_length={self.config.max_context_length}"
+            )
+            mapping_lines = _summarize_doc_mapping(doc_mapping)
+            if mapping_lines:
+                logger.debug("Doc mapping summary:\n" + "\n".join(mapping_lines[:20]))
+            logger.debug("Context preview:\n" + _safe_truncate(context, 1500))
+        except Exception as e:
+            logger.debug(f"Logging _prepare_context failed: {e}")
 
         return context, doc_mapping
 
@@ -832,6 +899,13 @@ class ResponseGenerator:
     ) -> str:
         """Call primary LLM, and if empty/apology/error, retry with light-tier model."""
         # First try with configured client
+        try:
+            logger.debug(
+                f"Calling LLM (tier={self.config.llm_tier}) temp={temperature} max_tokens={max_tokens} prompt_len={len(prompt)}"
+            )
+            logger.debug("Prompt preview:\n" + _safe_truncate(prompt, 1500))
+        except Exception:
+            pass
         response = self.llm_client.generate(
             prompt=prompt, temperature=temperature, max_tokens=max_tokens
         )
@@ -846,6 +920,12 @@ class ResponseGenerator:
             or ("error generating response" in content_l)
         ):
             try:
+                logger.info(
+                    "Primary LLM response unusable; attempting fallback tier=light"
+                )
+            except Exception:
+                pass
+            try:
                 fallback_client = get_llm_client(tier="light")
                 resp2 = fallback_client.generate(
                     prompt=prompt,
@@ -856,7 +936,13 @@ class ResponseGenerator:
                     return resp2.content.strip()
             except Exception:
                 pass
-        return (content or "").strip()
+        final = (content or "").strip()
+        try:
+            logger.debug(f"LLM returned answer_len={len(final)}")
+            logger.debug("Answer preview:\n" + _safe_truncate(final, 1500))
+        except Exception:
+            pass
+        return final
 
     def _generate_ask_answer_bilingual(
         self,
@@ -916,6 +1002,25 @@ Instructions:
 
 Answer:"""
 
+        # Log prompt before calling LLM
+        try:
+            logger.info(
+                f"Prepared ASK(bilingual) prompt: language={language}, temp={self.config.temperature}, max_tokens={self.config.max_answer_length}"
+            )
+            # Log doc mapping summary used for this prompt
+            mapping_lines = _summarize_doc_mapping(doc_mapping)
+            if mapping_lines:
+                logger.debug(
+                    "Doc mapping summary (ASK bilingual):\n"
+                    + "\n".join(mapping_lines[:20])
+                )
+            # Log context preview specifically
+            logger.debug(
+                "Context preview (ASK bilingual):\n" + _safe_truncate(context, 1500)
+            )
+        except Exception:
+            pass
+
         # Call LLM with fallback to light-tier if needed
         answer = self._call_llm_with_fallback(
             prompt=prompt,
@@ -925,6 +1030,19 @@ Answer:"""
 
         # Extract citations
         citations = self._extract_citations(answer, doc_mapping)
+
+        # Log answer and parsed citations
+        try:
+            logger.info(
+                f"ASK(bilingual) generation complete: answer_len={len(answer)}, citations={len(citations)}"
+            )
+            cit_lines = _format_citations_for_log(citations)
+            if cit_lines:
+                logger.debug(
+                    "Parsed citations (ASK bilingual):\n" + "\n".join(cit_lines[:20])
+                )
+        except Exception:
+            pass
 
         return answer, citations
 
@@ -1293,10 +1411,16 @@ Response:"""
                 citations.append(citation)
 
         # Log extraction summary for diagnostics
-        logger.info(
-            f"Citation extraction: found {len(citations)} citations from answer "
-            f"(doc_mapping size: {len(doc_mapping) if doc_mapping else 0})"
-        )
+        try:
+            logger.info(
+                f"Citation extraction: found {len(citations)} citations from answer "
+                f"(doc_mapping size: {len(doc_mapping) if doc_mapping else 0})"
+            )
+            details = _format_citations_for_log(citations)
+            if details:
+                logger.debug("Citations detail:\n" + "\n".join(details[:30]))
+        except Exception:
+            pass
 
         return citations
 

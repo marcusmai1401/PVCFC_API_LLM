@@ -25,7 +25,7 @@ sys.path.append(PROJECT_ROOT)
 from loguru import logger
 
 from app.ingestion.document_classifier import DocumentClassifier
-from app.ingestion.ocr_config import get_ocr_status
+from app.ingestion.paddle_ocr_config import get_ocr_status
 from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 
@@ -855,23 +855,20 @@ def main():
         logger.error(f"Source directory does not exist: {args.source_dir}")
         sys.exit(1)
 
-    # Check OCR availability if requested
+    # Check OCR availability if requested (PaddleOCR)
     if args.enable_ocr:
-        from app.ingestion.ocr_config import get_ocr_status
+        from app.ingestion.paddle_ocr_config import get_ocr_status as get_paddle_status
 
-        ocr_status = get_ocr_status()
+        ocr_status = get_paddle_status()
         if not ocr_status["ocr_enabled"]:
-            logger.warning("OCR requested but not available:")
             logger.warning(
-                f"  Tesseract available: {ocr_status['tesseract_available']}"
+                "OCR requested but PaddleOCR is not available. Continuing without OCR..."
             )
-            logger.warning(
-                f"  pytesseract installed: {ocr_status['pytesseract_installed']}"
-            )
-            logger.warning("Continuing without OCR...")
             args.enable_ocr = False
         else:
-            logger.info(f"OCR enabled with Tesseract {ocr_status['tesseract_version']}")
+            engine = ocr_status.get("ocr_engine", "PaddleOCR")
+            gpu = ocr_status.get("gpu_available", False)
+            logger.info(f"OCR enabled using {engine} (GPU: {gpu})")
 
     # Check for unstructured.io if requested
     if args.parser == "unstructured":

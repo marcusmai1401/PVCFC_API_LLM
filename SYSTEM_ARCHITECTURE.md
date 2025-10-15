@@ -1,8 +1,8 @@
-# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
+﻿# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 0.6.1
-**Last Updated**: 2025-10-11
-**Document**: Complete Pipeline & Architecture Description
+**Version**: 0.6.2
+**Last Updated**: 2025-10-15
+**Document**: Complete Pipeline & Architecture Description (CORRECTED)
 
 ---
 
@@ -42,10 +42,14 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 | **Keyword Search** | OpenSearch (BM25) | Keyword search |
 | **LLM** | Gemini 2.5 Pro/Flash | Generation |
 | **Embedding** | Gemini Embedding 001 (768D) | Text vectorization |
-| **Reranker** | BGE CrossEncoder | Result reranking |
-| **OCR** | Tesseract (vie+eng) | Scanned PDF processing |
+| **Reranker** | BGE CrossEncoder (optional, disabled by default) | Result reranking |
+| **OCR** | PaddleOCR v2.7.3 (vie+eng, GPU-accelerated) | Scanned PDF processing |
 | **UI** | Streamlit | Testing & debugging |
 | **Monitoring** | Loguru + Metrics | Logging & observability |
+
+> **Note**: BGE reranking is **OPTIONAL** and **disabled by default** (ENABLE_BGE_RERANK=false). Enable only if needed for better semantic ranking.
+
+> **Note**: Hybrid Modern mode (USE_HYBRID_MODERN=true) is the **default production mode**, combining Weaviate + OpenSearch for best performance.
 
 ### 1.3 Architecture Diagram
 
@@ -55,29 +59,30 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 └──────┬──────┘
        │
        ↓
-┌─────────────────────────────────────────────────────────┐
-│              OFFLINE PIPELINE (Build Time)              │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌────────────┐    ┌──────────┐    ┌──────────────┐     │
-│  │  Ingest    │ →  │  Chunk   │ →  │   Dedup      │     │
-│  │  (OCR)     │    │          │    │  (content)   │     │
-│  └────────────┘    └──────────┘    └──────────────┘     │
-│         │                                    │          │
-│         ↓                                    ↓          │
-│  ┌────────────┐                   ┌──────────────┐      │
-│  │doc_id_map  │                   │  chunks.jsonl│      │
-│  │   .json    │                   │              │      │
-│  └────────────┘                   └──────┬───────┘      │
-│                                          │              │
-│                    ┌─────────────────────┴─────────┐    │
-│                    ↓                               ↓    │
-│         ┌────────────────┐            ┌────────────────┐│
-│         │  Weaviate DB   │            │  OpenSearch    ││
-│         │  (Vector 768D) │            │  (BM25 Index)  ││
-│         └────────────────┘            └────────────────┘│
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│              OFFLINE PIPELINE (Build Time)                │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌────────────┐    ┌──────────┐    ┌──────────────┐       │
+│  │  Ingest    │ →  │  Chunk   │ →  │   Dedup      │       │
+│  │ (PaddleOCR)│    │(Semantic)│    │  (content)   │       │
+│  └────────────┘    └──────────┘    └──────────────┘       │
+│         │                                    │            │
+│         ↓                                    ↓            │
+│  ┌────────────┐                   ┌──────────────┐        │
+│  │doc_id_map  │                   │  chunks.jsonl│        │
+│  │   .json    │                   │              │        │
+│  └────────────┘                   └──────┬───────┘        │
+│                                          │                │
+│                    ┌─────────────────────┴─────────┐      │
+│                    ↓                               ↓      │
+│         ┌───────────────────┐            ┌────────────────┐
+│         │  Weaviate DB      │            │  OpenSearch    │
+│         │  (Vector 768D)    │            │  (BM25 Index)  │
+│         │ Collection:"Chunk"│          Index:"rag_chunks"││
+│         └───────────────────┘            └────────────────┘
+│                                                           │
+└───────────────────────────────────────────────────────────┘
                            │
                            ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -109,7 +114,7 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │  └────────────────┼────────────────────┘                │
 │                   ↓                                     │
 │  ┌─────────────────────────────┐                        │
-│  │  BGE CrossEncoder Rerank    │  (Optional)            │
+│  │  BGE CrossEncoder Rerank    │  (OFF by default)      │
 │  └──────────────┬──────────────┘                        │
 │                 ↓                                       │
 │  ┌────────────────────────────┐                         │
@@ -127,9 +132,11 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │  │      Text │          │ Vision       │                │
 │  │           ↓          ↓              │                │
 │  │  ┌─────────────┐  ┌──────────────┐  │                │
-│  │  │  Gemini     │  │ Gemini 2.5   │  │                │
-│  │  │  2.5 Flash  │  │ Pro (Vision) │  │                │
-│  │  │  (Text)     │  │ + PDF Pages  │  │                │
+│  │  │ Text Models │  │ Gemini 2.5   │  │                │
+│  │  │ Production: │  │ Pro (Vision) │  │                │
+│  │  │ 2.5 Pro     │  │ + PDF Pages  │  │                │
+│  │  │ Light Mode: │  │              │  │                │
+│  │  │ 2.5 Flash   │  │              │  │                │
 │  │  └──────┬──────┘  └──────┬───────┘  │                │
 │  │         │                │          │                │
 │  │         └────────┬───────┘          │                │
@@ -177,11 +184,12 @@ RAW PDF FILES
     ↓
 [1] INGESTION
     • Parse PDF (PyMuPDF)
-    • OCR if needed (Tesseract)
+    • OCR if needed (PaddleOCR v2.7.3 GPU)
     • Extract text + metadata
     ↓
-[2] CHUNKING
-    • Split by size (1000 chars, overlap 200)
+[2] CHUNKING (SEMANTIC STRATEGY)
+    • Semantic chunking (respects paragraphs/sentences)
+    • Size target: ~1000 chars, overlap: 200
     • Keep page metadata
     ↓
 [3] DEDUPLICATION
@@ -189,15 +197,17 @@ RAW PDF FILES
     • Keep 1 representative per hash
     ↓
 [4] INDEXING
-    ├── Weaviate: Vector embeddings (768D)
-    └── OpenSearch: BM25 inverted index
+    ├── Weaviate: Vector embeddings (768D) → Collection "Chunk"
+    └── OpenSearch: BM25 inverted index → Index "rag_chunks"
     ↓
 OUTPUT:
     • chunks.jsonl (deduplicated chunks)
     • doc_id_map.json (doc_id → pdf_path mapping)
-    • Weaviate collection (vectors)
-    • OpenSearch index (keywords)
+    • Weaviate collection "Chunk" (vectors)
+    • OpenSearch index "rag_chunks" (keywords)
 ```
+
+> **Index Directory Note**: Default config uses artifacts/index_production, but current .env overrides to data/indexes. Check your environment.
 
 ### 2.2 Query Time (Online)
 
@@ -226,7 +236,7 @@ USER QUERY: "What is K06101 max pressure?"
     • Merge scores from both sources
     • Combined ranking
     ↓
-[4] BGE RERANKING (Optional)
+[4] BGE RERANKING (Optional - DISABLED by default)
     • CrossEncoder score each (query, doc) pair
     • Re-sort by semantic relevance
     • Top-k selection (k=8)
@@ -241,14 +251,16 @@ USER QUERY: "What is K06101 max pressure?"
     │   • Send to Gemini 2.5 Pro (multimodal)
     │   • Extract answer + citations
     │
-    └── Text Generation (fallback)
+    └── Text Generation
         • Context = concatenated chunks
-        • Send to Gemini 2.5 Flash/Pro
+        • Model selection by tier:
+          - Production mode (default): Gemini 2.5 Pro
+          - Light mode: Gemini 2.5 Flash
         • Extract answer + citations
     ↓
 [6] POST-PROCESSING
     • Citation validation (CiteFix-lite)
-    • Confidence calculation
+    • Confidence calculation (with defensive clamping)
     • IEEE-style conversion (optional)
     ↓
 [7] RESPONSE BUILDING
@@ -259,6 +271,15 @@ USER QUERY: "What is K06101 max pressure?"
     ↓
 JSON RESPONSE to Client
 ```
+
+> **Confidence Clamping Note**: Due to past bugs where confidence could be None or >1, defensive clamping to [0,1] is applied. Logs errors when invalid values detected.
+
+> **Model Selection Note**: The system uses tier-based model selection:
+> - **Production mode (default)**: `execution_mode="production"` → `generator_tier="heavy"` → Uses **Gemini 2.5 Pro** for both text and vision generation
+> - **Light mode**: `execution_mode="light_only"` → `generator_tier="light"` → Uses **Gemini 2.5 Flash** for text generation only
+> - **Vision generation**: Always uses **Gemini 2.5 Pro** regardless of tier/mode
+>
+> This means in typical production usage, both text and vision use the same Gemini 2.5 Pro model for consistency and quality.
 
 ---
 
@@ -279,16 +300,24 @@ for pdf_file in scan_directory("D:\\Data_Raw"):
         process_document(pdf_file)
 ```
 
-#### Step 2: PDF Parsing
+#### Step 2: PDF Parsing with PaddleOCR
 ```python
 # Try vector text first
 doc = fitz.open(pdf_path)
 text = extract_text(doc)
 
 if not has_text(text):
-    # Fallback to OCR
-    text = ocr_with_tesseract(pdf_path, lang="vie+eng", dpi=300)
+    # Fallback to PaddleOCR (GPU-accelerated)
+    text = ocr_with_paddleocr(
+        pdf_path,
+        lang="vie+eng",
+        use_gpu=True,  # GPU support via paddlepaddle-gpu
+        det_algorithm="DB",
+        rec_algorithm="SVTR_LCNet"
+    )
 ```
+
+> **OCR Note**: System uses **PaddleOCR v2.7.3** with GPU acceleration, NOT Tesseract. See app/ingestion/paddle_ocr_config.py for configuration.
 
 #### Step 3: Metadata Extraction
 ```python
@@ -321,25 +350,35 @@ content_hash = hashlib.sha1(normalized.encode()).hexdigest()
 
 ## 4. PHASE 2: INDEXING & STORAGE
 
-### 4.1 Chunking Strategy
+### 4.1 Chunking Strategy (SEMANTIC, NOT FIXED)
 
 ```python
-# Character-based chunking
-chunk_size = 1000  # characters
-overlap = 200      # characters
+# Semantic chunking (respects paragraph and sentence boundaries)
+# Default strategy in TextChunker class
+from app.ingestion.text_chunker import TextChunker
 
-chunks = []
-for i in range(0, len(text), chunk_size - overlap):
-    chunk_text = text[i:i + chunk_size]
-    chunk = {
-        "chunk_id": f"{doc_id}_chunk_{i}",
-        "text": chunk_text,
-        "doc_id": doc_id,
-        "page": calculate_page(i, page_breaks),
-        "metadata": {...}
-    }
-    chunks.append(chunk)
+chunker = TextChunker(
+    chunk_size=1000,       # Target size in characters
+    chunk_overlap=200,      # Overlap between chunks
+    chunking_strategy="semantic"  # Options: "semantic", "sentence", "fixed"
+)
+
+# Semantic chunking process:
+# 1. Split text by paragraphs (\n\n+)
+# 2. If paragraph > chunk_size, split by sentences
+# 3. Build chunks respecting boundaries
+# 4. Add overlap from previous chunk
+# 5. Extract page metadata from content markers (<!-- Page X -->)
+
+chunks = chunker.chunk_text(
+    text=page_text,
+    doc_id=doc_id,
+    metadata={"page": page_num, "doc_type": "manual"},
+    page_nums=[page_num]
+)
 ```
+
+> **Chunking Note**: System uses **semantic chunking by default**, NOT simple fixed-size splitting. This preserves document structure and improves retrieval quality.
 
 ### 4.2 Deduplication
 
@@ -368,9 +407,9 @@ client = weaviate.connect_to_local(
     grpc_port=50051
 )
 
-# Create collection
+# Create collection with name "Chunk" (not "PVCFCDocuments")
 collection = client.collections.create(
-    name="PVCFCDocuments",
+    name="Chunk",  # Production collection name
     vectorizer_config=None,  # Manual vectorization
     properties=[
         Property(name="text", data_type=DataType.TEXT),
@@ -383,7 +422,7 @@ collection = client.collections.create(
 # Batch insert
 with collection.batch.dynamic() as batch:
     for chunk in chunks:
-        # Embed text
+        # Embed text using Gemini
         vector = embed_text(chunk["text"])
 
         # Add to batch
@@ -393,10 +432,12 @@ with collection.batch.dynamic() as batch:
         )
 ```
 
+> **Weaviate Collection Name**: Production uses "Chunk", configured via .env (WEAVIATE_COLLECTION=Chunk). Default in code is "PVCFCDocuments" but overridden.
+
 ### 4.4 OpenSearch Indexing
 
 ```python
-# Create index
+# Create index with BM25 parameters (NO epsilon in OpenSearch)
 opensearch_client.indices.create(
     index="rag_chunks",
     body={
@@ -407,6 +448,7 @@ opensearch_client.indices.create(
                         "type": "BM25",
                         "k1": 1.2,
                         "b": 0.75
+                        # Note: OpenSearch BM25 does not use epsilon parameter
                     }
                 }
             }
@@ -430,8 +472,9 @@ for chunk in chunks:
     )
 ```
 
----
+> **BM25 Parameters Note**: OpenSearch BM25 only uses k1 and parameters. The epsilon parameter is specific to offline rank-bm25 library.
 
+---
 ## 5. PHASE 3: QUERY PROCESSING
 
 ### 5.1 Query Transform
@@ -584,10 +627,10 @@ def reciprocal_rank_fusion(
     opensearch_results: List[Result],
     k: int = 60
 ) -> List[Result]:
-    """
+    \"\"\"
     RRF formula: score(d) = Σ (1 / (k + rank_i(d)))
     where rank_i(d) is the rank of document d in retriever i
-    """
+    \"\"\"
     rrf_scores = defaultdict(float)
 
     # Add Weaviate scores
@@ -619,7 +662,7 @@ def reciprocal_rank_fusion(
 
 ## 7. PHASE 5: RERANKING
 
-### 7.1 BGE CrossEncoder Reranking (Optional)
+### 7.1 BGE CrossEncoder Reranking (Optional - Disabled by Default)
 
 ```python
 def bge_rerank(
@@ -650,6 +693,8 @@ def bge_rerank(
     # 6. Return top-k
     return reranked[:top_k]
 ```
+
+> **BGE Reranking Note**: This is **OPTIONAL** and **disabled by default** in production (`ENABLE_BGE_RERANK=false` in .env). Enable only if you need more accurate semantic reranking, but be aware it adds 100-400ms latency.
 
 ### 7.2 Fallback: Score-based Reranking
 
@@ -736,7 +781,7 @@ def vision_generation(
             logger.warning(f"Failed to render page {page_num}: {e}")
 
     # 3. Build vision prompt
-    prompt = f"""
+    prompt = f\"\"\"
 Based on the provided PDF pages, answer the following question:
 
 Question: {query}
@@ -747,11 +792,13 @@ Instructions:
 - Focus on tables, diagrams, and specific values visible in the pages
 
 Answer:
-"""
+\"\"\"
 
-    # 4. Call Gemini Vision
+    # 4. Call Gemini Vision API
+    # Note: Vision generation ALWAYS uses Gemini 2.5 Pro regardless of tier/mode
+    # Model names are auto-prefixed with "models/" by llm_client
     response = gemini_client.generate_content(
-        model="gemini-2.5-pro",
+        model="gemini-2.5-pro",  # Vision always uses Pro (hardcoded)
         contents=[
             prompt,
             *[page["image"] for page in rendered_pages]
@@ -765,14 +812,27 @@ Answer:
     return answer, citations
 ```
 
+> **Model Name Format Note**: When configuring in .env, use simple names like gemini-2.5-pro. The LLM client automatically adds "models/" prefix internally.
+
 ### 8.3 Text Generation
 
 ```python
 def text_generation(
     query: str,
-    retrieved_docs: List[Result]
+    retrieved_docs: List[Result],
+    execution_mode: str = "production"  # default to production
 ) -> Tuple[str, List[Citation]]:
-    # 1. Build context
+    # 1. Select model based on execution mode (tier-based)
+    # Production mode (default) uses heavy tier -> Gemini 2.5 Pro
+    # Light mode uses light tier -> Gemini 2.5 Flash
+    if execution_mode == "production":
+        generator_tier = "heavy"
+        text_model = "gemini-2.5-pro"
+    else:  # light_only
+        generator_tier = "light"
+        text_model = "gemini-2.5-flash"
+
+    # 2. Build context
     context_parts = []
     doc_mapping = {}
 
@@ -781,10 +841,10 @@ def text_generation(
         context_parts.append(f"[Doc {i}]{page_info} {doc.text}")
         doc_mapping[i] = doc
 
-    context = "\n---\n".join(context_parts)
+    context = "\\n---\\n".join(context_parts)
 
-    # 2. Build prompt
-    prompt = f"""
+    # 3. Build prompt
+    prompt = f\"\"\"
 Based on the following context documents, answer the question.
 
 Context:
@@ -798,11 +858,11 @@ Instructions:
 - Only use information from the provided context
 
 Answer:
-"""
+\"\"\"
 
-    # 3. Call Gemini
+    # 4. Call Gemini with selected model
     response = gemini_client.generate_content(
-        model="gemini-2.5-flash",
+        model=text_model,  # Uses gemini-2.5-pro in production, gemini-2.5-flash in light mode
         contents=prompt
     )
 
@@ -902,9 +962,13 @@ def calculate_confidence(
     citations: List[Citation],
     retrieved_docs: List[Result]
 ) -> float:
-    """
+    \"\"\"
     Calculate confidence score with defensive programming
-    """
+
+    Note: Defensive clamping is applied due to historical bugs where
+    confidence could be None or exceed [0,1] range. All invalid values
+    are logged as errors for bug tracking.
+    \"\"\"
     # Base confidence from retrieval scores
     if retrieved_docs:
         # DEFENSIVE: Handle None scores
@@ -1053,7 +1117,7 @@ class EmbeddingService:
         texts: List[str],
         batch_size: int = 256
     ) -> List[np.ndarray]:
-        """Batch embed texts with rate limiting"""
+        \"\"\"Batch embed texts with rate limiting\"\"\"
         embeddings = []
 
         for i in range(0, len(texts), batch_size):
@@ -1076,7 +1140,7 @@ class EmbeddingService:
         return embeddings
 
     def _get_dimension(self, model: str) -> int:
-        """Auto-detect embedding dimension"""
+        \"\"\"Auto-detect embedding dimension\"\"\"
         if "gemini-embedding-001" in model:
             return 768
         elif "e5-small" in model:
@@ -1096,7 +1160,7 @@ def render_pdf_page(
     dpi: int = 200,
     format: str = "jpeg"
 ) -> bytes:
-    """Render a PDF page to image bytes"""
+    \"\"\"Render a PDF page to image bytes\"\"\"
     import fitz  # PyMuPDF
 
     # Open PDF
@@ -1230,18 +1294,20 @@ async def parallel_retrieve(query: str):
 
 ## 📊 PERFORMANCE METRICS
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Ingestion** | ~5 docs/sec | With OCR |
-| **Indexing** | ~1000 docs/min | Weaviate + OpenSearch |
-| **Query Latency** | 500-2000ms | Depends on reranking |
-| **  - Transform** | 50-150ms | Query processing |
-| **  - Retrieval** | 200-500ms | Hybrid search |
-| **  - Rerank** | 100-400ms | BGE if enabled |
-| **  - Generation** | 300-1000ms | LLM call |
-| **Throughput** | 20-50 QPS | Single instance |
-| **Memory Usage** | 4-8GB | Runtime |
-| **Vector Dimension** | 768D | Gemini embedding |
+| Metric            | Value             | Notes                 |
+|-------------------|-------------------|-----------------------|
+| **Ingestion**     | ~5 docs/sec       | With PaddleOCR GPU    |
+| **Indexing**      | ~1000 docs/min    | Weaviate + OpenSearch |
+| **Query Latency** | 500-2000ms        | Depends on reranking  |
+| ** - Transform**  | 50-150ms          | Query processing      |
+| ** - Retrieval**  | 200-500ms         | Hybrid search         |
+| ** - Rerank**     | 100-400ms         | BGE if enabled        |
+| ** - Generation** | 300-1000ms        | LLM call              |
+| **Throughput**    | 20-50 QPS         | Single instance       |
+| **Memory Usage**  | 4-8GB             | Runtime               |
+| Vector Dimension  | 768D              | Gemini embedding      |
+
+> **⚠️ Performance Metrics Note**: These metrics were measured with **FAISS + offline BM25**. With modern **Hybrid Modern mode (Weaviate gRPC + OpenSearch)**, performance may be different. Recommend re-measuring with current production setup.
 
 ---
 
@@ -1249,12 +1315,6 @@ async def parallel_retrieve(query: str):
 
 - [README.md](README.md) - Quick start guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history
-- [CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md](docs/implementation/CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md) - Defensive programming details
-- [docs/guides/WEAVIATE_SETUP_GUIDE.md](docs/guides/WEAVIATE_SETUP_GUIDE.md) - Weaviate setup
-- [docs/guides/MANUAL_TESTING_CHECKLIST.md](docs/guides/MANUAL_TESTING_CHECKLIST.md) - Testing guide
-
----
-
-**Last Updated**: 2025-10-11
-**Version**: 0.6.1
-**Status**: ✅ Production Ready
+- [CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md](DOCUMENTS_CHATBOX/docs/implementation/CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md) - Defensive programming details
+- [WEAVIATE_SETUP_GUIDE.md](DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_SETUP_GUIDE.md) - Weaviate setup
+- [MANUAL_TESTING_CHECKLIST.md](DOCUMENTS_CHATBOX/docs/guides/MANUAL_TESTING_CHECKLIST.md) - Testing guide
