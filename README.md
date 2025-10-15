@@ -1,5 +1,5 @@
 
-# PVCFC RAG — README - UPDATE AT 5:30AM - 13/10/2025
+# PVCFC RAG — README - LAST UPDATE: 16/10/2025
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
@@ -106,9 +106,11 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
   * **Docker Deployment**: Easy setup with docker-compose.
 
 * **BGE Reranking**: BAAI/bge-reranker-base for semantic reranking
+  * **Status**: Currently **ENABLED** in production (`ENABLE_BGE_RERANK=true`)
   * Multi-level support: chunk, document, page
   * Aggregation methods: max, mean, top3_mean
-  * Configurable via `ENABLE_BGE_RERANK=true`
+  * Performance: Adds ~100-500ms latency, significantly improves ranking accuracy
+  * First query: ~3-5s (model loading), subsequent queries: ~0.5s rerank time
 
 ### 6.1) Hybrid Retrieval Modes (Modern vs Legacy)
 
@@ -142,12 +144,15 @@ Notes:
 * **Retrieval k**: Configurable qua request parameter `max_context` (default=8, max=20). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
 
 * **BGE Reranking** (BAAI/bge-reranker-base):
-  * **Khi bật**: `ENABLE_BGE_RERANK=true` trong .env
+  * **Status**: Currently **ENABLED** (`ENABLE_BGE_RERANK=true` in production .env)
+  * **Model**: BAAI/bge-reranker-base (auto-downloaded on first query)
   * **Cấu hình**:
     - `BGE_RERANK_CANDIDATE_LIMIT=50`: Số candidates trước khi rerank
     - `BGE_RERANK_TOP_K=10`: Số kết quả cuối cùng
     - `BGE_RERANK_LEVEL=chunk`: Rerank level (chunk/doc/page)
     - `BGE_RERANK_AGGREGATION=max`: Phương pháp tổng hợp (max/mean/top3_mean)
+  * **Performance**: First query ~45-60s (model loading), subsequent ~2-5s total
+  * **Accuracy**: Top rerank scores 0.90-0.96 for highly relevant results
   * **Fallback**: Nếu rerank thất bại, sử dụng score-based ranking
 
 * **Legacy Reranking** (khi BGE tắt):
@@ -253,7 +258,8 @@ WEAVIATE_COLLECTION=Chunk
 WEAVIATE_RETRIEVAL_LIMIT=50
 
 # BGE Reranking (Phase 3)
-ENABLE_BGE_RERANK=false  # Enable BGE CrossEncoder reranking
+# Currently ENABLED in production for better semantic ranking
+ENABLE_BGE_RERANK=true  # Enable BGE CrossEncoder reranking (BAAI/bge-reranker-base)
 BGE_RERANK_CANDIDATE_LIMIT=50
 BGE_RERANK_TOP_K=10
 BGE_RERANK_LEVEL=chunk  # chunk|doc|page
@@ -316,7 +322,11 @@ python scripts\\weaviate\\test_weaviate_search.py "CO2 compressor"
 **Chạy API**
 
 ```powershell
+# Option 1: Direct uvicorn
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Option 2: Using launcher script (recommended)
+.\launchers\start_api.ps1
 ```
 
 ### Kiểm thử tích hợp (Hybrid Modern)
@@ -335,7 +345,7 @@ Kỳ vọng:
 
 ## 12) Endpoints (rút gọn)
 
-* **POST `/api/ask`**
+* **POST `/ask`** (note: endpoint path is `/ask`, not `/api/ask`)
   **Request**:
 
   ```json
@@ -383,10 +393,10 @@ Kỳ vọng:
 }
 ```
 
-* **POST `/api/report`**
+* **POST `/report`**
   Sinh báo cáo tạm (Markdown/Docx đơn giản) từ **answer + citations**.
 
-* **POST `/api/locate`**
+* **POST `/locate`**
   Định vị trang liên quan (không yêu cầu bbox ở V1).
 
 * **GET `/index-stats`**, **GET `/metrics`**, **GET `/trace`**.
