@@ -127,6 +127,7 @@ class OpenSearchBM25Retriever:
                     "title",
                     "level",
                     "doc_type",
+                    "tags",  # Include tags field
                 ],
             }
 
@@ -156,6 +157,7 @@ class OpenSearchBM25Retriever:
                     "title": src.get("title"),
                     "level": src.get("level"),
                     "doc_type": src.get("doc_type"),
+                    "tags": src.get("tags", []),  # Include tags
                 }
 
                 result = {
@@ -176,6 +178,130 @@ class OpenSearchBM25Retriever:
             # Return empty results on error (graceful degradation)
             logger.warning("Returning empty results due to OpenSearch error")
             return []
+
+    def search_with_tag_boosting(
+        self, query: str, detected_tags: List[str] = None, top_k: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Enhanced search with tag boosting for P&ID documents
+
+        Strategy:
+        - Exact match in tags.keyword field → boost 10x
+        - Phrase match in text → boost 5x
+        - Multi-match with fuzziness → boost 2x
+
+        Args:
+            query: Search query
+            detected_tags: List of detected equipment tags
+            top_k: Number of results to return
+
+        Returns:
+            List of search results with boosted scores
+        """
+        if not detected_tags:
+            # Fallback to normal search
+            logger.debug("No tags detected, using normal search")
+            return self.search(query, top_k)
+
+        logger.info(f"Tag-boosted search for tags: {detected_tags}")
+
+        try:
+            # Tag-focused query strategy with bool query
+            body = {
+                "size": top_k,
+                "query": {
+                    "bool": {
+                        "should": [
+                            # Exact match trong tags.keyword → boost 10x
+                            {
+                                "terms": {
+                                    "tags.keyword": detected_tags,
+                                    "boost": 10.0,
+                                }
+                            },
+                            # Phrase match trong text → boost 5x
+                            {
+                                "match_phrase": {
+                                    "text": {
+                                        "query": " ".join(detected_tags),
+                                        "boost": 5.0,
+                                    }
+                                }
+                            },
+                            # Multi-match với fuzzy → boost 2x
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": ["text^2", "heading^1.5", "title"],
+                                    "fuzziness": "AUTO",
+                                    "prefix_length": 1,
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                },
+                "_source": [
+                    "chunk_id",
+                    "doc_id",
+                    "text",
+                    "page",
+                    "page_start",
+                    "page_end",
+                    "heading",
+                    "title",
+                    "level",
+                    "doc_type",
+                    "tags",
+                    "tags_raw",
+                ],
+            }
+
+            # Execute search
+            response = self.client.search(index=self.index_name, body=body)
+            hits = response["hits"]["hits"]
+
+            # Convert to compatible format
+            results = []
+            for idx, hit in enumerate(hits):
+                score = hit.get("_score", 0.0)
+                src = hit.get("_source", {})
+
+                # Extract metadata
+                metadata = {
+                    "chunk_id": src.get("chunk_id"),
+                    "doc_id": src.get("doc_id"),
+                    "page": src.get("page"),
+                    "page_start": src.get("page_start"),
+                    "page_end": src.get("page_end"),
+                    "heading": src.get("heading"),
+                    "title": src.get("title"),
+                    "level": src.get("level"),
+                    "doc_type": src.get("doc_type"),
+                    "tags": src.get("tags", []),
+                    "tags_raw": src.get("tags_raw", []),
+                }
+
+                result = {
+                    "text": src.get("text", ""),
+                    "score": float(score),
+                    "metadata": metadata,
+                    "rank": len(results) + 1,
+                    "source": "opensearch_tag_boosted",
+                }
+                results.append(result)
+
+            logger.info(
+                f"Tag-boosted search returned {len(results)} results "
+                f"(tags: {detected_tags})"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"Tag-boosted search failed: {e}")
+            # Graceful degradation: fallback to normal search
+            logger.warning("Falling back to normal search")
+            return self.search(query, top_k)
 
     def batch_search(
         self, queries: List[str], top_k: int = 5

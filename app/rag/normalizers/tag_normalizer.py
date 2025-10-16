@@ -34,9 +34,9 @@ class TagNormalizer:
         ),
         TagPattern(
             name="pump",
-            pattern=r"P[-\s]?\d{3,4}[A-Z]?",
-            description="Pump tags (e.g., P-101, P-2001A)",
-            examples=["P-101", "P 2001A", "P-305B"],
+            pattern=r"P[-\s]?\d{3,5}[A-Z]?",
+            description="Pump tags (e.g., P-101, P-2001A, P-04201A)",
+            examples=["P-101", "P 2001A", "P-305B", "P-04201A"],
         ),
         TagPattern(
             name="compressor",
@@ -46,15 +46,27 @@ class TagNormalizer:
         ),
         TagPattern(
             name="vessel",
-            pattern=r"[VDT][-\s]?\d{3,4}[A-Z]?",
-            description="Vessel/Tank tags (e.g., V-101, T-201)",
-            examples=["V-101", "T-201", "D-305"],
+            pattern=r"[VDT][-\s]?\d{3,5}[A-Z]?",
+            description="Vessel/Tank tags (e.g., V-101, T-201, T-04201)",
+            examples=["V-101", "T-201", "D-305", "T-04201"],
         ),
         TagPattern(
             name="heat_exchanger",
-            pattern=r"[EH][-\s]?\d{3,4}[A-Z]?",
-            description="Heat exchanger tags (e.g., E-101, H-201)",
-            examples=["E-101", "H-201", "E 305A"],
+            pattern=r"[EH][-\s]?\d{3,5}[A-Z]?",
+            description="Heat exchanger tags (e.g., E-101, H-201, E-04217)",
+            examples=["E-101", "H-201", "E 305A", "E-04217"],
+        ),
+        TagPattern(
+            name="reactor",
+            pattern=r"R[-\s]?\d{3,5}[A-Z]?",
+            description="Reactor tags (e.g., R-101, R-04201)",
+            examples=["R-101", "R-04201"],
+        ),
+        TagPattern(
+            name="furnace",
+            pattern=r"[FB][-\s]?\d{3,5}[A-Z]?",
+            description="Furnace/Boiler tags (e.g., F-101, B-201, F-04201)",
+            examples=["F-101", "B-201", "F-04201"],
         ),
         TagPattern(
             name="instrument",

@@ -51,7 +51,7 @@ def call_ask_api(
         logger.log_api_request(endpoint="/ask", method="POST", payload=payload)
 
         start_time = time.time()
-        response = requests.post(url, json=payload, timeout=60)
+        response = requests.post(url, json=payload, timeout=180)
         total_latency = (time.time() - start_time) * 1000  # Convert to ms
 
         if response.status_code == 200:
@@ -97,9 +97,9 @@ def call_ask_api(
         logger.log_error(
             "API request timeout",
             exception=e,
-            context={"timeout": 60, "api_base_url": api_base_url},
+            context={"timeout": 180, "api_base_url": api_base_url},
         )
-        return {"success": False, "error": "Request timed out after 60 seconds"}
+        return {"success": False, "error": "Request timed out after 180 seconds"}
     except Exception as e:
         logger.log_error(
             "Unexpected API error",

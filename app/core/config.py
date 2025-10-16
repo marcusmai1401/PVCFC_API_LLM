@@ -134,6 +134,14 @@ class Settings(BaseSettings):
     )
 
     # ========================================
+    # Phase 2 - Chain-of-Verification (CoVe)
+    # ========================================
+    enable_cove: bool = Field(
+        default=True,
+        description="Enable Chain-of-Verification (CoVe) for answer validation (reduces hallucinations but adds latency)",
+    )
+
+    # ========================================
     # Index Directory Configuration
     # ========================================
     index_dir: str = Field(

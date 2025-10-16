@@ -1,0 +1,82 @@
+[
+  {
+    "query": "E04217",
+    "query_type": "tag_only",
+    "expected_tags": ["E04217"],
+    "expected_docs": [],
+    "expected_page": null,
+    "expected_answer_contains": [],
+    "description": "Pure tag lookup - heat exchanger"
+  },
+  {
+    "query": "E04217 ở đâu",
+    "query_type": "tag_only",
+    "expected_tags": ["E04217"],
+    "expected_docs": [],
+    "expected_page": null,
+    "expected_answer_contains": [],
+    "description": "Tag location query"
+  },
+  {
+    "query": "thông tin P04201A",
+    "query_type": "tag_only",
+    "expected_tags": ["P04201A"],
+    "expected_docs": [],
+    "expected_page": null,
+    "expected_answer_contains": [],
+    "description": "Tag information query - pump"
+  },
+  {
+    "query": "áp suất của E04217",
+    "query_type": "mixed",
+    "expected_tags": ["E04217"],
+    "expected_answer_contains": ["bar", "psi", "pressure", "áp suất"],
+    "description": "Tag + pressure parameter query"
+  },
+  {
+    "query": "flow rate pump P04201A",
+    "query_type": "mixed",
+    "expected_tags": ["P04201A"],
+    "expected_answer_contains": ["kg/h", "m³/h", "flow", "lưu lượng"],
+    "description": "Tag + flow parameter query"
+  },
+  {
+    "query": "nhiệt độ reactor R04201",
+    "query_type": "mixed",
+    "expected_tags": ["R04201"],
+    "expected_answer_contains": ["°C", "°F", "temperature", "nhiệt độ"],
+    "description": "Tag + temperature parameter query"
+  },
+  {
+    "query": "máy nén K04301",
+    "query_type": "tag_only",
+    "expected_tags": ["K04301"],
+    "expected_docs": [],
+    "expected_page": null,
+    "expected_answer_contains": [],
+    "description": "Compressor tag query"
+  },
+  {
+    "query": "bồn chứa T04201",
+    "query_type": "tag_only",
+    "expected_tags": ["T04201"],
+    "expected_docs": [],
+    "expected_page": null,
+    "expected_answer_contains": [],
+    "description": "Tank tag query"
+  },
+  {
+    "query": "tháp C04302 specifications",
+    "query_type": "mixed",
+    "expected_tags": ["C04302"],
+    "expected_answer_contains": ["specification", "spec"],
+    "description": "Column/tower specifications query"
+  },
+  {
+    "query": "lò đốt F04201 operating temperature",
+    "query_type": "mixed",
+    "expected_tags": ["F04201"],
+    "expected_answer_contains": ["temperature", "°C", "operating"],
+    "description": "Furnace operating parameters"
+  }
+]

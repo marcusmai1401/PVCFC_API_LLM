@@ -57,10 +57,12 @@ async def ask_question(
 
     Pipeline:
     1. Query transformation (normalize, HyDE)
-    2. Hybrid retrieval (BM25 + FAISS)
-    3. Reranking (cross-encoder)
+    2. Hybrid retrieval (Weaviate vector + OpenSearch BM25 + BGE reranking if enabled)
+    3. Legacy reranking (cross-encoder, only if BGE disabled)
     4. Generation with citations
-    5. Chain-of-Verification (optional)
+    5. Chain-of-Verification (optional, controlled by ENABLE_COVE)
+
+    Note: When BGE reranking is enabled, step 3 is skipped (reranking happens in step 2).
     """
     start_time = time.time()
     trace_id = "unknown"  # get_trace_id() not implemented yet
@@ -276,7 +278,8 @@ async def ask_question(
         final_answer = generated_answer.answer
         cove_time = 0.0  # Initialize cove_time
 
-        if request.execution_mode != "light_only":  # Skip CoVe in light mode
+        # Run CoVe only if enabled in settings AND not in light_only mode
+        if settings.enable_cove and request.execution_mode != "light_only":
             cove_start = time.time()
             # Pass global_confidence from generation to CoVe for smart warning logic
             verification_result = await cove.run_verification(
@@ -306,7 +309,7 @@ async def ask_question(
             "rerank_ms": round(rerank_time),
             "generate_ms": round(generate_time),
         }
-        if request.execution_mode != "light_only":
+        if settings.enable_cove and request.execution_mode != "light_only":
             timing_breakdown["cove_ms"] = round(cove_time)
 
         http_request.state.timing_breakdown = timing_breakdown
@@ -328,7 +331,7 @@ async def ask_question(
             generated_answer.confidence, len(generated_answer.citations)
         )
 
-        if request.execution_mode != "light_only":
+        if settings.enable_cove and request.execution_mode != "light_only":
             MetricsCollector.record_pipeline_step("cove_verification", cove_time / 1000)
 
         # Convert citations to response format
@@ -698,7 +701,8 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             "language": request.language,
             "execution_mode": request.execution_mode,
             "vision_enabled": effective_vision_enabled,
-            "cove_enabled": request.execution_mode != "light_only",
+            "cove_enabled": settings.enable_cove
+            and request.execution_mode != "light_only",
             "answer_length": len(final_answer),
             "citations_count": len(citations_list),
             "confidence": generated_answer.confidence,

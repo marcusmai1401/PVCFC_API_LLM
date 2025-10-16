@@ -228,6 +228,216 @@ class HybridWeaviateOpenSearchRetriever:
         logger.info(f"Final result count: {len(fused_results)}")
         return fused_results
 
+    def retrieve_enhanced(
+        self,
+        query: str,
+        top_k: int = 10,
+        enable_pid_enhancement: bool = True,
+        config_override: Optional[HybridModernConfig] = None,
+    ) -> List[RetrievalResult]:
+        """
+        Enhanced retrieval with P&ID tag awareness
+
+        Flow:
+        1. PID Query Enhancement (detect tags, variants, query_type)
+        2. Parallel search (OpenSearch + Weaviate) with boosting/filtering
+        3. Adaptive RRF fusion (weights based on query_type)
+        4. PID Tag Reranking (boost exact/fuzzy matches)
+        5. BGE Reranking (final semantic ordering)
+
+        Args:
+            query: User query string
+            top_k: Final number of results to return
+            enable_pid_enhancement: Enable P&ID-specific enhancements
+            config_override: Optional config override
+
+        Returns:
+            Enhanced retrieval results optimized for P&ID queries
+        """
+        config = config_override or self.config
+
+        logger.info("=" * 80)
+        logger.info(f"ENHANCED RETRIEVAL: '{query}'")
+        logger.info(f"PID Enhancement: {enable_pid_enhancement}")
+        logger.info("=" * 80)
+
+        # Step 1: Query enhancement
+        if enable_pid_enhancement:
+            from app.rag.query_processing.pid_query_enhancer import PIDQueryEnhancer
+
+            enhancer = PIDQueryEnhancer()
+            enhanced = enhancer.enhance(query)
+        else:
+            enhanced = {"strategy": "semantic", "original": query}
+
+        strategy = enhanced["strategy"]
+        query_type = enhanced.get("query_type", "semantic")
+
+        logger.info(f"→ Strategy: {strategy}, Type: {query_type}")
+
+        # Step 2: Retrieval with boosting/filtering
+        if strategy == "tag_focused":
+            tags = enhanced["tags"]
+            logger.info(f"→ Tag-focused retrieval for tags: {tags}")
+
+            # OpenSearch: tag-boosted search
+            try:
+                logger.debug("  Searching OpenSearch with tag boosting...")
+                opensearch_results = self._search_opensearch_tag_boosted(
+                    query=enhanced["original"],
+                    detected_tags=tags,
+                    top_k=config.opensearch_limit,
+                )
+                logger.info(f"  OpenSearch: {len(opensearch_results)} results")
+            except Exception as e:
+                logger.error(f"  OpenSearch tag-boosted search failed: {e}")
+                opensearch_results = []
+
+            # Weaviate: tag-filtered search
+            try:
+                logger.debug("  Searching Weaviate with tag filter...")
+                weaviate_results = self.weaviate_retriever.search_with_tag_filter(
+                    query=enhanced["original"],
+                    tag_filter=tags,
+                    limit=config.weaviate_limit,
+                )
+                logger.info(f"  Weaviate: {len(weaviate_results)} results")
+            except Exception as e:
+                logger.error(f"  Weaviate tag-filtered search failed: {e}")
+                weaviate_results = []
+
+        else:
+            # Normal hybrid search
+            logger.info(f"→ Normal hybrid search (strategy: {strategy})")
+
+            # OpenSearch
+            try:
+                opensearch_results = self._search_opensearch(
+                    query=enhanced["original"], top_k=config.opensearch_limit
+                )
+                logger.info(f"  OpenSearch: {len(opensearch_results)} results")
+            except Exception as e:
+                logger.error(f"  OpenSearch search failed: {e}")
+                opensearch_results = []
+
+            # Weaviate
+            try:
+                from app.rag.query_transform import QueryFilters, TransformedQuery
+
+                transformed = TransformedQuery(
+                    original=query,
+                    normalized=query.lower(),
+                    intent=None,
+                    filters=QueryFilters(),
+                    language="en",
+                )
+                weaviate_results = self.weaviate_retriever.search(transformed)
+                logger.info(f"  Weaviate: {len(weaviate_results)} results")
+            except Exception as e:
+                logger.error(f"  Weaviate search failed: {e}")
+                weaviate_results = []
+
+        # Check if we have any results
+        if not opensearch_results and not weaviate_results:
+            logger.warning("No results from either backend!")
+            return []
+
+        # Step 3: Adaptive RRF fusion
+        logger.info(f"→ Applying adaptive RRF fusion (type: {query_type})")
+        fused_results = self._rrf_fusion_adaptive(
+            opensearch_results=opensearch_results,
+            weaviate_results=weaviate_results,
+            query_type=query_type,
+            k=config.rrf_k,
+            top_n=config.top_rrf,
+        )
+
+        # Step 4: PID Tag Reranking (before BGE)
+        if strategy == "tag_focused":
+            from app.rag.rerankers.pid_tag_reranker import PIDTagReranker
+
+            logger.info(f"→ Applying PID tag reranking")
+            pid_reranker = PIDTagReranker()
+            fused_results = pid_reranker.rerank(
+                results=[r.__dict__ for r in fused_results],  # Convert to dict
+                query_tags=enhanced["tags"],
+                top_k=50,  # Keep more candidates for BGE
+            )
+
+            # Convert back to RetrievalResult
+            fused_results = [
+                RetrievalResult(
+                    chunk_id=r.get("chunk_id") or r.get("metadata", {}).get("chunk_id"),
+                    text=r["text"],
+                    score=r["final_score"],
+                    source=r.get("source", "unknown"),
+                    metadata=r.get("metadata", {}),
+                    doc_id=r.get("doc_id") or r.get("metadata", {}).get("doc_id"),
+                    page=r.get("page") or r.get("metadata", {}).get("page"),
+                    bbox=None,
+                    parent_id=None,
+                )
+                for r in fused_results
+            ]
+
+        # Step 5: BGE Reranking (final)
+        if config.enable_bge_rerank and settings.enable_bge_rerank:
+            logger.info(f"→ Applying BGE reranking (final)")
+            try:
+                final_results = self._apply_bge_reranking(
+                    query=enhanced["original"], results=fused_results, top_k=top_k
+                )
+            except Exception as e:
+                logger.error(f"  BGE reranking failed: {e}, using boosted results")
+                final_results = fused_results[:top_k]
+        else:
+            final_results = fused_results[:top_k]
+
+        logger.info("=" * 80)
+        logger.info(f"ENHANCED RETRIEVAL COMPLETE: {len(final_results)} final results")
+        logger.info("=" * 80)
+
+        return final_results
+
+    def _search_opensearch_tag_boosted(
+        self, query: str, detected_tags: List[str], top_k: int
+    ) -> List[RetrievalResult]:
+        """
+        Search OpenSearch with tag boosting and convert to RetrievalResult
+
+        Args:
+            query: Query string
+            detected_tags: Detected equipment tags
+            top_k: Number of results
+
+        Returns:
+            List of RetrievalResult objects
+        """
+        # Call tag-boosted search
+        opensearch_hits = self.opensearch_retriever.search_with_tag_boosting(
+            query=query, detected_tags=detected_tags, top_k=top_k
+        )
+
+        # Convert to RetrievalResult format
+        results = []
+        for hit in opensearch_hits:
+            metadata = hit.get("metadata", {})
+
+            result = RetrievalResult(
+                chunk_id=metadata.get("chunk_id", hit.get("chunk_id", "unknown")),
+                text=hit["text"],
+                score=hit["score"],
+                source="opensearch_tag_boosted",
+                metadata=metadata,
+                doc_id=metadata.get("doc_id"),
+                page=metadata.get("page"),
+                bbox=None,
+                parent_id=None,
+            )
+            results.append(result)
+
+        return results
+
     def _search_opensearch(self, query: str, top_k: int) -> List[RetrievalResult]:
         """
         Search OpenSearch and convert to RetrievalResult format
@@ -316,6 +526,101 @@ class HybridWeaviateOpenSearchRetriever:
             fused_results.append(result)
 
         return fused_results
+
+    def _rrf_fusion_adaptive(
+        self,
+        opensearch_results: List[RetrievalResult],
+        weaviate_results: List[RetrievalResult],
+        query_type: str = "mixed",
+        k: int = 60,
+        top_n: int = 60,
+    ) -> List[RetrievalResult]:
+        """
+        Adaptive RRF fusion with query-type based weights
+
+        Weight profiles:
+        - tag_only:  OpenSearch=1.0, Weaviate=0.3 (keyword-heavy)
+        - mixed:     OpenSearch=0.7, Weaviate=0.7 (balanced)
+        - semantic:  OpenSearch=0.5, Weaviate=1.0 (semantic-heavy)
+        - visual:    OpenSearch=0.4, Weaviate=0.6 (semantic-leaning)
+
+        Args:
+            opensearch_results: Results from OpenSearch (keyword)
+            weaviate_results: Results from Weaviate (semantic)
+            query_type: Query type classification
+            k: RRF constant
+            top_n: Number of results to return
+
+        Returns:
+            Fused results with adaptive weighting
+        """
+        # Define adaptive weights
+        WEIGHT_MAP = {
+            "tag_only": {"opensearch": 1.0, "weaviate": 0.3},
+            "mixed": {"opensearch": 0.7, "weaviate": 0.7},
+            "semantic": {"opensearch": 0.5, "weaviate": 1.0},
+            "visual": {"opensearch": 0.4, "weaviate": 0.6},
+        }
+
+        weights = WEIGHT_MAP.get(query_type, WEIGHT_MAP["mixed"])
+
+        logger.info(
+            f"Adaptive RRF fusion: type={query_type}, "
+            f"weights=[OS:{weights['opensearch']}, WV:{weights['weaviate']}]"
+        )
+
+        rrf_scores = defaultdict(float)
+        all_results_dict = {}
+
+        # OpenSearch contribution (keyword-focused)
+        for rank, result in enumerate(opensearch_results):
+            key = result.chunk_id or result.text[:200]
+            rrf_contribution = weights["opensearch"] / (k + rank + 1)
+            rrf_scores[key] += rrf_contribution
+
+            if key not in all_results_dict:
+                all_results_dict[key] = result
+
+        logger.debug(
+            f"OpenSearch contributed {len(opensearch_results)} results "
+            f"with weight {weights['opensearch']}"
+        )
+
+        # Weaviate contribution (semantic-focused)
+        for rank, result in enumerate(weaviate_results):
+            key = result.chunk_id or result.text[:200]
+            rrf_contribution = weights["weaviate"] / (k + rank + 1)
+            rrf_scores[key] += rrf_contribution
+
+            if key not in all_results_dict:
+                all_results_dict[key] = result
+
+        logger.debug(
+            f"Weaviate contributed {len(weaviate_results)} results "
+            f"with weight {weights['weaviate']}"
+        )
+
+        # Sort by RRF score
+        sorted_results = sorted(
+            [(key, score) for key, score in rrf_scores.items()],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:top_n]
+
+        # Build final results
+        fused = []
+        for key, rrf_score in sorted_results:
+            result = all_results_dict[key]
+            result.score = rrf_score
+            result.source = f"rrf_{query_type}"
+            fused.append(result)
+
+        logger.info(
+            f"Adaptive RRF fusion ({query_type}): produced {len(fused)} results, "
+            f"top_score={fused[0].score:.4f}"
+        )
+
+        return fused
 
     def _apply_bge_reranking(
         self,

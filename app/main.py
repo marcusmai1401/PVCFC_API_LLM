@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from app.api.endpoints import pdf_renderer
-from app.api.routers import ask, config, health, locate, report
+from app.api.routers import ask, config, health, locate, report, tags
 from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
 from app.core.metrics import get_metrics, get_metrics_content_type
@@ -52,6 +52,32 @@ async def lifespan(app: FastAPI):
             manager = get_index_manager(settings)
             app.state.retriever = manager.get_retriever()
             app.state.settings = settings
+
+            # Attach OpenSearch client to app state for routers needing direct access (e.g., /tags)
+            try:
+                retriever = app.state.retriever
+                # Modern hybrid retriever exposes opensearch_retriever
+                if (
+                    hasattr(retriever, "opensearch_retriever")
+                    and retriever.opensearch_retriever
+                ):
+                    app.state.opensearch_client = retriever.opensearch_retriever.client
+                    logger.info(
+                        "Attached OpenSearch client from Hybrid Modern retriever"
+                    )
+                # Legacy hybrid may expose bm25_indexer as OpenSearch retriever when enabled
+                elif hasattr(retriever, "bm25_indexer") and retriever.bm25_indexer:
+                    from app.rag.indexers.opensearch_bm25_retriever import (
+                        OpenSearchBM25Retriever,
+                    )
+
+                    if isinstance(retriever.bm25_indexer, OpenSearchBM25Retriever):
+                        app.state.opensearch_client = retriever.bm25_indexer.client
+                        logger.info(
+                            "Attached OpenSearch client from Legacy Hybrid retriever"
+                        )
+            except Exception as e:
+                logger.warning(f"Could not attach OpenSearch client to app state: {e}")
 
             # Load doc_id_map if available (prioritize production path)
             import json
@@ -151,6 +177,9 @@ def create_app() -> FastAPI:
     app.include_router(ask.router, tags=["Query"])
     app.include_router(locate.router, tags=["Location"])
     app.include_router(report.router, tags=["Reports"])
+
+    # Metadata router - Tags listing
+    app.include_router(tags.router, tags=["Metadata"])
 
     # Phase 4 router - Configuration management
     app.include_router(config.router, tags=["Configuration"])

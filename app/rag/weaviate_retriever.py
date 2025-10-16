@@ -273,6 +273,117 @@ class WeaviateRetriever:
                 combined_filter = combined_filter & condition
             return combined_filter
 
+    def _build_filters_with_tags(
+        self, filters, detected_tags: Optional[List[str]] = None
+    ) -> Optional[Filter]:
+        """
+        Build Weaviate filters including tag filtering for P&ID
+
+        Args:
+            filters: QueryFilters object
+            detected_tags: List of detected equipment tags
+
+        Returns:
+            Weaviate Filter object or None
+        """
+        filter_conditions = []
+
+        # Existing filters from QueryFilters
+        if filters:
+            existing_filter = self._build_filters(filters)
+            if existing_filter:
+                filter_conditions.append(existing_filter)
+
+        # NEW: Tag filtering (using tags property)
+        if detected_tags:
+            # Note: Requires Weaviate schema to have "tags" property (TEXT_ARRAY)
+            try:
+                tag_filter = Filter.by_property("tags").contains_any(detected_tags)
+                filter_conditions.append(tag_filter)
+                logger.debug(f"Added tag filter for: {detected_tags}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to add tag filter (schema may not have tags property): {e}"
+                )
+
+        # Combine filters with AND
+        if len(filter_conditions) == 0:
+            return None
+        elif len(filter_conditions) == 1:
+            return filter_conditions[0]
+        else:
+            combined_filter = filter_conditions[0]
+            for condition in filter_conditions[1:]:
+                combined_filter = combined_filter & condition
+            return combined_filter
+
+    def search_with_tag_filter(
+        self,
+        query: str,
+        tag_filter: List[str] = None,
+        limit: int = 50,
+        config_override: Optional[WeaviateSearchConfig] = None,
+    ) -> List[RetrievalResult]:
+        """
+        Search with equipment tag filtering for P&ID documents
+
+        Args:
+            query: Search query
+            tag_filter: List of equipment tags to filter by
+            limit: Number of results
+            config_override: Optional config override
+
+        Returns:
+            Filtered and ranked retrieval results
+        """
+        config = config_override or self.config
+
+        logger.info(
+            f"Tag-filtered Weaviate search: query='{query[:50]}', tags={tag_filter}"
+        )
+
+        try:
+            self._ensure_client()
+
+            # Get query embedding
+            query_vector = self._get_query_vector(query)
+
+            # Build filters with tags
+            where_filter = self._build_filters_with_tags(None, tag_filter)
+
+            # Perform Weaviate search
+            results = self._search_weaviate(
+                query_vector=query_vector,
+                where_filter=where_filter,
+                limit=limit,
+            )
+
+            logger.info(f"Tag-filtered search returned {len(results)} results")
+
+            # Convert to RetrievalResult format
+            retrieval_results = self._convert_to_retrieval_results(results)
+
+            # Mark source
+            for r in retrieval_results:
+                r.source = "weaviate_tag_filtered"
+
+            return retrieval_results
+
+        except Exception as e:
+            logger.error(f"Tag-filtered Weaviate search failed: {e}")
+            # Graceful degradation: fallback to normal search
+            logger.warning("Falling back to normal Weaviate search")
+            from app.rag.query_transform import QueryFilters, TransformedQuery
+
+            transformed = TransformedQuery(
+                original=query,
+                normalized=query.lower(),
+                intent=None,
+                filters=QueryFilters(),
+                language="en",
+            )
+            return self.search(transformed, config_override)
+
     def _search_weaviate(
         self,
         query_vector: List[float],

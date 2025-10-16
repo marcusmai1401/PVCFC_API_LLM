@@ -428,11 +428,15 @@ def call_ask_api(
             "execution_mode": "production",  # Always use production mode
         }
 
+        # Add tag filters if provided
+        if "tags" in params and params["tags"]:
+            payload["filters"] = {"tags": params["tags"]}
+
         # Log API request
         logger.log_api_request(endpoint="/ask", method="POST", payload=payload)
 
         start_time = time.time()
-        response = requests.post(url, json=payload, timeout=60)
+        response = requests.post(url, json=payload, timeout=180)
         total_latency = (time.time() - start_time) * 1000  # Convert to ms
 
         if response.status_code == 200:
@@ -478,9 +482,9 @@ def call_ask_api(
         logger.log_error(
             "API request timeout",
             exception=e,
-            context={"timeout": 60, "api_base_url": api_base_url},
+            context={"timeout": 180, "api_base_url": api_base_url},
         )
-        return {"success": False, "error": "Request timed out after 60 seconds"}
+        return {"success": False, "error": "Request timed out after 180 seconds"}
     except Exception as e:
         logger.log_error(
             "Unexpected API error",
@@ -890,6 +894,49 @@ def render(vision_mode=False):
 
     # Advanced options - minimal
     with st.expander("Advanced Options", expanded=False):
+        st.markdown("**P&ID Tag Filter** 🏷️")
+        st.caption("Filter documents by equipment tags (e.g., E04217, P-101, V-2051)")
+
+        # Fetch available tags from API
+        if "available_tags" not in st.session_state:
+            try:
+                tags_response = requests.get(
+                    f"{st.session_state.api_base_url}/tags", timeout=5
+                )
+                if tags_response.ok:
+                    tags_data = tags_response.json()
+                    st.session_state.available_tags = tags_data.get("tags", [])
+                else:
+                    st.session_state.available_tags = []
+            except Exception:
+                st.session_state.available_tags = []
+
+        # Show tag filter UI
+        available_tags = st.session_state.available_tags
+        if available_tags:
+            # Multi-select for tags
+            selected_tags = st.multiselect(
+                "Select Tags",
+                options=available_tags,
+                default=[],
+                help=f"{len(available_tags)} tags available in the system",
+                key="tag_filter",
+                label_visibility="collapsed",
+            )
+
+            if selected_tags:
+                st.info(
+                    f"📌 Filtering by {len(selected_tags)} tag(s): {', '.join(selected_tags[:5])}{'...' if len(selected_tags) > 5 else ''}"
+                )
+            else:
+                st.caption(
+                    f"✓ {len(available_tags)} tags available (no filter applied)"
+                )
+        else:
+            st.caption("⚠️ Tag filtering unavailable (OpenSearch may be disconnected)")
+
+        st.divider()
+
         st.markdown("**Citation Format**")
         use_ieee_citations = st.checkbox(
             "Use IEEE-style Citations",
@@ -904,6 +951,7 @@ def render(vision_mode=False):
         st.caption("Retrieval: Weaviate (semantic) + OpenSearch (keyword)")
         st.caption("Reranking: BGE Cross-Encoder")
         st.caption("Vision: Gemini Multimodal")
+        st.caption(f"P&ID Tags: {len(available_tags)} tags indexed")
 
     # Set defaults for hidden parameters
     execution_mode = "production"  # Always production
@@ -956,6 +1004,11 @@ def render(vision_mode=False):
                     "language": language,
                     "hyde": True,
                 }
+
+                # Add tag filters if selected
+                selected_tags = st.session_state.get("tag_filter", [])
+                if selected_tags:
+                    params["tags"] = selected_tags
 
                 # Call API with logger
                 result = call_ask_api(
@@ -1598,15 +1651,55 @@ def render(vision_mode=False):
         breakdown = meta.get("breakdown", {})
 
         if breakdown:
-            # Create timeline visualization
-            total_time = sum(breakdown.values())
-            st.write(f"**Total Processing Time: {total_time:.0f}ms**")
+            # Detect cache hit (retrieve_ms = 0 AND rerank_ms = 0)
+            retrieve_ms = breakdown.get("retrieve_ms", 0)
+            rerank_ms = breakdown.get("rerank_ms", 0)
+            cache_hit = retrieve_ms == 0 and rerank_ms == 0
 
-            # Create a horizontal bar for each stage
+            # Detect BGE reranking (rerank_ms = 0 but retrieve_ms > 0)
+            bge_enabled = rerank_ms == 0 and retrieve_ms > 0
+
+            # Calculate total time
+            total_time = sum(breakdown.values())
+
+            # Show header with cache status
+            if cache_hit:
+                st.write(
+                    f"**Total Processing Time: {total_time:.0f}ms** ⚡ *(Cache Hit)*"
+                )
+                st.caption("Retrieval and reranking results were served from cache")
+            else:
+                st.write(f"**Total Processing Time: {total_time:.0f}ms**")
+
+            # Stage labels mapping
+            stage_labels = {
+                "transform_ms": "1️⃣ Query Transform",
+                "retrieve_ms": "2️⃣ Hybrid Retrieval"
+                + (" (incl. BGE Rerank)" if bge_enabled else ""),
+                "rerank_ms": "3️⃣ Reranking",
+                "generate_ms": "4️⃣ Generation",
+                "cove_ms": "5️⃣ Chain-of-Verification",
+            }
+
+            # Create a horizontal bar for each stage (skip zero-time stages unless cache hit)
             for stage, time_ms in breakdown.items():
+                # Skip rerank_ms display if BGE is enabled (it's included in retrieve_ms)
+                if stage == "rerank_ms" and bge_enabled:
+                    continue
+
                 percentage = (time_ms / total_time * 100) if total_time > 0 else 0
+                label = stage_labels.get(stage, stage)
+
+                # Color based on percentage
+                if percentage > 50:
+                    color = "🔴"  # Red for high
+                elif percentage > 20:
+                    color = "🟡"  # Yellow for medium
+                else:
+                    color = "🟢"  # Green for low
+
                 st.progress(percentage / 100)
-                st.caption(f"{stage}: {time_ms:.0f}ms ({percentage:.1f}%)")
+                st.caption(f"{color} {label}: {time_ms:.0f}ms ({percentage:.1f}%)")
         else:
             st.info("No timing data available for this query")
 

@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: opensearch-pvcfc
+    restart: unless-stopped
+    ports:
+      - "9200:9200"  # REST API
+      - "9600:9600"  # Performance Analyzer
+    environment:
+      # Cluster settings
+      cluster.name: pvcfc-opensearch-cluster
+      node.name: opensearch-node1
+
+      # Discovery (single-node for development)
+      discovery.type: single-node
+
+      # Security (disabled for local development)
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+
+      # Memory settings (adjust based on your system)
+      OPENSEARCH_JAVA_OPTS: "-Xms2g -Xmx2g"
+
+      # Bootstrap memory lock
+      bootstrap.memory_lock: "true"
+
+      # Network
+      network.host: 0.0.0.0
+
+      # Disable telemetry
+      DISABLE_TELEMETRY: "true"
+
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  opensearch_data:
+    driver: local
+
+networks:
+  default:
+    name: opensearch-network
