@@ -10,7 +10,7 @@ import streamlit as st
 
 def render():
     """Render ingest panel component"""
-    st.header("📥 Ingest Panel")
+    st.header("Ingest Panel")
     st.caption("Upload and process documents with automatic OCR and indexing")
 
     # Main layout
@@ -33,7 +33,7 @@ def render():
             )
 
             if uploaded_files:
-                st.info(f"📁 {len(uploaded_files)} file(s) selected")
+                st.info(f"{len(uploaded_files)} file(s) selected")
                 for file in uploaded_files:
                     st.caption(f"• {file.name} ({file.size/1024:.1f} KB)")
         else:
@@ -82,7 +82,7 @@ def render():
         )
 
         # Start button
-        if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
+        if st.button("Start Ingestion", type="primary", use_container_width=True):
             if input_method == "File Upload" and uploaded_files:
                 with st.spinner("Starting ingestion job..."):
                     # TODO: Implement API call in Phase 3
@@ -103,7 +103,7 @@ def render():
 
         with active_tab:
             # Sample active job
-            st.info("🔄 Active ingestion jobs will appear here")
+            st.info("Active ingestion jobs will appear here")
 
             # Placeholder for active job
             with st.container():
@@ -128,7 +128,7 @@ def render():
 
         with history_tab:
             # Job history table
-            st.info("📋 Completed jobs will be listed here")
+            st.info("Completed jobs will be listed here")
 
             # Sample history
             history_data = {
@@ -143,7 +143,7 @@ def render():
             st.dataframe(df, use_container_width=True, hide_index=True)
 
         with logs_tab:
-            st.info("📜 Job logs will stream here")
+            st.info("Job logs will stream here")
 
             # Sample log output
             with st.expander("Sample Log Output"):
@@ -169,18 +169,18 @@ def render():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        if st.button("🔄 Reload Indices", use_container_width=True):
+        if st.button("Reload Indices", use_container_width=True):
             with st.spinner("Reloading..."):
                 st.success("Indices reloaded")
 
     with col2:
-        if st.button("📊 View Stats", use_container_width=True):
+        if st.button("View Stats", use_container_width=True):
             st.info("Phase 3 will show index statistics")
 
     with col3:
-        if st.button("📸 Snapshots", use_container_width=True):
+        if st.button("Snapshots", use_container_width=True):
             st.info("Phase 3 will show index snapshots")
 
     with col4:
-        if st.button("⏮️ Rollback", use_container_width=True):
+        if st.button("Rollback", use_container_width=True):
             st.info("Phase 3 will enable rollback")

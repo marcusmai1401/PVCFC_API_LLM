@@ -49,6 +49,22 @@ class PipelineConfig:
     )
 
     # ============================================================================
+    # PID TAGS & CAD-LIKE EXTRACTION PATHS
+    # ============================================================================
+
+    # Page layout artifacts (vector drawings + text spans per page)
+    LAYOUT_DIR = Path(os.environ.get("LAYOUT_DIR", str(ARTIFACTS_DIR / "page_layout")))
+
+    # Tag entities artifacts (tags.jsonl, relations.jsonl)
+    ENTITIES_DIR = Path(os.environ.get("ENTITIES_DIR", str(ARTIFACTS_DIR / "entities")))
+
+    # Bbox crops (PNG images of extracted tags)
+    CROPS_DIR = Path(os.environ.get("CROPS_DIR", str(ARTIFACTS_DIR / "crops")))
+
+    # Telemetry logs (runtime metrics per file)
+    LOGS_DIR = Path(os.environ.get("LOGS_DIR", str(ARTIFACTS_DIR / "logs")))
+
+    # ============================================================================
     # TEXT EXTRACTION & OCR THRESHOLDS
     # ============================================================================
 
@@ -236,12 +252,81 @@ class PipelineConfig:
         return self.ARTIFACTS_DIR / "doc_metadata.json"
 
     # ============================================================================
+    # PID TAGS & CAD-LIKE EXTRACTION CONFIGURATION
+    # ============================================================================
+
+    # Enable PID tags extraction pipeline
+    ENABLE_PID_TAGS = os.environ.get("ENABLE_PID_TAGS", "false").lower() == "true"
+
+    # Gate mode: auto (use scorer), always (force enable), never (disable)
+    GATE_MODE = os.environ.get("GATE_MODE", "auto")
+
+    # CAD-like gate threshold
+    GATE_THRESHOLD = float(os.environ.get("GATE_THRESHOLD", "0.60"))
+
+    # Gray zone threshold
+    GRAY_ZONE_LOW = float(os.environ.get("GRAY_ZONE_LOW", "0.45"))
+
+    # Tag extraction pass threshold
+    TAG_PASS_THRESHOLD = float(os.environ.get("TAG_PASS_THRESHOLD", "6.0"))
+
+    # Suffix radius (em units)
+    SUFFIX_RADIUS_EM = float(os.environ.get("SUFFIX_RADIUS_EM", "1.0"))
+
+    # Taggy page selection thresholds
+    TAGGY_MIN_REGEX_HITS = int(os.environ.get("TAGGY_MIN_REGEX_HITS", "3"))
+    TAGGY_MIN_CODE_TOKENS = int(os.environ.get("TAGGY_MIN_CODE_TOKENS", "4"))
+
+    # OpenSearch tags index name
+    TAGS_INDEX_NAME = os.environ.get("TAGS_INDEX_NAME", "pvcfc_pid_tags")
+
+    # Enable shape-aware ROI (requires OpenCV)
+    ENABLE_SHAPE_AWARE_ROI = (
+        os.environ.get("ENABLE_SHAPE_AWARE_ROI", "false").lower() == "true"
+    )
+
+    # Lazy crop generation (only generate on query demand)
+    LAZY_CROP_GENERATION = (
+        os.environ.get("LAZY_CROP_GENERATION", "true").lower() == "true"
+    )
+
+    # Config file paths
+    CADLIKE_GATE_CONFIG = Path(
+        os.environ.get(
+            "CADLIKE_GATE_CONFIG", str(PROJECT_ROOT / "config" / "cadlike_gate.yaml")
+        )
+    )
+    TAG_GRAMMAR_CONFIG = Path(
+        os.environ.get(
+            "TAG_GRAMMAR_CONFIG", str(PROJECT_ROOT / "config" / "tag_grammar.yaml")
+        )
+    )
+    PAGE_FILTERS_CONFIG = Path(
+        os.environ.get(
+            "PAGE_FILTERS_CONFIG", str(PROJECT_ROOT / "config" / "page_filters.yaml")
+        )
+    )
+    TAGS_INDEX_MAPPING_CONFIG = Path(
+        os.environ.get(
+            "TAGS_INDEX_MAPPING_CONFIG",
+            str(PROJECT_ROOT / "config" / "tags_index_mapping.json"),
+        )
+    )
+
+    # ============================================================================
     # HELPER METHODS
     # ============================================================================
 
     def ensure_artifacts_dir(self):
         """Create artifacts directory if it doesn't exist"""
         self.ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def ensure_pid_tags_dirs(self):
+        """Create PID tags-specific directories if they don't exist"""
+        self.LAYOUT_DIR.mkdir(parents=True, exist_ok=True)
+        self.ENTITIES_DIR.mkdir(parents=True, exist_ok=True)
+        self.CROPS_DIR.mkdir(parents=True, exist_ok=True)
+        self.LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
     def get_ocr_config(self) -> dict:
         """

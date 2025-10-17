@@ -287,7 +287,7 @@ def render_pdf_page(
         modal_key = f"pdf_modal_{doc_id}_{page_num}"
 
         # Header with document info
-        st.markdown(f"### 📄 Document: {doc_id}")
+st.markdown(f"### Document: {doc_id}")
         st.markdown(f"**Page {page_num}**")
 
         # Create buttons row for controls
@@ -309,19 +309,19 @@ def render_pdf_page(
 
         with btn_col1:
             # Open in new tab button (using markdown link styled as button)
-            st.markdown(
+st.markdown(
                 f'<a href="{full_url}" target="_blank" style="'
                 f"display: inline-block; padding: 0.25rem 0.75rem; "
                 f"background-color: #0066cc; color: white; text-decoration: none; "
                 f'border-radius: 0.25rem; font-size: 14px;">'
-                f"🔗 Open in New Tab</a>",
+                f"Open in new tab</a>",
                 unsafe_allow_html=True,
             )
 
         with btn_col2:
             # Download button (optional, for future enhancement)
-            if st.button(
-                "💾 Download",
+if st.button(
+                "Download",
                 key=f"download_{modal_key}",
                 help="Download this page as image",
             ):
@@ -370,12 +370,12 @@ def render_pdf_page(
 
                 # Show page info
                 info_col1, info_col2, info_col3 = st.columns(3)
-                with info_col1:
-                    st.info(f"📄 Page {page_num} of {total_pages}")
+with info_col1:
+                    st.info(f"Page {page_num} of {total_pages}")
                 with info_col2:
-                    st.info(f"📐 {width} x {height} px")
+                    st.info(f"{width} x {height} px")
                 with info_col3:
-                    st.info(f"⏱️ {round(render_time)}ms")
+                    st.info(f"{round(render_time)}ms")
 
             else:
                 # Log error
@@ -618,7 +618,7 @@ def render_citations_with_viewer(citations: List[Dict], api_base_url: str, logge
             with col8:
                 # Add View Page button
                 button_key = f"view_pdf_{idx}_{citation.get('doc_id', 'unknown')}_{citation.get('page', 0)}"
-                if st.button("👁️ View Page", key=button_key, help="View PDF page"):
+if st.button("View Page", key=button_key, help="View PDF page"):
                     # Log the View Page click event
                     logger.log_button_click(
                         "view_pdf_page",
@@ -685,8 +685,8 @@ def render_citations_with_viewer(citations: List[Dict], api_base_url: str, logge
             pdf_info = st.session_state[f"show_pdf_{idx}"]
 
             # Show PDF in an expander (expanded=True as per requirements)
-            with st.expander(
-                f"📄 Viewing: {pdf_info['doc_id']} - Page {pdf_info['page_num']}",
+with st.expander(
+                f"Viewing: {pdf_info['doc_id']} - Page {pdf_info['page_num']}",
                 expanded=True,
             ):
                 # Pass logger to render_pdf_page for complete logging chain
@@ -772,20 +772,17 @@ def normalize_api_response(results: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def render(vision_mode=False):
-    """Render query lab component with Material Design 3 styling"""
+    """Render query lab component with iOS/macOS styling"""
 
-    # M3 Header with proper typography
-    st.markdown(
-        """
-    <div class="md-card md-card-filled md-spacing-lg" style="margin-bottom: 24px;">
-        <h1 class="md-typescale-headline-medium" style="margin: 0;">RAG Question Answering</h1>
-        <p class="md-typescale-body-medium" style="margin: 8px 0 0 0; color: var(--md-sys-color-on-surface-variant);">
-            Enterprise-grade document search and question answering system
+    # iOS-style hero header
+    st.markdown("""
+    <div class="ios-card" style="margin-bottom: 32px; text-align: center;">
+        <h1 class="ios-title-large" style="margin: 0 0 12px 0;">Ask a Question</h1>
+        <p class="ios-body" style="margin: 0; color: #86868b;">
+            Enterprise-grade document search and question answering with citations
         </p>
     </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     # Initialize logger
     logger = get_logger(verbose=st.session_state.get("enable_verbose_logging", False))
@@ -813,38 +810,40 @@ def render(vision_mode=False):
     if "run_id" not in st.session_state:
         st.session_state.run_id = None
 
-    # Query input with M3 styling
-    st.markdown(
-        '<div class="md-typescale-title-medium" style="margin-bottom: 8px;">Query Input</div>',
-        unsafe_allow_html=True,
-    )
+    # Query input with iOS styling
+    st.markdown("""
+    <div class="ios-card-flat" style="margin-bottom: 24px;">
+        <label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Your Question</label>
+    </div>
+    """, unsafe_allow_html=True)
+
     query = st.text_area(
         "Enter your question",
-        placeholder="Enter your question here...\nExample: What are the operating specifications for ammonia storage tanks?",
+        placeholder="Type your question here...\nExample: What are the operating specifications for ammonia storage tanks?",
         height=120,
         help="Enter technical questions about your documents",
         key="query_input",
         label_visibility="collapsed",
     )
 
-    # Settings with M3 chips/segmented controls
-    st.markdown(
-        '<div class="md-typescale-title-medium" style="margin: 24px 0 8px 0;">Configuration</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Settings with iOS styling
+    st.markdown("""
+    <div class="ios-card-flat" style="margin-bottom: 16px;">
+        <h3 class="ios-title" style="margin: 0;">Configuration</h3>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
-        st.markdown(
-            '<div class="md-typescale-label-large" style="margin-bottom: 4px;">Language</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Language</label>', unsafe_allow_html=True)
         # Use chips for language selection
         lang_col1, lang_col2 = st.columns(2)
         with lang_col1:
             if st.button(
-                "🇻🇳 Vietnamese",
+                "Vietnamese",
                 key="lang_vi",
                 use_container_width=True,
                 type="primary"
@@ -854,7 +853,7 @@ def render(vision_mode=False):
                 st.session_state.selected_lang = "vi"
         with lang_col2:
             if st.button(
-                "🇬🇧 English",
+                "English",
                 key="lang_en",
                 use_container_width=True,
                 type="primary"
@@ -866,10 +865,7 @@ def render(vision_mode=False):
         language = st.session_state.get("selected_lang", "vi")
 
     with col2:
-        st.markdown(
-            '<div class="md-typescale-label-large" style="margin-bottom: 4px;">Context Chunks</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Context Chunks</label>', unsafe_allow_html=True)
         max_context = st.number_input(
             "Context Chunks",
             min_value=1,
@@ -880,22 +876,21 @@ def render(vision_mode=False):
         )
 
     with col3:
-        st.markdown(
-            '<div class="md-card md-card-outlined md-spacing-sm" style="margin-top: 24px; text-align: center;">'
-            '<div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant);">ACTIVE FEATURES</div>'
-            '<div class="md-typescale-body-small" style="margin-top: 4px;">Vision + Reranking</div>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("""
+        <div class="ios-card-compact" style="margin-top: 20px; text-align: center;">
+            <p class="ios-caption" style="margin: 0 0 4px 0; text-transform: uppercase; font-weight: 600;">Active Features</p>
+            <p class="ios-body" style="margin: 0; font-weight: 500;">Vision + Reranking</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Vision and Re-ranking are ALWAYS enabled (hardcoded)
     enable_vision = True
     use_rerank = True
 
-    # Advanced options - minimal
+    # Advanced options - minimal iOS style
     with st.expander("Advanced Options", expanded=False):
-        st.markdown("**P&ID Tag Filter** 🏷️")
-        st.caption("Filter documents by equipment tags (e.g., E04217, P-101, V-2051)")
+        st.markdown('<h4 class="ios-title" style="margin: 0 0 4px 0;">P&ID Tag Filter</h4>', unsafe_allow_html=True)
+        st.markdown('<p class="ios-caption" style="margin: 0 0 12px 0;">Filter documents by equipment tags (e.g., E04217, P-101, V-2051)</p>', unsafe_allow_html=True)
 
         # Fetch available tags from API
         if "available_tags" not in st.session_state:
@@ -935,37 +930,41 @@ def render(vision_mode=False):
         else:
             st.caption("⚠️ Tag filtering unavailable (OpenSearch may be disconnected)")
 
-        st.divider()
+        st.markdown("<hr>", unsafe_allow_html=True)
 
-        st.markdown("**Citation Format**")
+        st.markdown('<h4 class="ios-title" style="margin: 16px 0 4px 0;">Citation Format</h4>', unsafe_allow_html=True)
         use_ieee_citations = st.checkbox(
             "Use IEEE-style Citations",
             value=True,
             help="Numbered citation format [1], [2] with references section",
         )
-        st.caption("Standard academic citation style")
+        st.markdown('<p class="ios-caption" style="margin: 4px 0 0 0;">Standard academic citation style</p>', unsafe_allow_html=True)
 
-        st.divider()
+        st.markdown("<hr>", unsafe_allow_html=True)
 
-        st.markdown("**System Information**")
-        st.caption("Retrieval: Weaviate (semantic) + OpenSearch (keyword)")
-        st.caption("Reranking: BGE Cross-Encoder")
-        st.caption("Vision: Gemini Multimodal")
-        st.caption(f"P&ID Tags: {len(available_tags)} tags indexed")
+        st.markdown('<h4 class="ios-title" style="margin: 16px 0 8px 0;">System Information</h4>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="ios-card-compact">
+            <p class="ios-caption" style="margin: 0 0 4px 0;">Retrieval: Weaviate + OpenSearch</p>
+            <p class="ios-caption" style="margin: 0 0 4px 0;">Reranking: BGE Cross-Encoder</p>
+            <p class="ios-caption" style="margin: 0 0 4px 0;">Vision: Gemini Multimodal</p>
+            <p class="ios-caption" style="margin: 0;">P&ID Tags: """ + str(len(available_tags)) + """ indexed</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Set defaults for hidden parameters
     execution_mode = "production"  # Always production
     top_k_context = max_context
 
-    # Run button with M3 styling
+    # Run button with iOS styling
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Add loading indicator if processing
-    if st.session_state.get("query_processing", False):
-        st.markdown('<div class="md-progress-linear"></div>', unsafe_allow_html=True)
+# Show top linear loader when processing
+    if st.session_state.get("ios_loading", False):
+        st.markdown('<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
 
     if st.button(
-        "🚀 Run Query", type="primary", use_container_width=True, key="run_query_btn"
+        "Run Query", type="primary", use_container_width=True, key="run_query_btn"
     ):
         if query:
             # Start a new run
@@ -996,8 +995,18 @@ def render(vision_mode=False):
                 performance_key="query_execution",
             )
 
-            with st.spinner("Processing query..."):
-                # Prepare parameters
+# Overlay ON
+            st.session_state.ios_loading = True
+            st.markdown("""
+            <div class=\"ios-overlay\" role=\"status\" aria-live=\"polite\">
+              <div class=\"ios-overlay-content\">
+                <div class=\"ios-spinner\" style=\"margin: 0 auto;\"></div>
+                <p class=\"ios-caption\" style=\"margin: 12px 0 0 0;\">Generating answer...</p>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Prepare parameters
                 params = {
                     "max_context": top_k_context,
                     "execution_mode": "production",  # Force production
@@ -1034,7 +1043,8 @@ def render(vision_mode=False):
                         performance_key="query_execution",
                     )
 
-                    st.success("✓ Query completed successfully")
+st.success("Query completed successfully")
+                    st.session_state.ios_loading = False
                     st.rerun()
                 else:
                     # Log failure
@@ -1046,8 +1056,10 @@ def render(vision_mode=False):
                         },
                     )
 
-                    st.error(f"Error: {result['error']}")
+st.error(f"Error: {result['error']}")
                     st.session_state.query_results = None
+                    st.session_state.ios_loading = False
+                    st.rerun()
         else:
             logger.log_event(
                 EventType.WARNING,
@@ -1056,12 +1068,13 @@ def render(vision_mode=False):
             )
             st.warning("Please enter a query")
 
-    # Results section with M3 styling
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        '<div class="md-typescale-title-large" style="margin-bottom: 16px;">Results</div>',
-        unsafe_allow_html=True,
-    )
+    # Results section with iOS styling
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="ios-card-flat" style="margin-bottom: 24px;">
+        <h2 class="ios-title" style="margin: 0;">Results</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
     if st.session_state.query_results:
         results = st.session_state.query_results
@@ -1071,7 +1084,7 @@ def render(vision_mode=False):
         # Keep meta available for metrics and timeline tabs
         meta = results.get("meta", {})
 
-        # Result tabs - clean
+        # Result tabs - clean iOS style
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
             [
                 "Overview",
@@ -1086,7 +1099,7 @@ def render(vision_mode=False):
 
         with tab1:
             # Overview Tab
-            st.markdown("### Answer")
+            st.markdown('<h3 class="ios-title" style="margin: 0 0 16px 0;">Answer</h3>', unsafe_allow_html=True)
 
             answer_text = results.get("answer", "")
             citations = results.get("citations", [])
@@ -1208,8 +1221,8 @@ def render(vision_mode=False):
 
             # Check if answer is empty or too short
             if not answer_text or len(answer_text.strip()) < 10:
-                st.warning(
-                    "⚠️ The system could not generate a complete answer. This may be due to:"
+st.warning(
+                    "The system could not generate a complete answer. This may be due to:"
                 )
                 st.markdown(
                     """
@@ -1236,61 +1249,52 @@ def render(vision_mode=False):
                 else:
                     st.markdown(answer_text)
 
-            # Display metrics cards with M3 styling
+            # Display metrics cards with iOS styling
             st.markdown("<br>", unsafe_allow_html=True)
             col_m1, col_m2, col_m3 = st.columns(3)
 
             with col_m1:
                 confidence = results.get("confidence", 0.0)
-                # Use M3 color roles for semantic meaning
+                # Use iOS color roles for semantic meaning
                 if confidence > 0.7:
-                    conf_color = "var(--md-sys-color-tertiary)"
+                    conf_color = "#34c759"  # iOS green
                 elif confidence > 0.5:
-                    conf_color = "var(--md-sys-color-secondary)"
+                    conf_color = "#ff9500"  # iOS orange
                 else:
-                    conf_color = "var(--md-sys-color-error)"
+                    conf_color = "#ff3b30"  # iOS red
 
-                st.markdown(
-                    f"""
-                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
-                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">CONFIDENCE</div>
-                        <div class="md-typescale-headline-small" style="color: {conf_color};">{confidence:.0%}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"""
+                <div class="ios-card-compact" style="text-align: center;">
+                    <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Confidence</p>
+                    <p class="ios-title-large" style="margin: 0; color: {conf_color};">{confidence:.0%}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
             with col_m2:
                 num_citations = len(results.get("citations", []))
-                st.markdown(
-                    f"""
-                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
-                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">CITATIONS</div>
-                        <div class="md-typescale-headline-small" style="color: var(--md-sys-color-primary);">{num_citations}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"""
+                <div class="ios-card-compact" style="text-align: center;">
+                    <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Citations</p>
+                    <p class="ios-title-large" style="margin: 0; color: #007aff;">{num_citations}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
             with col_m3:
                 total_latency = results.get("total_latency_ms", 0)
                 # Semantic color for latency
                 if total_latency < 3000:
-                    latency_color = "var(--md-sys-color-tertiary)"
+                    latency_color = "#34c759"  # iOS green
                 elif total_latency < 5000:
-                    latency_color = "var(--md-sys-color-secondary)"
+                    latency_color = "#ff9500"  # iOS orange
                 else:
-                    latency_color = "var(--md-sys-color-error)"
+                    latency_color = "#ff3b30"  # iOS red
 
-                st.markdown(
-                    f"""
-                    <div class="md-card md-card-elevated md-spacing-md" style="text-align: center;">
-                        <div class="md-typescale-label-small" style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 8px;">LATENCY</div>
-                        <div class="md-typescale-headline-small" style="color: {latency_color};">{total_latency:.0f}<span class="md-typescale-body-small" style="color: var(--md-sys-color-on-surface-variant);">ms</span></div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"""
+                <div class="ios-card-compact" style="text-align: center;">
+                    <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Latency</p>
+                    <p class="ios-title-large" style="margin: 0; color: {latency_color};">{total_latency:.0f}<span class="ios-caption">ms</span></p>
+                </div>
+                """, unsafe_allow_html=True)
 
             # Warnings
             warnings = results.get("warnings", [])
@@ -1299,17 +1303,17 @@ def render(vision_mode=False):
                 for warn in warnings:
                     st.write(f"- {warn}")
 
-            # References section with Side Sheet option
+            # References section with iOS styling
             if citations:
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<br><br>", unsafe_allow_html=True)
 
                 col_ref1, col_ref2 = st.columns([4, 1])
                 with col_ref1:
-                    st.markdown("### References")
+                    st.markdown('<h3 class="ios-title" style="margin: 0;">References</h3>', unsafe_allow_html=True)
                 with col_ref2:
                     # Button to open side sheet with all citations
                     if st.button(
-                        "📋 View in Panel",
+                        "View Panel",
                         key="open_ref_sheet",
                         use_container_width=True,
                         help="Open citations in side panel",
@@ -1368,8 +1372,8 @@ def render(vision_mode=False):
                                         }
                                         params_str = urlencode(params)
                                         img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
-                                        page_links.append(
-                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">⚠️ p.{page}</a>'
+page_links.append(
+                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">p.{page}</a>'
                                         )
                                 except Exception as e:
                                     # If any error, provide image fallback
@@ -1381,8 +1385,8 @@ def render(vision_mode=False):
                                     }
                                     params_str = urlencode(params)
                                     img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
-                                    page_links.append(
-                                        f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">⚠️ p.{page}</a>'
+page_links.append(
+                                        f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">p.{page}</a>'
                                     )
 
                             st.markdown(
@@ -1395,7 +1399,7 @@ def render(vision_mode=False):
                             st.caption(f"    {pages_str}")
                 else:
                     # Traditional sources section
-                    st.markdown("### 📚 Referenced Sources")
+st.markdown("### Referenced Sources")
 
                     # Extract unique doc_ids with their details
                     unique_sources = {}
@@ -1611,7 +1615,7 @@ def render(vision_mode=False):
 
         with tab6:
             # Metrics Tab
-            st.markdown("### 📈 Performance Metrics")
+st.markdown("### Performance Metrics")
 
             # Latency breakdown
             breakdown = meta.get("breakdown", {})
@@ -1633,12 +1637,12 @@ def render(vision_mode=False):
 
         with tab7:
             # Raw Data Tab
-            st.markdown("### 📜 Raw Response Data")
+st.markdown("### Raw Response Data")
             st.json(results)
 
     else:
         # No results yet - show placeholders
-        st.info("📝 Results will appear here after running a query")
+st.info("Results will appear here after running a query")
         st.caption("Enter a query and click 'Run Query' to see results")
 
     # Timeline visualization at bottom
@@ -1669,16 +1673,16 @@ def render(vision_mode=False):
                 )
                 st.caption("Retrieval and reranking results were served from cache")
             else:
-                st.write(f"**Total Processing Time: {total_time:.0f}ms**")
+st.write(f"**Total Processing Time: {total_time:.0f}ms** (Cache hit)")
 
             # Stage labels mapping
-            stage_labels = {
-                "transform_ms": "1️⃣ Query Transform",
-                "retrieve_ms": "2️⃣ Hybrid Retrieval"
-                + (" (incl. BGE Rerank)" if bge_enabled else ""),
-                "rerank_ms": "3️⃣ Reranking",
-                "generate_ms": "4️⃣ Generation",
-                "cove_ms": "5️⃣ Chain-of-Verification",
+stage_labels = {
+                "transform_ms": "1. Query Transform",
+                "retrieve_ms": "2. Hybrid Retrieval" + (" (incl. BGE Rerank)" if bge_enabled else ""),
+                "rerank_ms": "3. Reranking",
+                "generate_ms": "4. Generation",
+                "cove_ms": "5. Chain-of-Verification",
+            }
             }
 
             # Create a horizontal bar for each stage (skip zero-time stages unless cache hit)
@@ -1690,16 +1694,8 @@ def render(vision_mode=False):
                 percentage = (time_ms / total_time * 100) if total_time > 0 else 0
                 label = stage_labels.get(stage, stage)
 
-                # Color based on percentage
-                if percentage > 50:
-                    color = "🔴"  # Red for high
-                elif percentage > 20:
-                    color = "🟡"  # Yellow for medium
-                else:
-                    color = "🟢"  # Green for low
-
-                st.progress(percentage / 100)
-                st.caption(f"{color} {label}: {time_ms:.0f}ms ({percentage:.1f}%)")
+st.progress(percentage / 100)
+                st.caption(f"{label}: {time_ms:.0f}ms ({percentage:.1f}%)")
         else:
             st.info("No timing data available for this query")
 

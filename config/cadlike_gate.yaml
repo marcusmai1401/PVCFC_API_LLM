@@ -1,0 +1,60 @@
+# ============================================================================
+# CAD-like Gate Configuration
+# ============================================================================
+# Purpose: Auto-detect CAD-like PDFs (P&ID/PFD/ISO/Loop/Schematic) via scoring
+# Spec: PVCFC_CADlike_Tag_Extraction_Handoff.md Section 3
+# ============================================================================
+
+# Feature weights (must sum to 1.0)
+weights:
+  producer_keyword: 0.20      # PDF metadata contains CAD vendor
+  geometry_density: 0.15      # Vector paths/lines per area
+  short_caps_rate: 0.15       # Ratio of 2-4 letter CAPS tokens
+  regex_3piece_hits: 0.20     # 3-piece tag pattern matches
+  technical_suffix: 0.10      # A/B/C, 2oo3, -201B presence
+  non_a4_page: 0.05          # Large page size (A1/A0)
+  multi_rotation: 0.05       # Rotated text spans
+  leader_pattern: 0.10       # Thin lines ending near text
+
+# Producer/Creator keywords to detect CAD software
+producer_keywords:
+  - AutoCAD
+  - Autodesk
+  - Bentley
+  - AVEVA
+  - Intergraph
+  - EPLAN
+  - Plant3D
+  - CAD
+  - MicroStation
+  - SmartPlant
+
+# 3-piece tag regex (AREA CODE NUM)
+regex_3piece:
+  pattern: "\\b\\d{2}\\s+[A-Z]{2,4}\\s+\\d{3,5}[A-Z]?\\b"
+  per_page_cap: 20  # Max hits to count per page (avoid runaway)
+
+# Thresholds
+thresholds:
+  cadlike: 0.60              # S >= 0.60 → CAD-like
+  gray_zone_low: 0.45        # Gray zone [0.45, 0.60)
+  gray_zone_boost_keywords: true  # Boost gray zone if filename has keywords
+
+# Gray zone filename boost keywords
+gray_zone_keywords:
+  - P&ID
+  - PFD
+  - ISO
+  - Loop
+  - Schematic
+  - Piping
+  - Instrument
+  - Drawing
+
+# Sampling configuration
+sample_pages:
+  strategy: "spread"  # spread: [1,2,3,mid,last]; full: all pages
+  max_sample_count: 5  # Default 5 pages for gate evaluation
+
+# Performance
+max_gate_time_ms: 300  # Target << 300ms per file

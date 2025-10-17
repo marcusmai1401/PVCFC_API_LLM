@@ -28,11 +28,11 @@ runOnSave = true
 serverAddress = "localhost"
 
 [theme]
-# Modern theme settings
-primaryColor = "#1f77b4"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
+# iOS/macOS light theme
+primaryColor = "#0A84FF"         # iOS blue
+backgroundColor = "#F5F5F7"       # iOS light grey
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1D1D1F"
 font = "sans serif"
 
 [runner]

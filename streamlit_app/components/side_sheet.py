@@ -82,12 +82,13 @@ def render_side_sheet(
     <div id="{sheet_id}" class="md-side-sheet {open_class}">
         <div class="md-side-sheet-header">
             <h2 class="md-side-sheet-header-title">{title}</h2>
-            <button
-                class="md-icon-button"
+<button
+                class="md-button md-button-text"
                 onclick="closeSideSheet('{sheet_id}')"
-                aria-label="Close side sheet"
+                aria-label="Close"
+                style="min-width: 40px; height: 40px; font-size: 20px;"
             >
-                <span class="material-symbols-outlined">close</span>
+                ×
             </button>
         </div>
         <div class="md-side-sheet-content">
@@ -171,7 +172,7 @@ def render_citation_side_sheet(
                 <span class="md-citation-item-meta">Conf: {conf_display}</span>
             </div>
             {f'<div class="md-citation-item-text">{text[:200]}...</div>' if text else ''}
-            {f'<a href="{pdf_link}" target="_blank" class="md-button-text" style="margin-top: 8px; display: inline-flex; align-items: center; gap: 4px;"><span class="material-symbols-outlined md-18">visibility</span> View Page</a>' if pdf_link else ''}
+{f'<a href="{pdf_link}" target="_blank" class="md-button-text" style="margin-top: 8px; display: inline-flex; align-items: center; gap: 4px;">View Page</a>' if pdf_link else ''}
         </div>
         """
 

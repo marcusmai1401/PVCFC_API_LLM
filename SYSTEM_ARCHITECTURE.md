@@ -1,8 +1,8 @@
 ﻿# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 0.8.0
-**Last Updated**: 2025-10-16
-**Document**: Complete Pipeline & Architecture Description (Production-Ready with P&ID Enhancement)
+**Version**: 0.9.0
+**Last Updated**: 2025-10-17
+**Document**: Complete Pipeline & Architecture Description (Production-Ready with CAD-like Tag Extraction)
 
 ---
 
@@ -60,120 +60,171 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 └──────┬──────┘
        │
        ↓
-┌───────────────────────────────────────────────────────────┐
-│              OFFLINE PIPELINE (Build Time)                │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌────────────┐    ┌──────────┐    ┌──────────────┐       │
-│  │  Ingest    │ →  │  Chunk   │ →  │   Dedup      │       │
-│  │ (PaddleOCR)│    │(Semantic)│    │  (content)   │       │
-│  └────────────┘    └──────────┘    └──────────────┘       │
-│         │                                    │            │
-│         ↓                                    ↓            │
-│  ┌────────────┐                   ┌──────────────┐        │
-│  │doc_id_map  │                   │  chunks.jsonl│        │
-│  │   .json    │                   │              │        │
-│  └────────────┘                   └──────┬───────┘        │
-│                                          │                │
-│                    ┌─────────────────────┴─────────┐      │
-│                    ↓                               ↓      │
-│         ┌───────────────────┐            ┌────────────────┐
-│         │  Weaviate DB      │            │  OpenSearch    │
-│         │  (Vector 768D)    │            │  (BM25 Index)  │
-│         │ Collection:"Chunk"│          Index:"rag_chunks"││
-│         └───────────────────┘            └────────────────┘
-│                                                           │
-└───────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│              OFFLINE PIPELINE (Build Time)                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌────────────┐    ┌──────────┐    ┌──────────────┐               │
+│  │  Ingest    │ →  │  Chunk   │ →  │   Dedup      │               │
+│  │ (PaddleOCR)│    │(Semantic)│    │  (content)   │               │
+│  └──────┬─────┘    └──────────┘    └──────┬───────┘               │
+│         │                                  │                      │
+│         │ P&ID Detection                   │                      │
+│         ↓                                  ↓                      │
+│  ┌──────────────────────────┐   ┌──────────────┐                  │
+│  │  CAD-like Gate           │   │  chunks.jsonl│                  │
+│  │  (Auto-detect P&ID)      │   │              │                  │
+│  └──────┬───────────────────┘   └──────┬───────┘                  │
+│         │ is_cadlike=true              │                          │
+│         ↓                              │                          │
+│  ┌──────────────────────────┐          │                          │
+│  │  Page Layout Builder     │          │                          │
+│  │  • PyMuPDF vector text   │          │                          │
+│  │  • OCR fallback          │          │                          │
+│  │  • Vector drawings       │          │                          │
+│  └──────┬───────────────────┘          │                          │
+│         │                              │                          │
+│         ↓                              │                          │
+│  ┌──────────────────────────┐          │                          │
+│  │  Tag Extractor           │          │                          │
+│  │  • CODE-anchored triplet │          │                          │
+│  │  • AREA-CODE-NUM-SUFFIX  │          │                          │
+│  │  • Exclusion zones       │          │                          │
+│  └──────┬───────────────────┘          │                          │
+│         │                              │                          │
+│         ↓                              ↓                          │
+│  ┌──────────────┐           ┌──────────────────────────┐          │
+│  │  tags.jsonl  │           │   Standard Indexing      │          │
+│  │  telemetry   │           │                          │          │
+│  └──────┬───────┘           └──────┬───────────────────┘          │
+│         │                          │                              │
+│         ↓                    ┌─────┴──────────┐                   │
+│  ┌──────────────────┐        ↓                ↓                   │
+│  │  OpenSearch      │  ┌──────────────┐  ┌──────────────┐         │
+│  │  Index:          │  │  Weaviate    │  │  OpenSearch  │         │
+│  │  pvcfc_pid_tags  │  │  Collection  │  │  Index       │         │
+│  │  (Tag sidecar)   │  │  "Chunk"     │  │  "rag_chunks"│         │
+│  └──────────────────┘  └──────────────┘  └──────────────┘         │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
                            │
                            ↓
-┌─────────────────────────────────────────────────────────┐
-│               ONLINE PIPELINE (Query Time)              │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌──────────┐                                           │
-│  │  Query   │  "What is K06101 max pressure?"           │
-│  └────┬─────┘                                           │
-│       │                                                 │
-│       ↓                                                 │
-│  ┌─────────────────┐                                    │
-│  │ Query Transform │  (Normalize, intent, HyDE)         │
-│  └────────┬────────┘                                    │
-│           │                                             │
-│           ↓                                             │
-│  ┌─────────────────────────────────────┐                │
-│  │    HYBRID RETRIEVAL (Parallel)      │                │
-│  │  ┌──────────┐      ┌──────────┐     │                │
-│  │  │ Weaviate │      │OpenSearch│     │                │
-│  │  │(Semantic)│      │  (BM25)  │     │                │
-│  │  └────┬─────┘      └────┬─────┘     │                │
-│  │       │                 │           │                │
-│  │       └────────┬────────┘           │                │
-│  │                ↓                    │                │
-│  │         ┌─────────────┐             │                │
-│  │         │  RRF Fusion │             │                │
-│  │         └──────┬──────┘             │                │
-│  └────────────────┼────────────────────┘                │
-│                   ↓                                     │
-│  ┌─────────────────────────────┐                        │
-│  │  BGE CrossEncoder Rerank    │  (Configurable)        │
-│  │  BAAI/bge-reranker-base     │  Currently: ENABLED    │
-│  └──────────────┬──────────────┘                        │
-│                 ↓                                       │
-│  ┌────────────────────────────┐                         │
-│  │  Top-K Reranked Results    │  (k=8 default)          │
-│  └──────────────┬─────────────┘                         │
-│                 │                                       │
-│                 ↓                                       │
-│  ┌─────────────────────────────────────┐                │
-│  │        GENERATION PIPELINE          │                │
-│  │                                     │                │
-│  │  ┌────────────────────────────┐     │                │
-│  │  │  Strategy: Text or Vision? │     │                │
-│  │  └────────┬──────────┬────────┘     │                │
-│  │           │          │              │                │
-│  │      Text │          │ Vision       │                │
-│  │           ↓          ↓              │                │
-│  │  ┌─────────────┐  ┌──────────────┐  │                │
-│  │  │ Text Models │  │ Gemini 2.5   │  │                │
-│  │  │ Production: │  │ Pro (Vision) │  │                │
-│  │  │ 2.5 Pro     │  │ + PDF Pages  │  │                │
-│  │  │ Light Mode: │  │              │  │                │
-│  │  │ 2.5 Flash   │  │              │  │                │
-│  │  └──────┬──────┘  └──────┬───────┘  │                │
-│  │         │                │          │                │
-│  │         └────────┬───────┘          │                │
-│  │                  ↓                  │                │
-│  │        ┌──────────────────┐         │                │
-│  │        │ Answer + Citation│         │                │
-│  │        │  Extraction      │         │                │
-│  │        └────────┬─────────┘         │                │
-│  │                 ↓                   │                │
-│  │        ┌──────────────────┐         │                │
-│  │        │ Post-validation  │         │                │
-│  │        │  (CiteFix-lite)  │         │                │
-│  │        └────────┬─────────┘         │                │
-│  │                 ↓                   │                │
-│  │        ┌──────────────────┐         │                │
-│  │        │ Confidence Score │         │                │
-│  │        │  Calculation     │         │                │
-│  │        └────────┬─────────┘         │                │
-│  └─────────────────┼───────────────────┘                │
-│                    ↓                                    │
-│  ┌─────────────────────────────────┐                    │
-│  │     BUILD API RESPONSE          │                    │
-│  │  • Answer text                  │                    │
-│  │  • Citations (doc_id + page)    │                    │
-│  │  • Confidence [0,1]             │                    │
-│  │  • Metadata                     │                    │
-│  │  • Timing breakdown             │                    │
-│  └─────────────────┬───────────────┘                    │
-│                    │                                    │
-└────────────────────┼────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                 ONLINE PIPELINE (Query Time)                      │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌──────────┐                                                     │
+│  │  Query   │  "What is 04-PIC-2046C max pressure?"               │
+│  └────┬─────┘                                                     │
+│       │                                                           │
+│       ↓                                                           │
+│  ┌─────────────────────────────────────────┐                      │
+│  │   Query Transform + P&ID Enhancement    │                      │
+│  │  • Normalize, intent detection          │                      │
+│  │  • Tag detection: [04-PIC-2046C]        │                      │
+│  │  • Variants: [PIC2046C, 04PIC2046C, ... │                      │
+│  │  • Query type: tag_focused              │                      │
+│  └──────────────────┬──────────────────────┘                      │
+│                     │                                             │
+│                     ↓                                             │
+│  ┌────────────────────────────────────────────┐                   │
+│  │      HYBRID RETRIEVAL (Parallel)           │                   │
+│  │                                            │                   │
+│  │  ┌──────────────┐      ┌──────────────┐    │                   │
+│  │  │  Weaviate    │      │  OpenSearch  │    │                   │
+│  │  │  (Semantic)  │      │   (BM25)     │    │                   │
+│  │  │  + Tag       │      │  + Tag       │    │                   │
+│  │  │    filter    │      │    boosting  │    │                   │
+│  │  └──────┬───────┘      └──────┬───────┘    │                   │
+│  │         │                     │            │                   │
+│  │         └──────────┬──────────┘            │                   │
+│  │                    ↓                       │                   │
+│  │         ┌────────────────────┐             │                   │
+│  │         │   Adaptive RRF     │             │                   │
+│  │         │   (Query-type      │             │                   │
+│  │         │    aware weights)  │             │                   │
+│  │         └──────────┬─────────┘             │                   │
+│  └────────────────────┼───────────────────────┘                   │
+│                       │                                           │
+│                       ↓                                           │
+│  ┌─────────────────────────────────────┐                          │
+│  │   PID Tag Reranking (Optional)      │                          │
+│  │  • Exact metadata match: ×10.0      │                          │
+│  │  • Text phrase match: ×5.0          │                          │
+│  │  • Fuzzy match (≥90%): ×2.0-3.0     │                          │
+│  │  • Tag-parameter proximity: ×3.0    │                          │
+│  └──────────────────┬──────────────────┘                          │
+│                     │                                             │
+│                     ↓                                             │
+│  ┌───────────────────────────────────┐                            │
+│  │   BGE CrossEncoder Rerank         │  (Currently ENABLED)       │
+│  │   BAAI/bge-reranker-base          │                            │
+│  └────────────────┬──────────────────┘                            │
+│                   │                                               │
+│                   ↓                                               │
+│  ┌────────────────────────────────┐                               │
+│  │   Top-K Reranked Results       │  (k=8 default)                │
+│  └──────────────┬─────────────────┘                               │
+│                 │                                                 │
+│                 ↓                                                 │
+│  ┌────────────────────────────────────┐                           │
+│  │      GENERATION PIPELINE           │                           │
+│  │                                    │                           │
+│  │  ┌──────────────────────────┐      │                           │
+│  │  │ Strategy: Text or Vision?│      │                           │
+│  │  └────────┬────────┬────────┘      │                           │
+│  │           │        │               │                           │
+│  │      Text │        │ Vision        │                           │
+│  │           ↓        ↓               │                           │
+│  │  ┌─────────────┐  ┌─────────────┐  │                           │
+│  │  │ Text Models │  │ Gemini 2.5  │  │                           │
+│  │  │ Production: │  │ Pro (Vision)│  │                           │
+│  │  │ 2.5 Pro     │  │ + PDF Pages │  │                           │
+│  │  │ Light Mode: │  │             │  │                           │
+│  │  │ 2.5 Flash   │  │             │  │                           │
+│  │  └──────┬──────┘  └──────┬──────┘  │                           │
+│  │         │                │         │                           │
+│  │         └────────┬───────┘         │                           │
+│  │                  ↓                 │                           │
+│  │        ┌──────────────────┐        │                           │
+│  │        │ Answer+Citation  │        │                           │
+│  │        │   Extraction     │        │                           │
+│  │        └────────┬─────────┘        │                           │
+│  │                 ↓                  │                           │
+│  │        ┌──────────────────┐        │                           │
+│  │        │ Post-validation  │        │                           │
+│  │        │  (CiteFix-lite)  │        │                           │
+│  │        └────────┬─────────┘        │                           │
+│  │                 ↓                  │                           │
+│  │        ┌──────────────────┐        │                           │
+│  │        │ Confidence Score │        │                           │
+│  │        │   Calculation    │        │                           │
+│  │        └────────┬─────────┘        │                           │
+│  └─────────────────┼──────────────────┘                           │
+│                    ↓                                              │
+│  ┌───────────────────────────────┐                                │
+│  │    BUILD API RESPONSE         │                                │
+│  │  • Answer text                │                                │
+│  │  • Citations (doc_id + page)  │                                │
+│  │  • Confidence [0,1]           │                                │
+│  │  • Metadata                   │                                │
+│  │  • Timing breakdown           │                                │
+│  └─────────────────┬─────────────┘                                │
+│                    │                                              │
+└────────────────────┼──────────────────────────────────────────────┘
                      ↓
               ┌──────────────┐
               │ JSON Response│
               └──────────────┘
 ```
+
+> **P&ID Tag Extraction Note**: The system includes a complete **CAD-like Tag Extraction pipeline** (disabled by default, enable via `ENABLE_PID_TAGS=true`):
+> - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.60) → PageLayoutBuilder (vector-first PyMuPDF + PP-OCRv5 fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → crops/*.png (bbox evidence) → OpenSearch `pvcfc_pid_tags` sidecar index
+> - **Online**: Query tag detection → Parallel retrieval (tags + chunks) → RRF fusion → Rerank → Attach crop_path for vision citations
+> - **Configuration**: `config/cadlike_gate.yaml`, `config/tag_grammar.yaml`, `config/page_filters.yaml`, `config/tags_index_mapping.json`
+> - **Artifacts**: `D:\PVCFC_Artifacts\` → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png`, `logs/tag_extraction_telemetry.jsonl`
+> - **Implementation**: `app/ingestion/tags/` (orchestrator, tag_extractor, crops), `app/ingestion/cadlike_gate.py`, `app/ingestion/layout/`, `app/rag/hybrid_with_tags_retriever.py`
+> - **Quick Start**: See `START_HERE_CAD_TAGS.md`, `CAD_TAG_EXTRACTION_QUICKSTART.md`
 
 ---
 
@@ -202,14 +253,77 @@ RAW PDF FILES
     ├── Weaviate: Vector embeddings (768D) → Collection "Chunk"
     └── OpenSearch: BM25 inverted index → Index "rag_chunks"
     ↓
+[5] P&ID TAG EXTRACTION (PARALLEL, IF ENABLE_PID_TAGS=true)
+    ↓
+    [5.1] CAD-LIKE GATE (app/ingestion/cadlike_gate.py)
+        • Sample pages: [1,2,3,mid,last] (5 pages default)
+        • Compute score S = Σ(weight_i × feature_i):
+          - Producer/Creator keywords (AutoCAD, Bentley, etc.)
+          - Geometry density (vector paths/lines per area)
+          - Short CAPS rate (2-4 letter tokens)
+          - 3-piece tag regex hits (dd CC-CC ddddd)
+          - Technical suffixes (A/B/C, 2oo3, -201B)
+          - Large page size (A1/A0)
+          - Rotated text spans
+          - Leader patterns
+        • Threshold: S ≥ 0.60 → CAD-like
+        • Gray zone [0.45, 0.60): boost if filename has P&ID/PFD/ISO keywords
+        • Select "taggy pages" (regex_hits≥3 OR code_tokens≥4)
+        ↓ is_cadlike=true
+    [5.2] PAGE LAYOUT EXTRACTION (app/ingestion/layout/page_layout_builder.py)
+        • Vector-first: PyMuPDF text spans (bbox, font_size, rotation)
+        • Vector drawings: lines, circles, rectangles, paths
+        • OCR fallback: PP-OCRv5 if vector text < 100 chars
+        • Normalize engineering spacing ("3.9  MPag" → "3.9 MPag")
+        • Save to page_layout/page_{doc_id}_{page}.json
+        ↓
+    [5.3] TAG EXTRACTION (app/ingestion/tags/tag_extractor.py)
+        • Token role classification:
+          - AREA: ^\d{2}$
+          - CODE: ^[A-Z]{2,4}$ (whitelist: PAL, PSAL, PT, PI, FIC, etc.)
+          - NUM: ^\d{3,5}[A-Z]?$
+          - SUFFIX: A/B(/C)?, [1-3]oo[2-4], -?\d{3,5}[A-Z]?
+        • CODE-anchored vertical triplet assembly:
+          - Find CODE from whitelist
+          - Search AREA above, NUM below (within tolerances)
+          - Score triplet (triplet_regex, x_align, y_uniform, font_sim)
+          - Pass if score ≥ 6.0
+        • Suffix attachment (expand bbox by 1.0em radius)
+        • Exclusion zones: LEGEND/NOTES/headers/footers
+        • Save to entities/tags.jsonl (1 JSON per tag)
+        ↓
+    [5.4] CROP GENERATION (app/ingestion/tags/crops.py - optional, lazy default)
+        • Render bbox crops to PNG (DPI=200)
+        • Filename: {doc_id}_p{page}_{tag_hash}.png
+        • Save to crops/ (only if LAZY_CROP_GENERATION=false)
+        ↓
+    [5.5] INDEXING & TELEMETRY
+        • Bulk upsert: entities/tags.jsonl → OpenSearch "pvcfc_pid_tags"
+        • Deterministic _id: {doc_id}#{page}#{tag}
+        • Log telemetry: logs/tag_extraction_telemetry.jsonl
+          - cadlike_score, tags_found_total, p50/p90, ocr_ratio, warnings
+        ↓
 OUTPUT:
     • chunks.jsonl (deduplicated chunks)
     • doc_id_map.json (doc_id → pdf_path mapping)
     • Weaviate collection "Chunk" (vectors)
     • OpenSearch index "rag_chunks" (keywords)
+
+    [NEW] P&ID TAG EXTRACTION OUTPUTS (if ENABLE_PID_TAGS=true):
+    • entities/tags.jsonl (instrument tags with bbox)
+    • page_layout/*.json (text spans + vector drawings per page)
+    • crops/*.png (bbox PNG crops - if not lazy)
+    • logs/tag_extraction_telemetry.jsonl (runtime metrics + warnings)
+    • OpenSearch index "pvcfc_pid_tags" (tag sidecar index)
 ```
 
 > **Index Directory Note**: Default config uses artifacts/index_production, but current .env overrides to data/indexes. Check your environment.
+
+> **P&ID Artifacts Location**: P&ID tag extraction artifacts are stored in `D:\PVCFC_Artifacts\` (configured via .env `ARTIFACTS_DIR=D:\PVCFC_Artifacts`):
+> - `entities/tags.jsonl`: Extracted instrument tags (1 JSON object per tag, e.g., {"doc_id": "...", "page": 5, "tag": "04 PSAL 2207", "parts": {...}, "bbox": [...], "confidence": 0.96})
+> - `page_layout/*.json`: Page-level layout data (text spans with bbox/font/rotation + vector drawings)
+> - `crops/*.png`: PNG crops of tag bboxes for vision citations (lazy mode: generated on-demand)
+> - `logs/tag_extraction_telemetry.jsonl`: Extraction metrics per document (cadlike_score, tags_found, warnings, elapsed_sec)
 
 ### 2.2 Query Time (Online)
 
@@ -350,7 +464,7 @@ if not has_text(text):
     )
 ```
 
-> **OCR Note**: System uses **PaddleOCR v2.7.3** with GPU acceleration, NOT Tesseract. See app/ingestion/paddle_ocr_config.py for configuration.
+> **OCR Note**: System uses **PP-OCRv5 models** (detection + classification) with PaddleOCR 2.7.3 library, GPU-accelerated via paddlepaddle-gpu 2.6.2. NOT Tesseract. See `app/ingestion/paddle_ocr_config.py` for configuration.
 
 #### Step 3: Metadata Extraction
 ```python
@@ -1989,6 +2103,16 @@ async def list_all_tags(
 > - **Subsequent queries**: ~2-5s total (retrieve ~1s + rerank ~0.5s + generate ~1-3s)
 > - **BGE rerank overhead**: ~100-500ms depending on candidate count
 > - **Top rerank scores**: 0.90-0.96 for highly relevant results
+>
+> **CAD-like Tag Extraction Performance** (if ENABLE_PID_TAGS=true):
+> - **Gate evaluation**: < 300ms per file (sampling 5 pages)
+> - **Layout extraction**: ~500ms per taggy page (vector-first)
+> - **Tag extraction**: ~500ms per taggy page (CODE-anchored assembly)
+> - **Crop generation**: ~50ms per tag (if enabled, lazy default)
+> - **Total ingestion overhead**: +1-2s per taggy page (10 pages = ~12-15s)
+> - **Query-time overhead**: +300-500ms for tag queries (parallel retrieval + RRF fusion)
+> - **Storage**: ~3-8GB total (layouts ~500MB, tags ~100MB, crops ~2-5GB if not lazy)
+>
 > Recommend measuring in your specific environment.
 
 ---
@@ -2000,10 +2124,23 @@ async def list_all_tags(
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [PID_IMPLEMENTATION_COMPLETE.md](PID_IMPLEMENTATION_COMPLETE.md) - P&ID enhancement implementation guide
 
+### CAD-like Tag Extraction (NEW - v0.9.0)
+- **[START_HERE_CAD_TAGS.md](START_HERE_CAD_TAGS.md)** - Quick start (3 commands)
+- [CAD_TAG_EXTRACTION_QUICKSTART.md](CAD_TAG_EXTRACTION_QUICKSTART.md) - Complete setup guide
+- [CAD_TAG_EXTRACTION_QUICK_REFERENCE.md](CAD_TAG_EXTRACTION_QUICK_REFERENCE.md) - 1-page cheat sheet
+- [CAD_TAG_EXTRACTION_IMPLEMENTATION_SUMMARY.md](CAD_TAG_EXTRACTION_IMPLEMENTATION_SUMMARY.md) - Technical details
+- [DEPLOYMENT_CHECKLIST_CAD_TAGS.md](DEPLOYMENT_CHECKLIST_CAD_TAGS.md) - Testing & deployment
+- [PVCFC_CADlike_Tag_Extraction_Handoff.md](PVCFC_CADlike_Tag_Extraction_Handoff.md) - Original specification
+- [Review_AI.md](Review_AI.md) - Implementation review & feasibility analysis
+- [app/ingestion/tags/README.md](app/ingestion/tags/README.md) - Module API documentation
+
 ### Setup & Configuration
 - [WEAVIATE_SETUP_GUIDE.md](DOCUMENTS_CHATBOX/docs/guides/WEAVIATE_SETUP_GUIDE.md) - Weaviate database setup
 - [PID_RETRIEVAL_ENHANCEMENT.md](docs/guides/PID_RETRIEVAL_ENHANCEMENT.md) - P&ID enhancement user guide
 - [env.example](env.example) - Environment variables reference
+- [config/cadlike_gate.yaml](config/cadlike_gate.yaml) - CAD gate configuration
+- [config/tag_grammar.yaml](config/tag_grammar.yaml) - Tag patterns & assembler tolerances
+- [config/page_filters.yaml](config/page_filters.yaml) - Taggy page selection & exclusions
 
 ### Implementation Details
 - [CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md](DOCUMENTS_CHATBOX/docs/implementation/CONFIDENCE_DEFENSIVE_IMPROVEMENTS.md) - Defensive programming details
@@ -2014,8 +2151,19 @@ async def list_all_tags(
 - [MANUAL_TESTING_CHECKLIST.md](DOCUMENTS_CHATBOX/docs/guides/MANUAL_TESTING_CHECKLIST.md) - Manual testing guide
 - [tests/eval_pid_retrieval.py](tests/eval_pid_retrieval.py) - P&ID evaluation script
 - [tests/ground_truth/pid_queries.json](tests/ground_truth/pid_queries.json) - P&ID test cases
+- **[tests/smoke_test_tags.py](tests/smoke_test_tags.py)** - CAD tags smoke tests (12 queries)
+- **[test_imports_cad_tags.py](test_imports_cad_tags.py)** - Verify tag extraction modules
 
-### Scripts
+### Scripts & Tools
 - [scripts/README_PID_ENHANCEMENT.md](scripts/README_PID_ENHANCEMENT.md) - P&ID scripts guide
 - [scripts/pid_enhancement_setup.ps1](scripts/pid_enhancement_setup.ps1) - Automated setup
 - [scripts/pid_enhancement_test.ps1](scripts/pid_enhancement_test.ps1) - Quick testing
+- **[scripts/opensearch/create_tags_index.py](scripts/opensearch/create_tags_index.py)** - Create pvcfc_pid_tags index
+- **[scripts/opensearch/bulk_upsert_tags.py](scripts/opensearch/bulk_upsert_tags.py)** - Bulk load tags to index
+- **[tools/test_tag_extraction.py](tools/test_tag_extraction.py)** - Test single PDF extraction
+
+### Storage & Migration
+- [STORAGE_MIGRATION_SUMMARY.md](STORAGE_MIGRATION_SUMMARY.md) - D: drive migration details
+- [scripts/utilities/migrate_artifacts_to_d_drive.ps1](scripts/utilities/migrate_artifacts_to_d_drive.ps1) - Artifacts migration script
+- [scripts/utilities/README_ARTIFACTS_MIGRATION.md](scripts/utilities/README_ARTIFACTS_MIGRATION.md) - Migration guide
+- [ARTIFACTS_CLEANUP_RECOMMENDATIONS.md](ARTIFACTS_CLEANUP_RECOMMENDATIONS.md) - Cleanup guide

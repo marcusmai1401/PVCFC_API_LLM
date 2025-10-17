@@ -1,0 +1,51 @@
+# ============================================================================
+# Page Filters & Exclusion Rules Configuration
+# ============================================================================
+# Purpose: Define taggy page selection and exclusion zones
+# Spec: PVCFC_CADlike_Tag_Extraction_Handoff.md Section 4 & 6.4
+# ============================================================================
+
+# ===== TAGGY PAGE SELECTION =====
+
+# A page is "taggy" (worth extracting tags from) if EITHER condition is met:
+taggy_page_rules:
+  min_regex_hits_3piece: 3    # >= 3 matches of 3-piece tag pattern
+  min_code_tokens: 4          # >= 4 tokens from CODE whitelist
+  max_pages: -1               # -1 = no limit; positive = cap taggy pages per doc
+
+# Optional: prefer pages with vector circles/boxes (instrument bubbles)
+prefer_bubbles_if_available: true
+
+# ===== EXCLUSION ZONES =====
+
+# Exclude tags from title/legend/notes boxes (high false positive)
+exclude_titles:
+  - "^LEGEND\\b"
+  - "^NOTES\\b"
+  - "^FIGURE\\b"
+  - "^SYMBOLS\\b"
+  - "^TITLE\\s+BLOCK\\b"
+  - "^REVISION\\s+HISTORY\\b"
+  - "^DRAWING\\s+INDEX\\b"
+
+# Layout-based exclusions
+exclude_layout:
+  table_like: true       # Exclude grid/table structures
+  header_footer: true    # Exclude headers/footers (top/bottom 10% of page)
+  header_footer_margin_ratio: 0.10  # Top/bottom 10% considered header/footer
+
+# Bounding box exclusions (relative to page dimensions)
+# Zones defined as [x0_ratio, y0_ratio, x1_ratio, y1_ratio] where ratios ∈ [0,1]
+exclude_zones:
+  # Example: Bottom-right legend box
+  # - [0.7, 0.8, 1.0, 1.0]  # Bottom-right 30% x 20%
+  enabled: false  # Disable by default; enable if needed per corpus
+  zones: []
+
+# ===== NOISE REDUCTION =====
+
+# Minimum tag confidence to accept
+min_tag_confidence: 0.50
+
+# Minimum triplet score to log (even if below pass threshold)
+min_score_to_log: 3.0

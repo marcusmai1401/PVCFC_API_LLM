@@ -1,20 +1,26 @@
 /**
- * Material Design 3 - Component Styles & Utilities
- * Expressive style with state layers, focus-visible, elevation
+ * iOS/macOS Design System - Component Styles
+ * Clean, minimal, frosted glass aesthetics
+ * Optimized for light mode with subtle depth
  */
+
+/* Import Inter font (closest to SF Pro for web) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* ============================================
    GLOBAL & BASE STYLES
    ============================================ */
 
-/* Apply tokens globally */
+/* Apply iOS-style base */
 html, body, .stApp {
-  background-color: var(--md-sys-color-surface);
+  background: linear-gradient(180deg, #f5f5f7 0%, #fafafa 100%);
   color: var(--md-sys-color-on-surface);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  font-feature-settings: 'liga' 1, 'tnum' 1;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.3px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Typography roles */
@@ -65,6 +71,118 @@ html, body, .stApp {
   line-height: var(--md-sys-typescale-label-large-line-height);
   font-weight: var(--md-sys-typescale-label-large-weight);
   letter-spacing: var(--md-sys-typescale-label-large-tracking);
+}
+
+/* ============================================
+   iOS/macOS TYPOGRAPHY CLASSES
+   ============================================ */
+
+.ios-display {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+  color: var(--md-sys-color-on-surface);
+}
+
+.ios-title-large {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  color: var(--md-sys-color-on-surface);
+}
+
+.ios-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  line-height: 1.3;
+  color: var(--md-sys-color-on-surface);
+}
+
+.ios-body {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+  color: var(--md-sys-color-on-surface);
+}
+
+.ios-caption {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--md-sys-color-on-surface-variant);
+  letter-spacing: -0.1px;
+  line-height: 1.4;
+}
+
+/* ============================================
+   iOS/macOS CARDS - Frosted Glass
+   ============================================ */
+
+.ios-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.08);
+  padding: 24px;
+  transition: all 0.3s var(--ios-ease-out-expo);
+}
+
+.ios-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 48px rgba(31, 38, 135, 0.12);
+}
+
+.ios-card-flat {
+  background: rgba(255, 255, 255, 0.95);
+  border: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: 20px;
+  transition: all 0.2s ease;
+}
+
+.ios-card-compact {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================
+   iOS/macOS INPUTS
+   ============================================ */
+
+.ios-input {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: -0.2px;
+  color: var(--md-sys-color-on-surface);
+  transition: all 0.25s var(--ios-ease-out-expo);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ios-input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+  outline: none;
+}
+
+.ios-input::placeholder {
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.5;
 }
 
 /* ============================================
@@ -269,113 +387,287 @@ html, body, .stApp {
 }
 
 /* ============================================
-   STREAMLIT COMPONENT OVERRIDES
+   iOS/macOS BUTTON STYLES
    ============================================ */
 
-/* Streamlit buttons */
+.ios-button {
+  background: linear-gradient(180deg, #007aff 0%, #0051d5 100%);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+  transition: all 0.2s var(--ios-ease-out-expo);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.ios-button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.35);
+}
+
+.ios-button:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 4px rgba(0, 122, 255, 0.2);
+}
+
+.ios-button-secondary {
+  background: rgba(142, 142, 147, 0.12);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: none;
+}
+
+.ios-button-secondary:hover {
+  background: rgba(142, 142, 147, 0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================
+   STREAMLIT COMPONENT OVERRIDES - iOS Style
+   ============================================ */
+
+/* Remove Streamlit branding and customize scrollbar */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Sidebar iOS-style */
+[data-testid="stSidebar"] {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(120%) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+  background-color: transparent !important;
+}
+
+/* Streamlit buttons - iOS gradient style */
 .stButton > button {
-  background-color: var(--md-sys-color-primary) !important;
-  color: var(--md-sys-color-on-primary) !important;
+  background: linear-gradient(180deg, #007aff 0%, #0051d5 100%) !important;
+  color: white !important;
   border: none !important;
-  border-radius: var(--md-sys-shape-corner-full) !important;
-  padding: 10px 24px !important;
-  font-size: var(--md-sys-typescale-label-large-size) !important;
-  font-weight: var(--md-sys-typescale-label-large-weight) !important;
-  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard) !important;
-  box-shadow: var(--md-sys-elevation-level0) !important;
-  min-height: 40px !important;
+  border-radius: 12px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  letter-spacing: -0.2px !important;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25) !important;
+  transition: all 0.2s var(--ios-ease-out-expo) !important;
+  min-height: 44px !important;
 }
 
 .stButton > button:hover {
-  box-shadow: var(--md-sys-elevation-level1) !important;
-  background-color: color-mix(in oklch, var(--md-sys-color-primary), var(--md-sys-color-on-primary) calc(var(--md-sys-state-hover-opacity) * 100%)) !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.35) !important;
+}
+
+.stButton > button:active {
+  transform: scale(0.98) !important;
 }
 
 .stButton > button:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary) !important;
+  outline: 2px solid #007aff !important;
   outline-offset: 2px !important;
 }
 
-/* Streamlit text inputs */
+/* Streamlit text inputs - iOS style */
 .stTextInput > div > div > input,
 .stTextArea > div > div > textarea {
-  background-color: var(--md-sys-color-surface-container-high) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
   color: var(--md-sys-color-on-surface) !important;
-  border: 1px solid var(--md-sys-color-outline) !important;
-  border-radius: var(--md-sys-shape-corner-extra-small) !important;
-  font-size: var(--md-sys-typescale-body-large-size) !important;
-  line-height: var(--md-sys-typescale-body-large-line-height) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.2px !important;
+  line-height: 1.5 !important;
+  transition: all 0.25s var(--ios-ease-out-expo) !important;
 }
 
 .stTextInput > div > div > input:focus,
 .stTextArea > div > div > textarea:focus {
-  border-color: var(--md-sys-color-primary) !important;
-  border-width: 2px !important;
+  border-color: #007aff !important;
+  border-width: 1px !important;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1) !important;
   outline: none !important;
 }
 
-.stTextInput > div > div > input:focus-visible,
-.stTextArea > div > div > textarea:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary) !important;
-  outline-offset: 2px !important;
+.stTextInput > div > div > input::placeholder,
+.stTextArea > div > div > textarea::placeholder {
+  color: var(--md-sys-color-on-surface-variant) !important;
+  opacity: 0.5 !important;
 }
 
-/* Streamlit selectbox */
+/* Streamlit selectbox - iOS style */
 .stSelectbox > div > div {
-  background-color: var(--md-sys-color-surface-container-high) !important;
-  border: 1px solid var(--md-sys-color-outline) !important;
-  border-radius: var(--md-sys-shape-corner-extra-small) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 12px !important;
   color: var(--md-sys-color-on-surface) !important;
+  padding: 10px 16px !important;
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.2px !important;
+  transition: all 0.2s ease !important;
 }
 
-/* Streamlit tabs */
+.stSelectbox > div > div:hover {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+/* Streamlit tabs - iOS segmented control style */
 .stTabs [data-baseweb="tab-list"] {
-  background-color: var(--md-sys-color-surface-container) !important;
-  border-radius: var(--md-sys-shape-corner-medium) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-radius: 16px !important;
   padding: 4px !important;
-  gap: 4px !important;
+  gap: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
 }
 
 .stTabs [data-baseweb="tab"] {
-  background-color: transparent !important;
-  color: var(--md-sys-color-on-surface-variant) !important;
-  border-radius: var(--md-sys-shape-corner-small) !important;
-  padding: 8px 16px !important;
-  font-weight: var(--md-sys-typescale-label-large-weight) !important;
-  transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard) !important;
+  background: transparent !important;
+  color: #86868b !important;
+  border-radius: 12px !important;
+  padding: 10px 20px !important;
+  font-weight: 500 !important;
+  font-size: 15px !important;
+  letter-spacing: -0.2px !important;
+  transition: all 0.2s var(--ios-ease-out-expo) !important;
+  border: none !important;
 }
 
 .stTabs [data-baseweb="tab"]:hover {
-  background-color: color-mix(in oklch, transparent, var(--md-sys-color-on-surface) calc(var(--md-sys-state-hover-opacity) * 100%)) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
 }
 
 .stTabs [aria-selected="true"] {
-  background-color: var(--md-sys-color-secondary-container) !important;
-  color: var(--md-sys-color-on-secondary-container) !important;
+  background: white !important;
+  color: #1d1d1f !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06) !important;
+  font-weight: 600 !important;
 }
 
-/* Streamlit metrics */
+/* Streamlit metrics - iOS card style */
 [data-testid="metric-container"] {
-  background-color: var(--md-sys-color-surface-container) !important;
-  border: 1px solid var(--md-sys-color-outline-variant) !important;
-  border-radius: var(--md-sys-shape-corner-medium) !important;
-  padding: 16px !important;
-  box-shadow: var(--md-sys-elevation-level1) !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.3s var(--ios-ease-out-expo) !important;
 }
 
-/* Streamlit expander */
+[data-testid="metric-container"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-testid="metric-container"] [data-testid="stMetricLabel"] {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #86868b !important;
+  letter-spacing: -0.1px !important;
+  text-transform: uppercase !important;
+}
+
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.8px !important;
+  color: #1d1d1f !important;
+}
+
+/* Streamlit expander - iOS disclosure style */
 .streamlit-expanderHeader {
-  background-color: var(--md-sys-color-surface-container) !important;
-  border: 1px solid var(--md-sys-color-outline-variant) !important;
-  border-radius: var(--md-sys-shape-corner-medium) !important;
-  color: var(--md-sys-color-on-surface) !important;
-  font-weight: var(--md-sys-typescale-title-medium-weight) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 12px !important;
+  color: #1d1d1f !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  letter-spacing: -0.2px !important;
+  padding: 14px 16px !important;
+  transition: all 0.2s ease !important;
 }
 
-/* Streamlit dataframe */
+.streamlit-expanderHeader:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Streamlit dataframe - iOS style */
 .stDataFrame {
-  border-radius: var(--md-sys-shape-corner-medium) !important;
+  border-radius: 12px !important;
   overflow: hidden !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+.stDataFrame [data-testid="stDataFrameResizable"] {
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Streamlit radio buttons - iOS style */
+.stRadio > div {
+  background: transparent !important;
+  gap: 8px !important;
+}
+
+.stRadio > div > label {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 12px !important;
+  padding: 12px 20px !important;
+  margin-bottom: 8px !important;
+  transition: all 0.2s ease !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.2px !important;
+}
+
+.stRadio > div > label:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  transform: translateX(4px);
+}
+
+.stRadio > div > label[data-baseweb="radio"] > div:first-child {
+  background-color: white !important;
+  border: 2px solid #007aff !important;
 }
 
 /* ============================================
@@ -621,4 +913,287 @@ html, body, .stApp {
   color: var(--md-sys-color-on-surface-variant);
   line-height: 1.4;
   margin-top: 8px;
+}
+
+/* ============================================
+   iOS/macOS ANIMATIONS & TRANSITIONS
+   ============================================ */
+
+/* Smooth page fade-in */
+.stApp > div {
+  animation: iosFadeInUp 0.6s var(--ios-ease-out-expo);
+}
+
+@keyframes iosFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* iOS loading spinner */
+.ios-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 122, 255, 0.2);
+  border-top-color: #007aff;
+  border-radius: 50%;
+  animation: iosSpin 0.8s linear infinite;
+}
+
+@keyframes iosSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Loading shimmer effect (like iOS skeleton screens) */
+@keyframes iosShimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.ios-loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.8) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: iosShimmer 2s infinite;
+}
+
+/* Pulse animation for status indicators */
+@keyframes iosPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ios-pulse {
+  animation: iosPulse 2s ease-in-out infinite;
+}
+
+/* Slide in from right (for side panels) */
+@keyframes iosSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Scale bounce (for success feedback) */
+@keyframes iosScaleBounce {
+  0% { transform: scale(0.95); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.ios-success-feedback {
+  animation: iosScaleBounce 0.4s var(--ios-ease-out-expo);
+}
+
+/* ============================================
+   iOS/macOS CITATION CARDS
+   ============================================ */
+
+.ios-citation-item {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-left: 3px solid #007aff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s var(--ios-ease-out-expo);
+}
+
+.ios-citation-item:hover {
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-left-color: #0051d5;
+}
+
+.ios-citation-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ios-citation-item-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: #1d1d1f;
+}
+
+.ios-citation-item-meta {
+  font-size: 13px;
+  font-weight: 500;
+  color: #86868b;
+  letter-spacing: -0.1px;
+}
+
+.ios-citation-item-text {
+  font-size: 13px;
+  font-weight: 400;
+  color: #86868b;
+  line-height: 1.4;
+  letter-spacing: -0.1px;
+  margin-top: 8px;
+}
+
+/* ============================================
+   iOS/macOS STATUS INDICATORS
+   ============================================ */
+
+.ios-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.ios-status-healthy {
+  background: #34c759;
+  box-shadow: 0 0 12px rgba(52, 199, 89, 0.4);
+}
+
+.ios-status-warning {
+  background: #ff9500;
+  box-shadow: 0 0 12px rgba(255, 149, 0, 0.4);
+}
+
+.ios-status-error {
+  background: #ff3b30;
+  box-shadow: 0 0 12px rgba(255, 59, 48, 0.4);
+}
+
+/* ============================================
+   iOS/macOS ALERTS & NOTIFICATIONS
+   ============================================ */
+
+.stAlert, .stSuccess, .stInfo, .stWarning, .stError {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 12px !important;
+  padding: 16px 20px !important;
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.2px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+}
+
+.stSuccess {
+  border-left: 3px solid #34c759 !important;
+}
+
+.stInfo {
+  border-left: 3px solid #007aff !important;
+}
+
+.stWarning {
+  border-left: 3px solid #ff9500 !important;
+}
+
+.stError {
+  border-left: 3px solid #ff3b30 !important;
+}
+
+/* ============================================
+   iOS/macOS PROGRESS INDICATORS
+   ============================================ */
+
+.stProgress > div > div {
+  background: rgba(142, 142, 147, 0.12) !important;
+  border-radius: 8px !important;
+  height: 8px !important;
+}
+
+.stProgress > div > div > div {
+  background: linear-gradient(90deg, #007aff 0%, #0051d5 100%) !important;
+  border-radius: 8px !important;
+  transition: width 0.3s var(--ios-ease-out-expo) !important;
+}
+
+/* ============================================
+   iOS/macOS TOOLTIPS & POPOVERS
+   ============================================ */
+
+[data-testid="stTooltipHoverTarget"] {
+  transition: all 0.2s ease !important;
+}
+
+[data-testid="stTooltipContent"] {
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.1px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ============================================
+   iOS/macOS LOADING OVERLAY
+   ============================================ */
+
+.ios-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ios-overlay-content {
+  background: rgba(255, 255, 255, 0.85);
+  border: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 20px 24px;
+  text-align: center;
+}
+
+/* Linear loader */
+.ios-linear-loader {
+  position: relative;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.ios-linear-loader::after {
+  content: '';
+  position: absolute;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, #007aff 0%, #0051d5 100%);
+  animation: iosLinearSlide 1.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes iosLinearSlide {
+  0% { left: -30%; }
+  100% { left: 100%; }
 }

@@ -172,44 +172,19 @@ def format_citations(citations: List[Dict]) -> pd.DataFrame:
 
 
 def render(vision_mode=False):
-    """Render query lab component with full functionality and logging
-
-    For Phase 1 completion, delegate to the enhanced version
-    """
-    # Import and use the improved version with enhanced citations
-    try:
-        from streamlit_app.components.query_lab_improved import (
-            render as improved_render,
-        )
-
-        improved_render(vision_mode=vision_mode)
-        return
-    except ImportError:
-        pass
-
-    # Try the enhanced version as fallback
-    try:
-        from streamlit_app.components.query_lab_enhanced import (
-            render as enhanced_render,
-        )
-
-        enhanced_render(vision_mode=vision_mode)
-        return
-    except ImportError:
-        pass
-
-    # Fallback to original implementation if enhanced not available
-    if vision_mode:
-        st.header("👁️ Vision-Assisted Query Lab")
+    """Render query lab component with full functionality and logging"""
+    # Use built-in implementation (iOS/macOS minimal). Delegation disabled for consistency.
+if vision_mode:
+        st.header("Vision-Assisted Query Lab")
         st.caption("Query Lab with vision verification features enabled")
     else:
-        st.header("🔍 Query Lab")
+        st.header("Query Lab")
         st.caption("Test and debug RAG pipeline with full control over parameters")
 
     # Initialize logger
     logger = get_logger(verbose=st.session_state.get("enable_verbose_logging", False))
 
-    # Initialize session state
+# Initialize session state
     if "query_results" not in st.session_state:
         st.session_state.query_results = None
     if "api_base_url" not in st.session_state:
@@ -218,6 +193,8 @@ def render(vision_mode=False):
         )
     if "run_id" not in st.session_state:
         st.session_state.run_id = None
+    if "ios_loading" not in st.session_state:
+        st.session_state.ios_loading = False
 
     # Main layout
     col1, col2 = st.columns([1, 2])
@@ -409,9 +386,13 @@ def render(vision_mode=False):
         # Language
         language = st.radio("Language", ["vi", "en"], horizontal=True)
 
+# Loading indicator (linear) when processing
+        if st.session_state.get("ios_loading", False):
+            st.markdown('<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
+
         # Run button
         if st.button(
-            "🚀 Run Query", type="primary", use_container_width=True, key="run_query_btn"
+            "Run Query", type="primary", use_container_width=True, key="run_query_btn"
         ):
             if query:
                 # Start a new run
@@ -442,7 +423,17 @@ def render(vision_mode=False):
                     performance_key="query_execution",
                 )
 
-                with st.spinner("Processing query..."):
+# Overlay ON
+                    st.session_state.ios_loading = True
+                    st.markdown("""
+                    <div class=\"ios-overlay\" role=\"status\" aria-live=\"polite\">
+                      <div class=\"ios-overlay-content\">
+                        <div class=\"ios-spinner\" style=\"margin: 0 auto;\"></div>
+                        <p class=\"ios-caption\" style=\"margin: 12px 0 0 0;\">Generating answer...</p>
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
                     # Prepare parameters
                     params = {
                         "max_context": top_k_context,
@@ -477,7 +468,8 @@ def render(vision_mode=False):
                             performance_key="query_execution",
                         )
 
-                        st.success("✓ Query completed successfully")
+                        st.success("Query completed successfully")
+                        st.session_state.ios_loading = False
                         st.rerun()
                     else:
                         # Log failure
@@ -491,6 +483,8 @@ def render(vision_mode=False):
 
                         st.error(f"Error: {result['error']}")
                         st.session_state.query_results = None
+                        st.session_state.ios_loading = False
+                        st.rerun()
             else:
                 logger.log_event(
                     EventType.WARNING,
@@ -521,13 +515,13 @@ def render(vision_mode=False):
 
             with tab1:
                 # Overview Tab
-                st.markdown("### 📝 Answer")
+                st.markdown("### Answer")
                 answer_text = results.get("answer", "")
 
                 # Check if answer is empty or too short
                 if not answer_text or len(answer_text.strip()) < 10:
                     st.warning(
-                        "⚠️ The system could not generate a complete answer. This may be due to:"
+                        "The system could not generate a complete answer. This may be due to:"
                     )
                     st.markdown(
                         """
@@ -562,13 +556,13 @@ def render(vision_mode=False):
                 # Warnings
                 warnings = results.get("warnings", [])
                 if warnings:
-                    st.warning("⚠️ Warnings:")
+st.warning("Warnings:")
                     for warn in warnings:
                         st.write(f"- {warn}")
 
             with tab2:
                 # Retrieval Tab
-                st.markdown("### 🔍 Retrieval Results")
+                st.markdown("### Retrieval Results")
 
                 # Get retrieval details from response
                 retrieval_details = results.get("retrieval_details", {})
@@ -578,9 +572,8 @@ def render(vision_mode=False):
                 total_retrieved = retrieval_details.get("total_retrieved", 0)
 
                 # Display mode indicator
-                mode_emoji = "🔹" if retriever_type == "weaviate" else "🔸"
-                st.info(
-                    f"{mode_emoji} Retrieval Mode: **{retriever_type.upper()}** | Total Retrieved: **{total_retrieved}**"
+st.info(
+                    f"Retrieval Mode: **{retriever_type.upper()}** | Total Retrieved: **{total_retrieved}**"
                 )
 
                 if retriever_type == "weaviate":
@@ -643,7 +636,7 @@ def render(vision_mode=False):
 
             with tab3:
                 # Rerank Tab
-                st.markdown("### 📊 Reranking Details")
+st.markdown("### Reranking Details")
 
                 rerank_info = meta.get("rerank", {})
 
@@ -680,7 +673,7 @@ def render(vision_mode=False):
 
             with tab4:
                 # Generation Tab
-                st.markdown("### 🤖 Generation Details")
+st.markdown("### Generation Details")
 
                 gen_info = meta.get("generation", {})
 
@@ -813,31 +806,31 @@ def render(vision_mode=False):
             )
 
             with tab1:
-                st.info("📝 Answer will appear here after running a query")
+st.info("Answer will appear here after running a query")
                 st.caption(
                     "This tab will show the final answer, confidence score, and warnings"
                 )
 
             with tab2:
-                st.info("🔍 Retrieval results will be shown here")
+st.info("Retrieval results will be shown here")
                 st.caption("BM25, FAISS, and RRF fused results")
 
             with tab3:
-                st.info("📊 Reranking details will be displayed here")
+st.info("Reranking details will be displayed here")
                 st.caption("Before/after scores and reranker explanation")
 
             with tab4:
-                st.info("🤖 Generation details will appear here")
+st.info("Generation details will appear here")
                 st.caption("Model info, prompt snapshot, timing")
 
             with tab5:
-                st.info("📌 Citations will be listed here")
+st.info("Citations will be listed here")
                 st.caption("Click citations to open PDF viewer (Phase 2)")
 
             with tab6:
                 if st.session_state.get("enable_vision", False):
-                    st.info(
-                        "👁️ Vision generation info will show here after running a query"
+st.info(
+                        "Vision generation info will show here after running a query"
                     )
                     st.caption("PDF pages used, success rate, and page details")
                 else:
@@ -846,11 +839,11 @@ def render(vision_mode=False):
                     )
 
             with tab7:
-                st.info("📈 Performance metrics will be displayed here")
+st.info("Performance metrics will be displayed here")
                 st.caption("Latency breakdown, token usage, cache hits")
 
             with tab8:
-                st.info("📜 Request logs will stream here")
+st.info("Request logs will stream here")
                 st.caption("Structured logs filtered by trace_id")
 
     # Timeline visualization
@@ -877,6 +870,6 @@ def render(vision_mode=False):
     else:
         st.divider()
         st.subheader("Pipeline Timeline")
-        st.info(
-            "⏱️ Latency breakdown timeline will be visualized here after running a query"
+st.info(
+            "Latency breakdown timeline will be visualized here after running a query"
         )

@@ -84,7 +84,7 @@ def fetch_index_stats(api_base_url: str, timeout: int = 5) -> Dict[str, Any]:
 
 def render_system_status(api_base_url: str = None):
     """
-    Render the System Status section
+    Render the System Status section with iOS styling
 
     Args:
         api_base_url: API base URL (uses session state if not provided)
@@ -94,12 +94,20 @@ def render_system_status(api_base_url: str = None):
     if api_base_url is None:
         api_base_url = st.session_state.get("api_base_url", "http://localhost:8000")
 
-    st.markdown("### System Status")
+    # iOS-style section header
+    st.markdown(
+        """
+    <div class="ios-card" style="margin-bottom: 24px;">
+        <h2 class="ios-title" style="margin: 0;">System Status</h2>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Create refresh button
     col1, col2, col3 = st.columns([2, 1, 3])
     with col2:
-        refresh = st.button("🔄 Refresh", use_container_width=True)
+        refresh = st.button("Refresh", use_container_width=True)
 
     # Initialize or refresh data
     if refresh or "system_status_cache" not in st.session_state:
@@ -125,35 +133,68 @@ def render_system_status(api_base_url: str = None):
 
     # Display last update time
     if cache_time:
-        st.caption(f"Last updated: {cache_time}")
+        st.markdown(
+            f'<p class="ios-caption" style="text-align: center; margin-bottom: 16px;">Last updated: {cache_time}</p>',
+            unsafe_allow_html=True,
+        )
 
-    # Display Health Status
-    st.markdown("#### API Health")
-
+    # Display Health Status with iOS cards
     if health_result.get("success"):
         health_data = health_result["data"]
 
-        # Main status
+        # Main status in iOS-style cards
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             status = health_data.get("status", "unknown")
-            if status == "healthy":
-                st.success(f"✅ {status.upper()}")
-            else:
-                st.error(f"❌ {status.upper()}")
+            status_color = "#34c759" if status == "healthy" else "#ff3b30"
+            st.markdown(
+                f"""
+            <div class="ios-card-compact" style="text-align: center;">
+                <p class="ios-caption" style="margin: 0 0 8px 0;">Status</p>
+                <p class="ios-title" style="margin: 0; color: {status_color};">{status.title()}</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
 
         with col2:
             env = health_data.get("app_env", "unknown")
-            st.info(f"🌍 Env: {env}")
+            st.markdown(
+                f"""
+            <div class="ios-card-compact" style="text-align: center;">
+                <p class="ios-caption" style="margin: 0 0 8px 0;">Environment</p>
+                <p class="ios-title" style="margin: 0;">{env.upper()}</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
 
         with col3:
             version = health_data.get("version", "unknown")
-            st.info(f"📦 v{version}")
+            st.markdown(
+                f"""
+            <div class="ios-card-compact" style="text-align: center;">
+                <p class="ios-caption" style="margin: 0 0 8px 0;">Version</p>
+                <p class="ios-title" style="margin: 0;">v{version}</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
 
         with col4:
             uptime = health_data.get("uptime_human", "unknown")
-            st.info(f"⏱️ {uptime}")
+            st.markdown(
+                f"""
+            <div class="ios-card-compact" style="text-align: center;">
+                <p class="ios-caption" style="margin: 0 0 8px 0;">Uptime</p>
+                <p class="ios-title" style="margin: 0;">{uptime}</p>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # LLM Provider info
         col1, col2 = st.columns(2)
@@ -170,16 +211,33 @@ def render_system_status(api_base_url: str = None):
 
         # Response time
         response_time = health_result.get("response_time_ms", 0)
-        st.caption(f"Response time: {response_time:.0f}ms")
+        st.markdown(
+            f'<p class="ios-caption" style="margin-top: 12px; text-align: center;">Response time: {response_time:.0f}ms</p>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.error(
-            f"❌ API Health Check Failed: {health_result.get('error', 'Unknown error')}"
+        st.markdown(
+            f"""
+        <div class="ios-card" style="border-left: 3px solid #ff3b30;">
+            <p class="ios-body" style="margin: 0; color: #ff3b30;">
+                API Health Check Failed: {health_result.get('error', 'Unknown error')}
+            </p>
+        </div>
+        """,
+            unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
     # Display Index Statistics
-    st.markdown("#### Index Statistics")
+    st.markdown(
+        """
+    <div class="ios-card" style="margin-bottom: 16px;">
+        <h3 class="ios-title" style="margin: 0;">Index Statistics</h3>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
 
     if index_result.get("success"):
         stats_data = index_result.get("data", {})

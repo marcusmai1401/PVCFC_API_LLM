@@ -1,59 +1,68 @@
 /**
- * Material Design 3 - Design Tokens
- * Generated from tokens.json with seed color #0E7B55
- * Supports light and dark themes with color roles
+ * iOS/macOS Design Tokens - Light Mode
+ * Inspired by Apple's design language with clean, minimal aesthetics
+ * Optimized for frosted glass effects and subtle hierarchies
  */
 
-/* Light theme tokens */
+/* Light theme tokens - iOS/macOS inspired */
 :root,
 :root[data-theme="light"] {
-  /* Primary */
-  --md-sys-color-primary: oklch(48% 0.15 160);
-  --md-sys-color-on-primary: oklch(100% 0 0);
-  --md-sys-color-primary-container: oklch(88% 0.12 160);
-  --md-sys-color-on-primary-container: oklch(15% 0.15 160);
+  /* Primary - iOS Blue */
+  --md-sys-color-primary: #007aff;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #e3f2ff;
+  --md-sys-color-on-primary-container: #001d35;
 
-  /* Secondary */
-  --md-sys-color-secondary: oklch(52% 0.08 200);
-  --md-sys-color-on-secondary: oklch(100% 0 0);
-  --md-sys-color-secondary-container: oklch(88% 0.06 200);
-  --md-sys-color-on-secondary-container: oklch(18% 0.08 200);
+  /* Secondary - iOS Gray */
+  --md-sys-color-secondary: #5e5e5e;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #e5e5ea;
+  --md-sys-color-on-secondary-container: #1d1d1f;
 
-  /* Tertiary */
-  --md-sys-color-tertiary: oklch(58% 0.12 280);
-  --md-sys-color-on-tertiary: oklch(100% 0 0);
-  --md-sys-color-tertiary-container: oklch(92% 0.08 280);
-  --md-sys-color-on-tertiary-container: oklch(22% 0.12 280);
+  /* Tertiary - iOS Purple */
+  --md-sys-color-tertiary: #af52de;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #f3e5ff;
+  --md-sys-color-on-tertiary-container: #2d0052;
 
-  /* Error */
-  --md-sys-color-error: oklch(58% 0.22 25);
-  --md-sys-color-on-error: oklch(100% 0 0);
-  --md-sys-color-error-container: oklch(92% 0.15 25);
-  --md-sys-color-on-error-container: oklch(25% 0.22 25);
+  /* Error - iOS Red */
+  --md-sys-color-error: #ff3b30;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffe5e3;
+  --md-sys-color-on-error-container: #410002;
 
-  /* Surface */
-  --md-sys-color-surface: oklch(98% 0.005 160);
-  --md-sys-color-on-surface: oklch(20% 0.02 160);
-  --md-sys-color-surface-variant: oklch(92% 0.01 160);
-  --md-sys-color-on-surface-variant: oklch(42% 0.02 160);
+  /* Surface - iOS light gray hierarchy */
+  --md-sys-color-surface: #f5f5f7;
+  --md-sys-color-on-surface: #1d1d1f;
+  --md-sys-color-surface-variant: #e5e5ea;
+  --md-sys-color-on-surface-variant: #86868b;
 
-  /* Outline */
-  --md-sys-color-outline: oklch(58% 0.02 160);
-  --md-sys-color-outline-variant: oklch(78% 0.01 160);
+  /* Outline - Subtle borders */
+  --md-sys-color-outline: rgba(0, 0, 0, 0.12);
+  --md-sys-color-outline-variant: rgba(0, 0, 0, 0.06);
 
   /* Inverse */
-  --md-sys-color-inverse-surface: oklch(24% 0.02 160);
-  --md-sys-color-inverse-on-surface: oklch(95% 0.01 160);
-  --md-sys-color-inverse-primary: oklch(78% 0.15 160);
+  --md-sys-color-inverse-surface: #1d1d1f;
+  --md-sys-color-inverse-on-surface: #f5f5f7;
+  --md-sys-color-inverse-primary: #64b5f6;
 
-  /* Surface containers */
-  --md-sys-color-surface-dim: oklch(88% 0.01 160);
-  --md-sys-color-surface-bright: oklch(98% 0.005 160);
-  --md-sys-color-surface-container-lowest: oklch(100% 0 0);
-  --md-sys-color-surface-container-low: oklch(96% 0.005 160);
-  --md-sys-color-surface-container: oklch(94% 0.01 160);
-  --md-sys-color-surface-container-high: oklch(92% 0.01 160);
-  --md-sys-color-surface-container-highest: oklch(90% 0.01 160);
+  /* Surface containers - Layered glassmorphism */
+  --md-sys-color-surface-dim: #e8e8ed;
+  --md-sys-color-surface-bright: #ffffff;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #fafafa;
+  --md-sys-color-surface-container: #f5f5f7;
+  --md-sys-color-surface-container-high: #efefef;
+  --md-sys-color-surface-container-highest: #e5e5ea;
+
+  /* iOS accent colors */
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-red: #ff3b30;
+  --ios-purple: #af52de;
+  --ios-indigo: #5856d6;
+  --ios-teal: #5ac8fa;
+  --ios-pink: #ff2d55;
 }
 
 /* Dark theme tokens */
@@ -107,129 +116,134 @@
   --md-sys-color-surface-container-highest: oklch(30% 0.02 160);
 }
 
-/* Typography scale */
+/* Typography scale - iOS/SF Pro inspired */
 :root {
-  /* Display */
-  --md-sys-typescale-display-large-size: 57px;
-  --md-sys-typescale-display-large-line-height: 64px;
-  --md-sys-typescale-display-large-weight: 400;
-  --md-sys-typescale-display-large-tracking: -0.25px;
+  /* Display - Large titles */
+  --md-sys-typescale-display-large-size: 48px;
+  --md-sys-typescale-display-large-line-height: 52px;
+  --md-sys-typescale-display-large-weight: 700;
+  --md-sys-typescale-display-large-tracking: -1.5px;
 
-  --md-sys-typescale-display-medium-size: 45px;
-  --md-sys-typescale-display-medium-line-height: 52px;
-  --md-sys-typescale-display-medium-weight: 400;
-  --md-sys-typescale-display-medium-tracking: 0;
+  --md-sys-typescale-display-medium-size: 40px;
+  --md-sys-typescale-display-medium-line-height: 44px;
+  --md-sys-typescale-display-medium-weight: 700;
+  --md-sys-typescale-display-medium-tracking: -1.2px;
 
-  --md-sys-typescale-display-small-size: 36px;
-  --md-sys-typescale-display-small-line-height: 44px;
-  --md-sys-typescale-display-small-weight: 400;
-  --md-sys-typescale-display-small-tracking: 0;
+  --md-sys-typescale-display-small-size: 32px;
+  --md-sys-typescale-display-small-line-height: 38px;
+  --md-sys-typescale-display-small-weight: 700;
+  --md-sys-typescale-display-small-tracking: -0.8px;
 
   /* Headline */
-  --md-sys-typescale-headline-large-size: 32px;
-  --md-sys-typescale-headline-large-line-height: 40px;
-  --md-sys-typescale-headline-large-weight: 400;
-  --md-sys-typescale-headline-large-tracking: 0;
+  --md-sys-typescale-headline-large-size: 28px;
+  --md-sys-typescale-headline-large-line-height: 34px;
+  --md-sys-typescale-headline-large-weight: 700;
+  --md-sys-typescale-headline-large-tracking: -0.6px;
 
-  --md-sys-typescale-headline-medium-size: 28px;
-  --md-sys-typescale-headline-medium-line-height: 36px;
-  --md-sys-typescale-headline-medium-weight: 400;
-  --md-sys-typescale-headline-medium-tracking: 0;
+  --md-sys-typescale-headline-medium-size: 24px;
+  --md-sys-typescale-headline-medium-line-height: 30px;
+  --md-sys-typescale-headline-medium-weight: 600;
+  --md-sys-typescale-headline-medium-tracking: -0.5px;
 
-  --md-sys-typescale-headline-small-size: 24px;
-  --md-sys-typescale-headline-small-line-height: 32px;
-  --md-sys-typescale-headline-small-weight: 400;
-  --md-sys-typescale-headline-small-tracking: 0;
+  --md-sys-typescale-headline-small-size: 22px;
+  --md-sys-typescale-headline-small-line-height: 28px;
+  --md-sys-typescale-headline-small-weight: 600;
+  --md-sys-typescale-headline-small-tracking: -0.4px;
 
   /* Title */
-  --md-sys-typescale-title-large-size: 22px;
-  --md-sys-typescale-title-large-line-height: 28px;
-  --md-sys-typescale-title-large-weight: 500;
-  --md-sys-typescale-title-large-tracking: 0;
+  --md-sys-typescale-title-large-size: 20px;
+  --md-sys-typescale-title-large-line-height: 26px;
+  --md-sys-typescale-title-large-weight: 600;
+  --md-sys-typescale-title-large-tracking: -0.3px;
 
-  --md-sys-typescale-title-medium-size: 16px;
-  --md-sys-typescale-title-medium-line-height: 24px;
-  --md-sys-typescale-title-medium-weight: 500;
-  --md-sys-typescale-title-medium-tracking: 0.15px;
+  --md-sys-typescale-title-medium-size: 17px;
+  --md-sys-typescale-title-medium-line-height: 22px;
+  --md-sys-typescale-title-medium-weight: 600;
+  --md-sys-typescale-title-medium-tracking: -0.2px;
 
-  --md-sys-typescale-title-small-size: 14px;
+  --md-sys-typescale-title-small-size: 15px;
   --md-sys-typescale-title-small-line-height: 20px;
-  --md-sys-typescale-title-small-weight: 500;
-  --md-sys-typescale-title-small-tracking: 0.1px;
+  --md-sys-typescale-title-small-weight: 600;
+  --md-sys-typescale-title-small-tracking: -0.2px;
 
   /* Label */
-  --md-sys-typescale-label-large-size: 14px;
+  --md-sys-typescale-label-large-size: 15px;
   --md-sys-typescale-label-large-line-height: 20px;
   --md-sys-typescale-label-large-weight: 500;
-  --md-sys-typescale-label-large-tracking: 0.1px;
+  --md-sys-typescale-label-large-tracking: -0.2px;
 
-  --md-sys-typescale-label-medium-size: 12px;
-  --md-sys-typescale-label-medium-line-height: 16px;
+  --md-sys-typescale-label-medium-size: 13px;
+  --md-sys-typescale-label-medium-line-height: 18px;
   --md-sys-typescale-label-medium-weight: 500;
-  --md-sys-typescale-label-medium-tracking: 0.5px;
+  --md-sys-typescale-label-medium-tracking: -0.1px;
 
   --md-sys-typescale-label-small-size: 11px;
   --md-sys-typescale-label-small-line-height: 16px;
   --md-sys-typescale-label-small-weight: 500;
-  --md-sys-typescale-label-small-tracking: 0.5px;
+  --md-sys-typescale-label-small-tracking: 0px;
 
-  /* Body */
-  --md-sys-typescale-body-large-size: 16px;
-  --md-sys-typescale-body-large-line-height: 24px;
+  /* Body - Comfortable reading */
+  --md-sys-typescale-body-large-size: 17px;
+  --md-sys-typescale-body-large-line-height: 26px;
   --md-sys-typescale-body-large-weight: 400;
-  --md-sys-typescale-body-large-tracking: 0.5px;
+  --md-sys-typescale-body-large-tracking: -0.3px;
 
-  --md-sys-typescale-body-medium-size: 14px;
-  --md-sys-typescale-body-medium-line-height: 20px;
+  --md-sys-typescale-body-medium-size: 15px;
+  --md-sys-typescale-body-medium-line-height: 22px;
   --md-sys-typescale-body-medium-weight: 400;
-  --md-sys-typescale-body-medium-tracking: 0.25px;
+  --md-sys-typescale-body-medium-tracking: -0.2px;
 
-  --md-sys-typescale-body-small-size: 12px;
-  --md-sys-typescale-body-small-line-height: 16px;
+  --md-sys-typescale-body-small-size: 13px;
+  --md-sys-typescale-body-small-line-height: 18px;
   --md-sys-typescale-body-small-weight: 400;
-  --md-sys-typescale-body-small-tracking: 0.4px;
+  --md-sys-typescale-body-small-tracking: -0.1px;
 }
 
-/* Shape scale */
+/* Shape scale - iOS rounded corners */
 :root {
   --md-sys-shape-corner-none: 0px;
-  --md-sys-shape-corner-extra-small: 4px;
-  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-extra-small: 6px;
+  --md-sys-shape-corner-small: 10px;
   --md-sys-shape-corner-medium: 12px;
   --md-sys-shape-corner-large: 16px;
-  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-extra-large: 20px;
   --md-sys-shape-corner-full: 9999px;
 }
 
-/* Elevation */
+/* Elevation - Subtle iOS-style shadows */
 :root {
   --md-sys-elevation-level0: none;
-  --md-sys-elevation-level1: 0px 1px 2px 0px rgba(0,0,0,0.3), 0px 1px 3px 1px rgba(0,0,0,0.15);
-  --md-sys-elevation-level2: 0px 1px 2px 0px rgba(0,0,0,0.3), 0px 2px 6px 2px rgba(0,0,0,0.15);
-  --md-sys-elevation-level3: 0px 4px 8px 3px rgba(0,0,0,0.15), 0px 1px 3px 0px rgba(0,0,0,0.3);
-  --md-sys-elevation-level4: 0px 6px 10px 4px rgba(0,0,0,0.15), 0px 2px 3px 0px rgba(0,0,0,0.3);
-  --md-sys-elevation-level5: 0px 8px 12px 6px rgba(0,0,0,0.15), 0px 4px 4px 0px rgba(0,0,0,0.3);
+  --md-sys-elevation-level1: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --md-sys-elevation-level2: 0 4px 16px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --md-sys-elevation-level3: 0 8px 32px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --md-sys-elevation-level4: 0 12px 48px rgba(0, 0, 0, 0.10), 0 6px 12px rgba(0, 0, 0, 0.05);
+  --md-sys-elevation-level5: 0 16px 64px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.06);
 }
 
-/* Motion */
+/* Motion - iOS smooth easing curves */
 :root {
-  --md-sys-motion-duration-short1: 50ms;
-  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-short1: 100ms;
+  --md-sys-motion-duration-short2: 200ms;
   --md-sys-motion-duration-medium1: 250ms;
   --md-sys-motion-duration-medium2: 300ms;
   --md-sys-motion-duration-long1: 400ms;
-  --md-sys-motion-duration-long2: 500ms;
+  --md-sys-motion-duration-long2: 600ms;
 
-  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0.0, 0, 1.0);
-  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --md-sys-motion-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
   --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+
+  /* iOS-specific easing */
+  --ios-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ios-ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+  --ios-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* State layer opacity */
+/* State layer opacity - Subtle like iOS */
 :root {
-  --md-sys-state-hover-opacity: 0.08;
-  --md-sys-state-focus-opacity: 0.12;
-  --md-sys-state-pressed-opacity: 0.12;
-  --md-sys-state-dragged-opacity: 0.16;
+  --md-sys-state-hover-opacity: 0.05;
+  --md-sys-state-focus-opacity: 0.10;
+  --md-sys-state-pressed-opacity: 0.15;
+  --md-sys-state-dragged-opacity: 0.20;
 }

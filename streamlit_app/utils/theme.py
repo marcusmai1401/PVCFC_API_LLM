@@ -19,13 +19,12 @@ def load_css_file(css_path: Path) -> str:
 
 
 def inject_m3_styles():
-    """Inject Material Design 3 tokens and styles into Streamlit."""
+    """Inject iOS/macOS tokens and styles into Streamlit (icons minimized)."""
     styles_dir = Path(__file__).parent.parent / "styles"
 
-    # Load tokens, m3 CSS, and Material Symbols
+    # Load tokens and base CSS (no global icon fonts)
     tokens_css = load_css_file(styles_dir / "tokens.css")
     m3_css = load_css_file(styles_dir / "m3.css")
-    material_symbols_css = load_css_file(styles_dir / "material-symbols.css")
 
     # Inject into Streamlit
     st.markdown(
@@ -33,7 +32,6 @@ def inject_m3_styles():
         <style>
         {tokens_css}
         {m3_css}
-        {material_symbols_css}
         </style>
         """,
         unsafe_allow_html=True,
