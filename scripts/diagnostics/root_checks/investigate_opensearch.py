@@ -6,23 +6,30 @@ import os
 
 from opensearchpy import OpenSearch
 
-# Load credentials from environment variables
+# Load credentials from environment variables (optional for no-security mode)
 OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
 OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD")
 
-if not OPENSEARCH_PASSWORD:
-    raise ValueError(
-        "OPENSEARCH_PASSWORD environment variable is required. "
-        "Please set it before running this script."
+# Connect with or without authentication based on security mode
+if OPENSEARCH_PASSWORD:
+    # Security enabled - use authentication
+    client = OpenSearch(
+        hosts=[{"host": "localhost", "port": 9200}],
+        http_auth=(OPENSEARCH_USER, OPENSEARCH_PASSWORD),
+        use_ssl=False,
+        verify_certs=False,
+        ssl_show_warn=False,
     )
-
-client = OpenSearch(
-    hosts=[{"host": "localhost", "port": 9200}],
-    http_auth=(OPENSEARCH_USER, OPENSEARCH_PASSWORD),
-    use_ssl=False,
-    verify_certs=False,
-    ssl_show_warn=False,
-)
+    print("Connected with authentication (security enabled)")
+else:
+    # Security disabled - no authentication needed
+    client = OpenSearch(
+        hosts=[{"host": "localhost", "port": 9200}],
+        use_ssl=False,
+        verify_certs=False,
+        ssl_show_warn=False,
+    )
+    print("Connected without authentication (security disabled)")
 
 print("\n" + "=" * 80)
 print("INVESTIGATION: Check actual OpenSearch data")
