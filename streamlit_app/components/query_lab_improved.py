@@ -91,8 +91,15 @@ def convert_to_ieee_style(
     from pathlib import Path
 
     # Pattern to match [Doc X, p.Y] or [Doc X, pp. Y-Z] or [Doc X]
-    # Also handles multiple citations in one bracket: [Doc 1, p.5; Doc 2, p.10]
-    pattern = r"\[Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Doc\s+(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]"
+    # Updated to handle:
+    # - Optional 's' in "Docs"
+    # - Optional spaces around numbers
+    # - Case insensitive
+    # - Multiple citations: [Doc 1, p.5; Doc 2, p.10]
+    pattern = re.compile(
+        r"\[Docs?\s*(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?(?:;\s*Docs?\s*(\d+)(?:,\s*pp?\.?\s*([\d\-]+))?)*\]",
+        re.IGNORECASE,
+    )
 
     # Normalize doc_number_map keys to strings for uniform matching
     doc_number_map_str = {}
@@ -254,8 +261,8 @@ def convert_to_ieee_style(
             # Multiple citations: [1][2]
             return "".join([f"[{ref}]" for ref in ieee_refs])
 
-    # Replace all citation patterns
-    converted_text = re.sub(pattern, replace_citation, converted_text)
+    # Replace all citation patterns (pattern is already compiled with re.IGNORECASE)
+    converted_text = pattern.sub(replace_citation, converted_text)
 
     # Post-process to remove duplicate consecutive citations like [1][1] -> [1]
     # Pattern: [N][N] where N is the same number
@@ -287,7 +294,7 @@ def render_pdf_page(
         modal_key = f"pdf_modal_{doc_id}_{page_num}"
 
         # Header with document info
-st.markdown(f"### Document: {doc_id}")
+        st.markdown(f"### Document: {doc_id}")
         st.markdown(f"**Page {page_num}**")
 
         # Create buttons row for controls
@@ -309,7 +316,7 @@ st.markdown(f"### Document: {doc_id}")
 
         with btn_col1:
             # Open in new tab button (using markdown link styled as button)
-st.markdown(
+            st.markdown(
                 f'<a href="{full_url}" target="_blank" style="'
                 f"display: inline-block; padding: 0.25rem 0.75rem; "
                 f"background-color: #0066cc; color: white; text-decoration: none; "
@@ -320,7 +327,7 @@ st.markdown(
 
         with btn_col2:
             # Download button (optional, for future enhancement)
-if st.button(
+            if st.button(
                 "Download",
                 key=f"download_{modal_key}",
                 help="Download this page as image",
@@ -370,7 +377,7 @@ if st.button(
 
                 # Show page info
                 info_col1, info_col2, info_col3 = st.columns(3)
-with info_col1:
+                with info_col1:
                     st.info(f"Page {page_num} of {total_pages}")
                 with info_col2:
                     st.info(f"{width} x {height} px")
@@ -618,7 +625,7 @@ def render_citations_with_viewer(citations: List[Dict], api_base_url: str, logge
             with col8:
                 # Add View Page button
                 button_key = f"view_pdf_{idx}_{citation.get('doc_id', 'unknown')}_{citation.get('page', 0)}"
-if st.button("View Page", key=button_key, help="View PDF page"):
+                if st.button("View Page", key=button_key, help="View PDF page"):
                     # Log the View Page click event
                     logger.log_button_click(
                         "view_pdf_page",
@@ -654,12 +661,26 @@ if st.button("View Page", key=button_key, help="View PDF page"):
                             },
                         )
 
-                        # Store in session state to show the viewer
-                        st.session_state[f"show_pdf_{idx}"] = {
+                        # Store in session state with unique key to prevent conflicts
+                        import hashlib
+
+                        unique_id = hashlib.md5(
+                            f"{citation.get('doc_id')}_{citation.get('page')}".encode()
+                        ).hexdigest()[:8]
+                        viewer_key = f"show_pdf_{unique_id}"
+
+                        st.session_state[viewer_key] = {
                             "pdf_path": source_path,
                             "page_num": citation["page"],
                             "doc_id": citation.get("doc_id", "Unknown"),
                         }
+
+                        # Track active viewers
+                        if "active_pdf_viewers" not in st.session_state:
+                            st.session_state["active_pdf_viewers"] = []
+                        if viewer_key not in st.session_state["active_pdf_viewers"]:
+                            st.session_state["active_pdf_viewers"].append(viewer_key)
+
                         st.rerun()
                     else:
                         # Log failure to find path
@@ -679,14 +700,28 @@ if st.button("View Page", key=button_key, help="View PDF page"):
 
             st.divider()
 
-    # Check if any PDF viewer should be shown
-    for idx in range(len(citations)):
-        if f"show_pdf_{idx}" in st.session_state:
-            pdf_info = st.session_state[f"show_pdf_{idx}"]
+    # Check if any PDF viewer should be shown (using active_pdf_viewers list)
+    active_viewers = st.session_state.get("active_pdf_viewers", [])
+
+    # Limit maximum viewers to prevent UI overload
+    MAX_VIEWERS = 3
+    if len(active_viewers) > MAX_VIEWERS:
+        st.warning(
+            f"Maximum {MAX_VIEWERS} PDF viewers open. Close one to open another."
+        )
+        # Keep only first MAX_VIEWERS
+        active_viewers = active_viewers[:MAX_VIEWERS]
+        st.session_state["active_pdf_viewers"] = active_viewers
+
+    for viewer_key in list(
+        active_viewers
+    ):  # Use list() to avoid modification during iteration
+        if viewer_key in st.session_state:
+            pdf_info = st.session_state[viewer_key]
 
             # Show PDF in an expander (expanded=True as per requirements)
-with st.expander(
-                f"Viewing: {pdf_info['doc_id']} - Page {pdf_info['page_num']}",
+            with st.expander(
+                f"Viewing: {pdf_info['doc_id'][:50]}... - Page {pdf_info['page_num']}",
                 expanded=True,
             ):
                 # Pass logger to render_pdf_page for complete logging chain
@@ -698,14 +733,22 @@ with st.expander(
                     logger=logger,
                 )
 
-                if st.button(f"Close Viewer", key=f"close_pdf_{idx}"):
+                if st.button(
+                    f"Close Viewer", key=f"close_{viewer_key}", use_container_width=True
+                ):
                     # Log close event
                     logger.log_button_click(
                         "close_pdf_viewer",
                         {"doc_id": pdf_info["doc_id"], "page": pdf_info["page_num"]},
                     )
-                    del st.session_state[f"show_pdf_{idx}"]
+                    del st.session_state[viewer_key]
+                    if viewer_key in st.session_state["active_pdf_viewers"]:
+                        st.session_state["active_pdf_viewers"].remove(viewer_key)
                     st.rerun()
+        else:
+            # Clean up orphaned viewer key
+            if viewer_key in st.session_state.get("active_pdf_viewers", []):
+                st.session_state["active_pdf_viewers"].remove(viewer_key)
 
 
 def normalize_api_response(results: Dict[str, Any]) -> Dict[str, Any]:
@@ -775,14 +818,17 @@ def render(vision_mode=False):
     """Render query lab component with iOS/macOS styling"""
 
     # iOS-style hero header
-    st.markdown("""
+    st.markdown(
+        """
     <div class="ios-card" style="margin-bottom: 32px; text-align: center;">
         <h1 class="ios-title-large" style="margin: 0 0 12px 0;">Ask a Question</h1>
         <p class="ios-body" style="margin: 0; color: #86868b;">
             Enterprise-grade document search and question answering with citations
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Initialize logger
     logger = get_logger(verbose=st.session_state.get("enable_verbose_logging", False))
@@ -811,11 +857,14 @@ def render(vision_mode=False):
         st.session_state.run_id = None
 
     # Query input with iOS styling
-    st.markdown("""
+    st.markdown(
+        """
     <div class="ios-card-flat" style="margin-bottom: 24px;">
         <label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Your Question</label>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     query = st.text_area(
         "Enter your question",
@@ -829,16 +878,22 @@ def render(vision_mode=False):
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Settings with iOS styling
-    st.markdown("""
+    st.markdown(
+        """
     <div class="ios-card-flat" style="margin-bottom: 16px;">
         <h3 class="ios-title" style="margin: 0;">Configuration</h3>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
-        st.markdown('<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Language</label>', unsafe_allow_html=True)
+        st.markdown(
+            '<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Language</label>',
+            unsafe_allow_html=True,
+        )
         # Use chips for language selection
         lang_col1, lang_col2 = st.columns(2)
         with lang_col1:
@@ -865,7 +920,10 @@ def render(vision_mode=False):
         language = st.session_state.get("selected_lang", "vi")
 
     with col2:
-        st.markdown('<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Context Chunks</label>', unsafe_allow_html=True)
+        st.markdown(
+            '<label class="ios-caption" style="display: block; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">Context Chunks</label>',
+            unsafe_allow_html=True,
+        )
         max_context = st.number_input(
             "Context Chunks",
             min_value=1,
@@ -876,12 +934,15 @@ def render(vision_mode=False):
         )
 
     with col3:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="ios-card-compact" style="margin-top: 20px; text-align: center;">
             <p class="ios-caption" style="margin: 0 0 4px 0; text-transform: uppercase; font-weight: 600;">Active Features</p>
             <p class="ios-body" style="margin: 0; font-weight: 500;">Vision + Reranking</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # Vision and Re-ranking are ALWAYS enabled (hardcoded)
     enable_vision = True
@@ -889,8 +950,14 @@ def render(vision_mode=False):
 
     # Advanced options - minimal iOS style
     with st.expander("Advanced Options", expanded=False):
-        st.markdown('<h4 class="ios-title" style="margin: 0 0 4px 0;">P&ID Tag Filter</h4>', unsafe_allow_html=True)
-        st.markdown('<p class="ios-caption" style="margin: 0 0 12px 0;">Filter documents by equipment tags (e.g., E04217, P-101, V-2051)</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<h4 class="ios-title" style="margin: 0 0 4px 0;">P&ID Tag Filter</h4>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p class="ios-caption" style="margin: 0 0 12px 0;">Filter documents by equipment tags (e.g., E04217, P-101, V-2051)</p>',
+            unsafe_allow_html=True,
+        )
 
         # Fetch available tags from API
         if "available_tags" not in st.session_state:
@@ -932,25 +999,49 @@ def render(vision_mode=False):
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
-        st.markdown('<h4 class="ios-title" style="margin: 16px 0 4px 0;">Citation Format</h4>', unsafe_allow_html=True)
+        st.markdown(
+            '<h4 class="ios-title" style="margin: 16px 0 4px 0;">Citation Format</h4>',
+            unsafe_allow_html=True,
+        )
+        # Initialize if not exists
+        if "use_ieee_citations" not in st.session_state:
+            st.session_state["use_ieee_citations"] = True
+
         use_ieee_citations = st.checkbox(
             "Use IEEE-style Citations",
-            value=True,
+            value=st.session_state.get("use_ieee_citations", True),
+            key="ieee_checkbox_input",  # Different key to avoid conflict
             help="Numbered citation format [1], [2] with references section",
         )
-        st.markdown('<p class="ios-caption" style="margin: 4px 0 0 0;">Standard academic citation style</p>', unsafe_allow_html=True)
+
+        # Sync to session state when changed
+        if use_ieee_citations != st.session_state.get("use_ieee_citations"):
+            st.session_state["use_ieee_citations"] = use_ieee_citations
+
+        st.markdown(
+            '<p class="ios-caption" style="margin: 4px 0 0 0;">Standard academic citation style</p>',
+            unsafe_allow_html=True,
+        )
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
-        st.markdown('<h4 class="ios-title" style="margin: 16px 0 8px 0;">System Information</h4>', unsafe_allow_html=True)
-        st.markdown("""
+        st.markdown(
+            '<h4 class="ios-title" style="margin: 16px 0 8px 0;">System Information</h4>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
         <div class="ios-card-compact">
             <p class="ios-caption" style="margin: 0 0 4px 0;">Retrieval: Weaviate + OpenSearch</p>
             <p class="ios-caption" style="margin: 0 0 4px 0;">Reranking: BGE Cross-Encoder</p>
             <p class="ios-caption" style="margin: 0 0 4px 0;">Vision: Gemini Multimodal</p>
-            <p class="ios-caption" style="margin: 0;">P&ID Tags: """ + str(len(available_tags)) + """ indexed</p>
+            <p class="ios-caption" style="margin: 0;">P&ID Tags: """
+            + str(len(available_tags))
+            + """ indexed</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # Set defaults for hidden parameters
     execution_mode = "production"  # Always production
@@ -959,9 +1050,12 @@ def render(vision_mode=False):
     # Run button with iOS styling
     st.markdown("<br>", unsafe_allow_html=True)
 
-# Show top linear loader when processing
+    # Show top linear loader when processing
     if st.session_state.get("ios_loading", False):
-        st.markdown('<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>',
+            unsafe_allow_html=True,
+        )
 
     if st.button(
         "Run Query", type="primary", use_container_width=True, key="run_query_btn"
@@ -995,71 +1089,70 @@ def render(vision_mode=False):
                 performance_key="query_execution",
             )
 
-# Overlay ON
+            # Overlay ON
             st.session_state.ios_loading = True
-            st.markdown("""
+            st.markdown(
+                """
             <div class=\"ios-overlay\" role=\"status\" aria-live=\"polite\">
               <div class=\"ios-overlay-content\">
                 <div class=\"ios-spinner\" style=\"margin: 0 auto;\"></div>
                 <p class=\"ios-caption\" style=\"margin: 12px 0 0 0;\">Generating answer...</p>
               </div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
             # Prepare parameters
-                params = {
-                    "max_context": top_k_context,
-                    "execution_mode": "production",  # Force production
-                    "language": language,
-                    "hyde": True,
-                }
+            params = {
+                "max_context": top_k_context,
+                "execution_mode": "production",  # Force production
+                "language": language,
+                "hyde": True,
+            }
 
-                # Add tag filters if selected
-                selected_tags = st.session_state.get("tag_filter", [])
-                if selected_tags:
-                    params["tags"] = selected_tags
+            # Add tag filters if selected
+            selected_tags = st.session_state.get("tag_filter", [])
+            if selected_tags:
+                params["tags"] = selected_tags
 
-                # Call API with logger
-                result = call_ask_api(
-                    query, st.session_state.api_base_url, params, logger
+            # Call API with logger
+            result = call_ask_api(query, st.session_state.api_base_url, params, logger)
+
+            if result["success"]:
+                st.session_state.query_results = result["data"]
+
+                # Log successful completion
+                logger.log_event(
+                    EventType.INFO,
+                    "Query completed successfully",
+                    {
+                        "run_id": st.session_state.run_id,
+                        "total_latency_ms": result["data"].get("total_latency_ms", 0),
+                        "answer_length": len(result["data"].get("answer", "")),
+                        "citations_count": len(result["data"].get("citations", [])),
+                        "confidence": result["data"].get("confidence", 0),
+                    },
+                    performance_key="query_execution",
                 )
 
-                if result["success"]:
-                    st.session_state.query_results = result["data"]
+                st.success("Query completed successfully")
+                st.session_state.ios_loading = False
+                st.rerun()
+            else:
+                # Log failure
+                logger.log_error(
+                    "Query execution failed",
+                    context={
+                        "run_id": st.session_state.run_id,
+                        "error": result["error"],
+                    },
+                )
 
-                    # Log successful completion
-                    logger.log_event(
-                        EventType.INFO,
-                        "Query completed successfully",
-                        {
-                            "run_id": st.session_state.run_id,
-                            "total_latency_ms": result["data"].get(
-                                "total_latency_ms", 0
-                            ),
-                            "answer_length": len(result["data"].get("answer", "")),
-                            "citations_count": len(result["data"].get("citations", [])),
-                            "confidence": result["data"].get("confidence", 0),
-                        },
-                        performance_key="query_execution",
-                    )
-
-st.success("Query completed successfully")
-                    st.session_state.ios_loading = False
-                    st.rerun()
-                else:
-                    # Log failure
-                    logger.log_error(
-                        "Query execution failed",
-                        context={
-                            "run_id": st.session_state.run_id,
-                            "error": result["error"],
-                        },
-                    )
-
-st.error(f"Error: {result['error']}")
-                    st.session_state.query_results = None
-                    st.session_state.ios_loading = False
-                    st.rerun()
+                st.error(f"Error: {result['error']}")
+                st.session_state.query_results = None
+                st.session_state.ios_loading = False
+                st.rerun()
         else:
             logger.log_event(
                 EventType.WARNING,
@@ -1070,11 +1163,14 @@ st.error(f"Error: {result['error']}")
 
     # Results section with iOS styling
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("""
+    st.markdown(
+        """
     <div class="ios-card-flat" style="margin-bottom: 24px;">
         <h2 class="ios-title" style="margin: 0;">Results</h2>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.query_results:
         results = st.session_state.query_results
@@ -1099,7 +1195,10 @@ st.error(f"Error: {result['error']}")
 
         with tab1:
             # Overview Tab
-            st.markdown('<h3 class="ios-title" style="margin: 0 0 16px 0;">Answer</h3>', unsafe_allow_html=True)
+            st.markdown(
+                '<h3 class="ios-title" style="margin: 0 0 16px 0;">Answer</h3>',
+                unsafe_allow_html=True,
+            )
 
             answer_text = results.get("answer", "")
             citations = results.get("citations", [])
@@ -1187,16 +1286,14 @@ st.error(f"Error: {result['error']}")
                                 "file_name": file_name,
                             }
 
-            # Check if IEEE-style citations is enabled
+            # Get IEEE-style setting from session state (set in Advanced Options)
             use_ieee = st.session_state.get("use_ieee_citations", True)
 
-            # DEBUG: Log raw data
-            with st.expander("🔍 DEBUG: Raw Data", expanded=False):
+            # DEBUG: Log raw data and IEEE citation list
+            with st.expander("🔍 DEBUG: Raw Data & Citations", expanded=False):
+                st.markdown("**📊 API Response Citations:**")
                 st.json(
                     {
-                        "answer_text_preview": answer_text[:500]
-                        if answer_text
-                        else None,
                         "citations_count": len(citations),
                         "citations_sample": [
                             {
@@ -1204,10 +1301,37 @@ st.error(f"Error: {result['error']}")
                                 "page": c.get("page"),
                                 "pdf_path": c.get("pdf_path", "")[:80] + "..."
                                 if c.get("pdf_path")
-                                else None,
+                                else "❌ MISSING",
                             }
                             for c in citations[:3]
                         ],
+                    }
+                )
+
+                st.markdown("**📚 IEEE Citation List:**")
+                if use_ieee and "ieee_citation_list" in locals():
+                    st.json(
+                        {
+                            "ieee_citations_count": len(ieee_citation_list),
+                            "ieee_citations": [
+                                {
+                                    "ref_num": idx,
+                                    "file_name": ref.get("file_name", "Unknown"),
+                                    "pages": ref.get("pages", []),
+                                    "pdf_path": ref.get("pdf_path", "")[:80] + "..."
+                                    if ref.get("pdf_path")
+                                    else "❌ MISSING",
+                                }
+                                for idx, ref in enumerate(ieee_citation_list, 1)
+                            ],
+                        }
+                    )
+                else:
+                    st.warning("IEEE citation list not available")
+
+                st.markdown("**🗺️ Doc Number Map:**")
+                st.json(
+                    {
                         "doc_number_map_keys": list(doc_number_map.keys())
                         if doc_number_map
                         else [],
@@ -1221,7 +1345,7 @@ st.error(f"Error: {result['error']}")
 
             # Check if answer is empty or too short
             if not answer_text or len(answer_text.strip()) < 10:
-st.warning(
+                st.warning(
                     "The system could not generate a complete answer. This may be due to:"
                 )
                 st.markdown(
@@ -1263,21 +1387,27 @@ st.warning(
                 else:
                     conf_color = "#ff3b30"  # iOS red
 
-                st.markdown(f"""
+                st.markdown(
+                    f"""
                 <div class="ios-card-compact" style="text-align: center;">
                     <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Confidence</p>
                     <p class="ios-title-large" style="margin: 0; color: {conf_color};">{confidence:.0%}</p>
                 </div>
-                """, unsafe_allow_html=True)
+                """,
+                    unsafe_allow_html=True,
+                )
 
             with col_m2:
                 num_citations = len(results.get("citations", []))
-                st.markdown(f"""
+                st.markdown(
+                    f"""
                 <div class="ios-card-compact" style="text-align: center;">
                     <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Citations</p>
                     <p class="ios-title-large" style="margin: 0; color: #007aff;">{num_citations}</p>
                 </div>
-                """, unsafe_allow_html=True)
+                """,
+                    unsafe_allow_html=True,
+                )
 
             with col_m3:
                 total_latency = results.get("total_latency_ms", 0)
@@ -1289,12 +1419,15 @@ st.warning(
                 else:
                     latency_color = "#ff3b30"  # iOS red
 
-                st.markdown(f"""
+                st.markdown(
+                    f"""
                 <div class="ios-card-compact" style="text-align: center;">
                     <p class="ios-caption" style="margin: 0 0 8px 0; text-transform: uppercase; font-weight: 600;">Latency</p>
                     <p class="ios-title-large" style="margin: 0; color: {latency_color};">{total_latency:.0f}<span class="ios-caption">ms</span></p>
                 </div>
-                """, unsafe_allow_html=True)
+                """,
+                    unsafe_allow_html=True,
+                )
 
             # Warnings
             warnings = results.get("warnings", [])
@@ -1309,7 +1442,10 @@ st.warning(
 
                 col_ref1, col_ref2 = st.columns([4, 1])
                 with col_ref1:
-                    st.markdown('<h3 class="ios-title" style="margin: 0;">References</h3>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<h3 class="ios-title" style="margin: 0;">References</h3>',
+                        unsafe_allow_html=True,
+                    )
                 with col_ref2:
                     # Button to open side sheet with all citations
                     if st.button(
@@ -1330,40 +1466,35 @@ st.warning(
                         file_name = ref.get("file_name", "Unknown")
                         pages = ref.get("pages", [])
                         pdf_path = ref.get("pdf_path", "")
+                        doc_id = ref.get("doc_id", "")
 
                         # Display reference number and file name
                         st.markdown(f"**[{idx}]** {file_name}")
 
-                        # Display pages with links
-                        if pages and pdf_path:
+                        # Display pages with links (ALWAYS render links if we have pages)
+                        if pages:
                             page_links = []
                             for page in pages:
                                 # Try to build PDF link with fallback to image
                                 try:
-                                    # Check if PDF file exists
-                                    import os
+                                    # Check if pdf_path is provided (let backend validate file existence)
                                     from pathlib import Path
 
-                                    pdf_exists = (
-                                        os.path.exists(pdf_path) if pdf_path else False
-                                    )
+                                    pdf_provided = bool(pdf_path)
 
-                                    if pdf_exists:
+                                    if pdf_provided and pdf_path:
                                         # Build URL for PDF open endpoint (native PDF viewing)
-                                        # We need both: page query param for API and #page=N fragment for browser
-                                        # The #page=N fragment tells browser's PDF viewer where to scroll to
                                         params = {
                                             "pdf_path": pdf_path,
                                             "page": str(page),
                                         }
                                         params_str = urlencode(params)
-                                        # Add #page=N fragment for browser PDF viewer to auto-scroll
                                         pdf_url = f"{st.session_state.api_base_url}/api/pdf/open?{params_str}#page={page}"
                                         page_links.append(
-                                            f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px;" title="Open PDF at page {page}">p.{page}</a>'
+                                            f'<a href="{pdf_url}" target="_blank" style="margin-right: 8px; color: #007aff; text-decoration: none;" title="Open PDF at page {page}">p.{page}</a>'
                                         )
-                                    else:
-                                        # Fallback to image render endpoint
+                                    elif pdf_path:
+                                        # PDF path exists but file not found - use image render
                                         params = {
                                             "pdf_path": pdf_path,
                                             "page_num": str(page),
@@ -1372,34 +1503,41 @@ st.warning(
                                         }
                                         params_str = urlencode(params)
                                         img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
-page_links.append(
-                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image (PDF not found)">p.{page}</a>'
+                                        page_links.append(
+                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px; color: #007aff; text-decoration: none;" title="View page {page} as image (PDF not found)">p.{page}</a>'
+                                        )
+                                    else:
+                                        # No pdf_path at all - show as informational link with warning
+                                        page_links.append(
+                                            f'<span style="margin-right: 8px; color: #666; cursor: help;" title="PDF path not available for this citation">p.{page}</span>'
                                         )
                                 except Exception as e:
-                                    # If any error, provide image fallback
-                                    params = {
-                                        "pdf_path": pdf_path,
-                                        "page_num": str(page),
-                                        "dpi": "200",
-                                        "format": "png",
-                                    }
-                                    params_str = urlencode(params)
-                                    img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
-page_links.append(
-                                        f'<a href="{img_url}" target="_blank" style="margin-right: 8px;" title="View page {page} as image">p.{page}</a>'
-                                    )
+                                    # If any error, try image fallback if we have pdf_path
+                                    if pdf_path:
+                                        params = {
+                                            "pdf_path": pdf_path,
+                                            "page_num": str(page),
+                                            "dpi": "200",
+                                            "format": "png",
+                                        }
+                                        params_str = urlencode(params)
+                                        img_url = f"{st.session_state.api_base_url}/api/pdf/render-page?{params_str}"
+                                        page_links.append(
+                                            f'<a href="{img_url}" target="_blank" style="margin-right: 8px; color: #007aff; text-decoration: none;" title="View page {page} as image">p.{page}</a>'
+                                        )
+                                    else:
+                                        # No pdf_path and error - show as plain text
+                                        page_links.append(
+                                            f'<span style="margin-right: 8px; color: #666;" title="Error: {str(e)[:50]}">p.{page}</span>'
+                                        )
 
                             st.markdown(
                                 "&nbsp;&nbsp;&nbsp;&nbsp;" + " ".join(page_links),
                                 unsafe_allow_html=True,
                             )
-                        elif pages:
-                            # No PDF path, just show page numbers
-                            pages_str = ", ".join([f"p.{p}" for p in pages])
-                            st.caption(f"    {pages_str}")
                 else:
                     # Traditional sources section
-st.markdown("### Referenced Sources")
+                    st.markdown("### Referenced Sources")
 
                     # Extract unique doc_ids with their details
                     unique_sources = {}
@@ -1451,6 +1589,19 @@ st.markdown("### Referenced Sources")
                             )
                             if first_cit and first_cit.get("text_snippet"):
                                 st.text(first_cit["text_snippet"][:200] + "...")
+
+                # Add Citation Details table with View Page buttons
+                st.markdown("<br><br>", unsafe_allow_html=True)
+                st.markdown(
+                    '<h3 class="ios-title" style="margin: 0 0 16px 0;">Citation Details</h3>',
+                    unsafe_allow_html=True,
+                )
+                st.caption(
+                    "Click 'View Page' to see PDF inline, or click page links above to open in new tab"
+                )
+                render_citations_with_viewer(
+                    citations, st.session_state.api_base_url, logger
+                )
 
         with tab2:
             # Retrieval Tab
@@ -1615,7 +1766,7 @@ st.markdown("### Referenced Sources")
 
         with tab6:
             # Metrics Tab
-st.markdown("### Performance Metrics")
+            st.markdown("### Performance Metrics")
 
             # Latency breakdown
             breakdown = meta.get("breakdown", {})
@@ -1637,12 +1788,12 @@ st.markdown("### Performance Metrics")
 
         with tab7:
             # Raw Data Tab
-st.markdown("### Raw Response Data")
+            st.markdown("### Raw Response Data")
             st.json(results)
 
     else:
         # No results yet - show placeholders
-st.info("Results will appear here after running a query")
+        st.info("Results will appear here after running a query")
         st.caption("Enter a query and click 'Run Query' to see results")
 
     # Timeline visualization at bottom
@@ -1673,16 +1824,16 @@ st.info("Results will appear here after running a query")
                 )
                 st.caption("Retrieval and reranking results were served from cache")
             else:
-st.write(f"**Total Processing Time: {total_time:.0f}ms** (Cache hit)")
+                st.write(f"**Total Processing Time: {total_time:.0f}ms**")
 
             # Stage labels mapping
-stage_labels = {
+            stage_labels = {
                 "transform_ms": "1. Query Transform",
-                "retrieve_ms": "2. Hybrid Retrieval" + (" (incl. BGE Rerank)" if bge_enabled else ""),
+                "retrieve_ms": "2. Hybrid Retrieval"
+                + (" (incl. BGE Rerank)" if bge_enabled else ""),
                 "rerank_ms": "3. Reranking",
                 "generate_ms": "4. Generation",
                 "cove_ms": "5. Chain-of-Verification",
-            }
             }
 
             # Create a horizontal bar for each stage (skip zero-time stages unless cache hit)
@@ -1694,7 +1845,7 @@ stage_labels = {
                 percentage = (time_ms / total_time * 100) if total_time > 0 else 0
                 label = stage_labels.get(stage, stage)
 
-st.progress(percentage / 100)
+                st.progress(percentage / 100)
                 st.caption(f"{label}: {time_ms:.0f}ms ({percentage:.1f}%)")
         else:
             st.info("No timing data available for this query")

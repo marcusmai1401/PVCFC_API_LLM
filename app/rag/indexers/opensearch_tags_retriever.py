@@ -2,10 +2,16 @@
 OpenSearch Tags Retriever
 Search sidecar tags index for instrument tag queries
 
+Updated with:
+- Component-based search (unit/prefix/suffix)
+- SUFFIX-only search with multi-prefix handling
+- Multi-prefix grouping and ambiguity warnings
+
 Spec: PVCFC_CADlike_Tag_Extraction_Handoff.md Section 8
 """
 
 import os
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -19,7 +25,9 @@ class OpenSearchTagsRetriever:
     Retriever for PID tags sidecar index
 
     Features:
-    - Exact filter by code/num/area
+    - Exact filter by unit/prefix/suffix (updated schema)
+    - Component-based search for partial queries
+    - SUFFIX-only search with multi-prefix grouping
     - Fuzzy fallback on tag text (n-gram)
     - Returns tag entities with bbox + crop_path
     """
@@ -141,19 +149,19 @@ class OpenSearchTagsRetriever:
         for tag_info in detected_tags:
             parts = tag_info.get("parts", {})
 
-            # Exact match on code + num (highest priority)
-            code = parts.get("code")
-            num = parts.get("num")
-            area = parts.get("area")
+            # Exact match on prefix + suffix (highest priority)
+            prefix = parts.get("prefix")
+            suffix = parts.get("suffix")
+            unit = parts.get("unit")
 
-            if code and num:
+            if prefix and suffix:
                 must_clauses = [
-                    {"term": {"code": code}},
-                    {"term": {"num": num}},
+                    {"term": {"prefix": prefix}},
+                    {"term": {"suffix": suffix}},
                 ]
 
-                if area:
-                    must_clauses.append({"term": {"area": area}})
+                if unit:
+                    must_clauses.append({"term": {"unit": unit}})
 
                 should_clauses.append(
                     {
@@ -198,10 +206,226 @@ class OpenSearchTagsRetriever:
         return {
             "multi_match": {
                 "query": query,
-                "fields": ["tag^3", "code^2", "num^2"],
+                "fields": ["tag^3", "prefix^2", "suffix^2"],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
+        }
+
+    def search_by_components(
+        self,
+        unit: Optional[str] = None,
+        prefix: Optional[str] = None,
+        suffix: Optional[str] = None,
+        variant: Optional[str] = None,
+        top_k: int = 50,
+    ) -> List[Dict]:
+        """
+        Search by individual components (flexible filtering)
+
+        Args:
+            unit: UNIT filter (e.g., "04")
+            prefix: PREFIX filter (e.g., "PAHH")
+            suffix: SUFFIX filter (e.g., "5153")
+            variant: VARIANT filter (e.g., "A")
+            top_k: Results limit
+
+        Returns:
+            List of matching tag entities
+        """
+        if not self._check_index_exists():
+            logger.warning(f"Tags index not found: {self.index_name}")
+            return []
+
+        filters = []
+
+        if unit:
+            filters.append({"term": {"unit": unit}})
+        if prefix:
+            filters.append({"term": {"prefix": prefix}})
+        if suffix:
+            filters.append({"term": {"suffix": suffix}})
+        if variant:
+            filters.append({"term": {"variant": variant}})
+
+        if not filters:
+            logger.warning("No component filters provided for search")
+            return []
+
+        query = {"bool": {"filter": filters}}
+
+        try:
+            response = self.client.search(
+                index=self.index_name, body={"query": query, "size": top_k}
+            )
+
+            results = self._parse_results(response)
+
+            logger.info(
+                f"Component search: unit={unit}, prefix={prefix}, suffix={suffix}, "
+                f"variant={variant} → {len(results)} results"
+            )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Component search failed: {e}")
+            return []
+
+    def search_by_suffix(self, suffix: str, top_k: int = 50) -> Dict:
+        """
+        Search by SUFFIX only (handles multi-prefix cases)
+
+        Boosting strategy:
+        - Exact suffix match: score × 10.0
+        - Sort by page (co-located tags)
+
+        Args:
+            suffix: SUFFIX value (e.g., "5153")
+            top_k: Results limit
+
+        Returns:
+            Grouped results dict with multi-prefix warning
+        """
+        if not self._check_index_exists():
+            logger.warning(f"Tags index not found: {self.index_name}")
+            return {"total_tags": 0, "has_ambiguity": False, "groups": []}
+
+        query = {
+            "bool": {
+                "should": [
+                    {"term": {"suffix": {"value": suffix, "boost": 10.0}}},
+                    {"match": {"tag": {"query": suffix, "boost": 1.0}}},
+                ]
+            }
+        }
+
+        try:
+            response = self.client.search(
+                index=self.index_name,
+                body={
+                    "query": query,
+                    "size": top_k,
+                    "sort": [
+                        {"_score": "desc"},
+                        {"page": "asc"},  # Co-located tags first
+                    ],
+                },
+            )
+
+            results = self._parse_results(response)
+
+            logger.info(f"SUFFIX search '{suffix}' → {len(results)} results")
+
+            # Group by (unit, suffix) and add warnings
+            grouped = self._group_and_warn_multi_prefix(results)
+
+            return grouped
+
+        except Exception as e:
+            logger.error(f"SUFFIX search failed: {e}")
+            return {"total_tags": 0, "has_ambiguity": False, "groups": []}
+
+    def _parse_results(self, response: Dict) -> List[Dict]:
+        """
+        Parse OpenSearch response into result list
+
+        Args:
+            response: OpenSearch response
+
+        Returns:
+            List of result dicts
+        """
+        results = []
+        for hit in response["hits"]["hits"]:
+            source = hit["_source"]
+
+            result = {
+                "chunk_id": f"tag_{hit['_id']}",
+                "doc_id": source.get("doc_id"),
+                "page": source.get("page"),
+                "text": source.get("tag", ""),
+                "score": hit["_score"],
+                "source": "tags_index",
+                "bbox": source.get("bbox"),
+                "crop_path": source.get("crop_path"),
+                "confidence": source.get("confidence", 1.0),
+                # Component fields
+                "unit": source.get("unit"),
+                "prefix": source.get("prefix"),
+                "suffix": source.get("suffix"),
+                "variant": source.get("variant"),
+                "annotation": source.get("annotation"),
+            }
+            results.append(result)
+
+        return results
+
+    def _group_and_warn_multi_prefix(self, results: List[Dict]) -> Dict:
+        """
+        Group results by (unit, suffix) and detect multi-prefix cases
+
+        Args:
+            results: List of search results
+
+        Returns:
+            Grouped results dict with structure:
+            {
+                "total_tags": 4,
+                "has_ambiguity": True,
+                "groups": [
+                    {
+                        "unit": "04",
+                        "suffix": "5153",
+                        "prefixes": ["PAHH", "PALL", "PI", "PXT"],
+                        "tags": [...],
+                        "pages": [54],
+                        "co_located": True,
+                        "warning": "4 different prefixes found for suffix 5153"
+                    }
+                ]
+            }
+        """
+        groups_dict = defaultdict(list)
+
+        # Group by (unit, suffix)
+        for result in results:
+            key = (result.get("unit") or "", result.get("suffix") or "")
+            groups_dict[key].append(result)
+
+        groups = []
+        has_ambiguity = False
+
+        for (unit, suffix), tags in groups_dict.items():
+            prefixes = sorted(
+                list(set(t.get("prefix") for t in tags if t.get("prefix")))
+            )
+            pages = sorted(set(t.get("page") for t in tags if t.get("page")))
+
+            is_ambiguous = len(prefixes) > 1
+            if is_ambiguous:
+                has_ambiguity = True
+
+            groups.append(
+                {
+                    "unit": unit if unit else None,
+                    "suffix": suffix,
+                    "prefixes": prefixes,
+                    "tags": tags,
+                    "pages": pages,
+                    "co_located": len(pages) == 1,  # All on same page
+                    "warning": (
+                        f"{len(prefixes)} different prefixes found for suffix {suffix}"
+                        if is_ambiguous
+                        else None
+                    ),
+                }
+            )
+
+        return {
+            "total_tags": len(results),
+            "has_ambiguity": has_ambiguity,
+            "groups": groups,
         }
 
     def health_check(self) -> Dict[str, Any]:

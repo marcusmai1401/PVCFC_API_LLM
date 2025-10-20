@@ -51,7 +51,7 @@ async def get_tags(request: Request) -> TagsResponse:
             "aggs": {
                 "unique_tags": {
                     "terms": {
-                        "field": "tags",  # Use tags field (already keyword type)
+                        "field": "tags.keyword",  # Use keyword subfield for aggregation
                         "size": 1000,  # Max tags to return
                         "order": {"_key": "asc"},  # Sort alphabetically
                     }

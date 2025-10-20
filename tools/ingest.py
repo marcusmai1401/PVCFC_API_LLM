@@ -789,9 +789,16 @@ class IngestionPipeline:
             try:
                 from app.rag.normalizers.tag_normalizer import TagNormalizer
 
-                _tn = TagNormalizer()
+                # IMPORTANT: Disable normalization to preserve original tag format (e.g. "04 ZLH 2038A")
+                # This ensures tags remain searchable with their original spacing and format
+                _tn = TagNormalizer(
+                    standardize_separator=False,  # Keep original separators (spaces, hyphens)
+                    remove_spaces=False,  # Preserve spaces in tags
+                    uppercase=True,  # Still uppercase for consistency
+                )
                 _tags = _tn.extract_tags(chunk_dict.get("text") or "")
                 if _tags:
+                    # Use "normalized" (uppercase only) as primary tags
                     normalized_tags = [
                         t.get("normalized") for t in _tags if t.get("normalized")
                     ]

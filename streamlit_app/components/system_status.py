@@ -209,12 +209,13 @@ def render_system_status(api_base_url: str = None):
             else:
                 st.metric("LLM Status", "Not Ready", delta="-Inactive")
 
-        # Response time
-        response_time = health_result.get("response_time_ms", 0)
-        st.markdown(
-            f'<p class="ios-caption" style="margin-top: 12px; text-align: center;">Response time: {response_time:.0f}ms</p>',
-            unsafe_allow_html=True,
-        )
+        # Response time (with null safety)
+        response_time = health_result.get("response_time_ms")
+        if response_time is not None:
+            st.markdown(
+                f'<p class="ios-caption" style="margin-top: 12px; text-align: center;">Response time: {float(response_time):.0f}ms</p>',
+                unsafe_allow_html=True,
+            )
     else:
         st.markdown(
             f"""
@@ -277,9 +278,15 @@ def render_system_status(api_base_url: str = None):
             # Using index manager format - support Weaviate, Legacy FAISS, and Hybrid Modern
             retriever_type = stats_data.get("retriever_type", "unknown")
 
-            if retriever_type == "hybrid_modern":
-                # Modern Hybrid mode (Weaviate + OpenSearch)
-                st.write("Hybrid Retrieval: Weaviate + OpenSearch")
+            if (
+                retriever_type == "hybrid_modern"
+                or retriever_type == "hybrid_with_tags"
+            ):
+                # Modern Hybrid mode (Weaviate + OpenSearch + optional P&ID Tags)
+                if retriever_type == "hybrid_with_tags":
+                    st.write("Hybrid Retrieval: Weaviate + OpenSearch + P&ID Tags")
+                else:
+                    st.write("Hybrid Retrieval: Weaviate + OpenSearch")
 
                 weaviate_stats = stats_data.get("weaviate", {})
                 opensearch_stats = stats_data.get("opensearch", {})
@@ -360,9 +367,10 @@ def render_system_status(api_base_url: str = None):
             with st.expander("View raw data", expanded=False):
                 st.json(stats_data)
 
-        # Response time
-        response_time = index_result.get("response_time_ms", 0)
-        st.caption(f"Response time: {response_time:.0f}ms")
+        # Response time (with null safety)
+        response_time = index_result.get("response_time_ms")
+        if response_time is not None:
+            st.caption(f"Response time: {float(response_time):.0f}ms")
 
     else:
         st.error(f"❌ Index Stats Failed: {index_result.get('error', 'Unknown error')}")
@@ -389,14 +397,29 @@ def render_system_status(api_base_url: str = None):
                 weaviate_stats = stats_data.get("weaviate", {})
                 retriever_ready = weaviate_stats.get("loaded", False)
                 retriever_info = "Weaviate"
-            elif retriever_type == "hybrid_modern":
-                # Modern Hybrid mode (Weaviate + OpenSearch)
+            elif (
+                retriever_type == "hybrid_modern"
+                or retriever_type == "hybrid_with_tags"
+            ):
+                # Modern Hybrid mode (Weaviate + OpenSearch + optional tags)
                 weaviate_stats = stats_data.get("weaviate", {})
                 opensearch_stats = stats_data.get("opensearch", {})
                 weaviate_ready = weaviate_stats.get("status") == "healthy"
                 opensearch_ready = opensearch_stats.get("num_documents", 0) > 0
                 retriever_ready = weaviate_ready or opensearch_ready
-                retriever_info = f"Weaviate: {'✓' if weaviate_ready else '✗'} | OpenSearch: {'✓' if opensearch_ready else '✗'}"
+
+                # Check for tags component
+                tags_info = ""
+                if retriever_type == "hybrid_with_tags":
+                    tags_stats = stats_data.get("components", {}).get("tags", {})
+                    if tags_stats and tags_stats.get("status") != "disabled":
+                        tags_ready = tags_stats.get("status") == "healthy"
+                        tags_count = tags_stats.get("doc_count", 0)
+                        tags_info = (
+                            f" | Tags: {'✓' if tags_ready else '✗'} ({tags_count})"
+                        )
+
+                retriever_info = f"Weaviate: {'✓' if weaviate_ready else '✗'} | OpenSearch: {'✓' if opensearch_ready else '✗'}{tags_info}"
             elif retriever_type == "hybrid_legacy" or retriever_type == "faiss":
                 # FAISS mode (legacy)
                 has_bm25 = False

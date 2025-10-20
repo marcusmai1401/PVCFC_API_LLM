@@ -1084,25 +1084,34 @@ class HybridRetriever:
             # Chunk-level reranking (default)
             reranked_chunks = reranker.rerank_chunks(query, chunks, top_k=top_k)
 
+            # Create mapping from chunk_id to original result for preserving metadata
+            chunk_id_to_result = {r.chunk_id: r for r in results}
+
             # Convert back to RetrievalResult
-            return [
-                RetrievalResult(
-                    chunk_id=chunk["chunk_id"],
-                    text=chunk["text"],
-                    score=float(score),  # BGE rerank score
-                    source="bge_reranked_" + chunk["source"],
-                    metadata={
-                        **chunk["metadata"],
-                        "bge_rerank_score": float(score),
-                        "original_rrf_score": chunk["original_score"],
-                    },
-                    doc_id=chunk["doc_id"],
-                    page=results[i].page if i < len(results) else None,
-                    bbox=results[i].bbox if i < len(results) else None,
-                    parent_id=results[i].parent_id if i < len(results) else None,
+            reranked_results = []
+            for chunk, score in reranked_chunks:
+                # Find original result to preserve page, bbox, parent_id
+                original = chunk_id_to_result.get(chunk["chunk_id"])
+
+                reranked_results.append(
+                    RetrievalResult(
+                        chunk_id=chunk["chunk_id"],
+                        text=chunk["text"],
+                        score=float(score),  # BGE rerank score
+                        source="bge_reranked_" + chunk["source"],
+                        metadata={
+                            **chunk["metadata"],
+                            "bge_rerank_score": float(score),
+                            "original_rrf_score": chunk["original_score"],
+                        },
+                        doc_id=chunk["doc_id"],
+                        page=original.page if original else None,
+                        bbox=original.bbox if original else None,
+                        parent_id=original.parent_id if original else None,
+                    )
                 )
-                for i, (chunk, score) in enumerate(reranked_chunks)
-            ]
+
+            return reranked_results
 
         elif rerank_level == "doc":
             # Document-level reranking

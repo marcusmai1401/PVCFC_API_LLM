@@ -1,0 +1,125 @@
+[
+  {
+    "test_id": "edge_001",
+    "query": "2024",
+    "expected_behavior": "semantic",
+    "reason": "4-digit year, could be confused with SUFFIX",
+    "validation": {
+      "should_reject": true,
+      "reason": "Could be year or other semantic reference"
+    }
+  },
+  {
+    "test_id": "edge_002",
+    "query": "procedure 5153",
+    "expected_behavior": "semantic",
+    "reason": "Has semantic keyword 'procedure'",
+    "validation": {
+      "should_reject": true,
+      "detected_keywords": ["procedure"]
+    }
+  },
+  {
+    "test_id": "edge_003",
+    "query": "What is PI?",
+    "expected_behavior": "semantic",
+    "reason": "Semantic question, PI could mean mathematical constant",
+    "validation": {
+      "should_reject": true,
+      "detected_keywords": ["what", "is"]
+    }
+  },
+  {
+    "test_id": "edge_004",
+    "query": "PI là gì?",
+    "expected_behavior": "semantic",
+    "reason": "Vietnamese semantic question",
+    "validation": {
+      "should_reject": true,
+      "detected_keywords": ["là gì"]
+    }
+  },
+  {
+    "test_id": "edge_005",
+    "query": "5153",
+    "expected_behavior": "pid_search",
+    "reason": "Pure digits, no context - likely P&ID tag",
+    "validation": {
+      "should_accept": true,
+      "confidence": ">=0.9"
+    }
+  },
+  {
+    "test_id": "edge_006",
+    "query": "04 5153",
+    "expected_behavior": "pid_search",
+    "reason": "Valid UNIT + SUFFIX components",
+    "validation": {
+      "should_accept": true,
+      "confidence": ">=0.6"
+    }
+  },
+  {
+    "test_id": "edge_007",
+    "query": "áp suất của 5153",
+    "expected_behavior": "pid_search",
+    "reason": "Has P&ID keyword 'áp suất'",
+    "validation": {
+      "should_accept": true,
+      "detected_keywords": ["áp suất"],
+      "confidence": ">=0.7"
+    }
+  },
+  {
+    "test_id": "edge_008",
+    "query": "quy trình 5153",
+    "expected_behavior": "semantic",
+    "reason": "Has semantic keyword 'quy trình' (procedure)",
+    "validation": {
+      "should_reject": true,
+      "detected_keywords": ["quy trình"]
+    }
+  },
+  {
+    "test_id": "edge_009",
+    "query": "99999",
+    "expected_behavior": "pid_search_then_fallback",
+    "reason": "Valid SUFFIX format but likely non-existent",
+    "validation": {
+      "should_accept": true,
+      "empty_results": true,
+      "fallback": true
+    }
+  },
+  {
+    "test_id": "edge_010",
+    "query": "How to start system 5153?",
+    "expected_behavior": "semantic",
+    "reason": "Has semantic keywords 'how to'",
+    "validation": {
+      "should_reject": true,
+      "detected_keywords": ["how"]
+    }
+  },
+  {
+    "test_id": "edge_011",
+    "query": "valve PI 5153",
+    "expected_behavior": "pid_search",
+    "reason": "Has P&ID keywords 'valve' and component 'PI 5153'",
+    "validation": {
+      "should_accept": true,
+      "detected_keywords": ["valve"],
+      "confidence": ">=0.7"
+    }
+  },
+  {
+    "test_id": "edge_012",
+    "query": "5153 procedure manual",
+    "expected_behavior": "semantic",
+    "reason": "Has semantic keywords 'procedure', 'manual' (query too long)",
+    "validation": {
+      "should_reject": true,
+      "query_length": ">10"
+    }
+  }
+]

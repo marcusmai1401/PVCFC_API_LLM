@@ -13,10 +13,11 @@ from pydantic import BaseModel, Field
 class TagParts(BaseModel):
     """Component parts of a tag"""
 
-    area: Optional[str] = None  # e.g., "04"
-    code: str  # e.g., "PSAL" (required)
-    num: str  # e.g., "2207" (required)
-    suffix: Optional[str] = None  # e.g., "A/B", "2oo3", "-201B"
+    unit: Optional[str] = None  # e.g., "04" (was area)
+    prefix: str  # e.g., "PSAL" (required, was code)
+    suffix: str  # e.g., "2207" (digits only, was num)
+    variant: Optional[str] = None  # e.g., "A" (NEW - single letter after suffix)
+    annotation: Optional[str] = None  # e.g., "A/B/C", "2oo3" (NEW - was old suffix)
 
 
 class TagEntity(BaseModel):
@@ -30,5 +31,6 @@ class TagEntity(BaseModel):
     rotation: float = 0.0  # Rotation in degrees
     confidence: float = Field(ge=0.0, le=1.0)  # Normalized from scoring
     evidence_span_ids: List[int] = Field(default_factory=list)  # Span IDs used
-    has_suffix: bool = False
+    has_variant: bool = False  # Has variant (A/B/C)
+    has_annotation: bool = False  # Has annotation (A/B/C, 1oo2)
     crop_path: Optional[str] = None  # Relative path to crop PNG

@@ -31,8 +31,8 @@ exclude_titles:
 # Layout-based exclusions
 exclude_layout:
   table_like: true       # Exclude grid/table structures
-  header_footer: true    # Exclude headers/footers (top/bottom 10% of page)
-  header_footer_margin_ratio: 0.10  # Top/bottom 10% considered header/footer
+  header_footer: false   # Exclude headers/footers (DISABLED for equipment tag testing)
+  header_footer_margin_ratio: 0.03  # Top/bottom 3% considered header/footer (reduced from 10% to avoid excluding equipment tags)
 
 # Bounding box exclusions (relative to page dimensions)
 # Zones defined as [x0_ratio, y0_ratio, x1_ratio, y1_ratio] where ratios ∈ [0,1]

@@ -22,10 +22,33 @@ class TagPattern:
 class TagNormalizer:
     """
     Normalizer để chuẩn hoá equipment tags trong P&ID documents
+
+    Updated with comprehensive patterns for instrument tags with UNIT prefix
     """
 
-    # Common P&ID tag patterns
+    # Annotation patterns (for separation from core tag)
+    ANNOTATION_PATTERNS = [
+        r"[A-Z]/[A-Z](?:/[A-Z])?",  # A/B, A/B/C
+        r"[1-3]oo[2-4]",  # 1oo2, 2oo3 (voting logic)
+    ]
+
+    # Common P&ID tag patterns (prioritized order)
     DEFAULT_PATTERNS = [
+        # NEW: Instrument with UNIT (most specific, check first)
+        TagPattern(
+            name="instrument_with_unit",
+            pattern=r"(?P<unit>\d{1,3})[\s\-]?(?P<prefix>[A-Z]{2,6})[\s\-]?(?P<suffix>\d{3,5})(?P<variant>[A-Z])?",
+            description="Instrument with UNIT prefix (e.g., 04 PAHH 5153, 4 IS 501)",
+            examples=["04 PAHH 5153", "4 IS 501", "120 PDAHH 5145A", "04 PSAL 2207"],
+        ),
+        # NEW: Instrument without UNIT (fallback)
+        TagPattern(
+            name="instrument_no_unit",
+            pattern=r"(?P<prefix>[A-Z]{2,6})[\s\-]?(?P<suffix>\d{3,5})(?P<variant>[A-Z])?",
+            description="Instrument without UNIT (e.g., PSAL 2207, PAHH 5153)",
+            examples=["PSAL 2207", "IS 501", "PAHH 5153A"],
+        ),
+        # Existing patterns (kept for backward compatibility)
         TagPattern(
             name="valve",
             pattern=r"[A-Z]{2,3}[-\s]?\d{3,5}[A-Z]?",
@@ -141,8 +164,11 @@ class TagNormalizer:
             # Just remove spaces
             tag = tag.replace(" ", "")
 
-        # Remove any remaining special characters except separator
-        if self.separator != "-":
+        # Remove any remaining special characters except separator (and spaces if preserve enabled)
+        if not self.remove_spaces and not self.standardize_separator:
+            # Preserve spaces - only remove special chars except alphanumeric, hyphen, and space
+            tag = re.sub(r"[^\w\s\-]", "", tag)
+        elif self.separator != "-":
             tag = re.sub(r"[^\w" + re.escape(self.separator) + r"]", "", tag)
         else:
             tag = re.sub(r"[^\w\-]", "", tag)
@@ -187,6 +213,87 @@ class TagNormalizer:
         tags_found.sort(key=lambda x: x["position"][0])
 
         return tags_found
+
+    def parse_tag_components(self, tag: str) -> Optional[Dict]:
+        """
+        Parse tag into components with annotation separation
+
+        Args:
+            tag: Tag string (e.g., "04 PAHH 5153A/B/C", "PSAL 2207")
+
+        Returns:
+            Dictionary with components:
+            {
+                "unit": "04",
+                "prefix": "PAHH",
+                "suffix": "5153",
+                "variant": "",
+                "annotation": "A/B/C",
+                "normalized": "04 PAHH 5153"
+            }
+            or None if parsing fails
+        """
+        # First, extract and remove annotation
+        annotation = ""
+        core_tag = tag.strip()
+
+        for pattern_str in self.ANNOTATION_PATTERNS:
+            pattern = re.compile(pattern_str)
+            match = pattern.search(core_tag)
+            if match:
+                annotation = match.group(0)
+                core_tag = core_tag.replace(annotation, "").strip()
+                logger.debug(f"Separated annotation '{annotation}' from tag '{tag}'")
+                break
+
+        # Try to parse core tag with UNIT first
+        with_unit_pattern = re.compile(
+            r"(?P<unit>\d{1,3})[\s\-]?(?P<prefix>[A-Z]{2,6})[\s\-]?(?P<suffix>\d{3,5})(?P<variant>[A-Z])?",
+            re.IGNORECASE,
+        )
+
+        match = with_unit_pattern.match(core_tag.upper())
+        if match:
+            result = {
+                "unit": match.group("unit"),
+                "prefix": match.group("prefix"),
+                "suffix": match.group("suffix"),
+                "variant": match.group("variant") or "",
+                "annotation": annotation,
+                "normalized": f"{match.group('unit')} {match.group('prefix')} {match.group('suffix')}",
+            }
+
+            if match.group("variant"):
+                result["normalized"] += match.group("variant")
+
+            logger.debug(f"Parsed tag with UNIT: {result}")
+            return result
+
+        # Try without UNIT
+        no_unit_pattern = re.compile(
+            r"(?P<prefix>[A-Z]{2,6})[\s\-]?(?P<suffix>\d{3,5})(?P<variant>[A-Z])?",
+            re.IGNORECASE,
+        )
+
+        match = no_unit_pattern.match(core_tag.upper())
+        if match:
+            result = {
+                "unit": "",
+                "prefix": match.group("prefix"),
+                "suffix": match.group("suffix"),
+                "variant": match.group("variant") or "",
+                "annotation": annotation,
+                "normalized": f"{match.group('prefix')} {match.group('suffix')}",
+            }
+
+            if match.group("variant"):
+                result["normalized"] += match.group("variant")
+
+            logger.debug(f"Parsed tag without UNIT: {result}")
+            return result
+
+        logger.debug(f"Failed to parse tag: {tag}")
+        return None
 
     def replace_tags_in_text(self, text: str, normalize: bool = True) -> str:
         """

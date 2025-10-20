@@ -41,18 +41,21 @@
                                                                           }
                                                                }
                                                 },
-                                        "area":  {
+                                        "unit":  {
                                                      "type":  "keyword"
                                                  },
-                                        "code":  {
+                                        "prefix":  {
                                                      "type":  "keyword"
                                                  },
-                                        "num":  {
-                                                    "type":  "keyword"
-                                                },
                                         "suffix":  {
                                                        "type":  "keyword"
                                                    },
+                                        "variant":  {
+                                                        "type":  "keyword"
+                                                    },
+                                        "annotation":  {
+                                                           "type":  "keyword"
+                                                       },
                                         "doc_id":  {
                                                        "type":  "keyword"
                                                    },
@@ -74,9 +77,12 @@
                                         "evidence_span_ids":  {
                                                                   "type":  "integer"
                                                               },
-                                        "has_suffix":  {
-                                                           "type":  "boolean"
-                                                       },
+                                        "has_variant":  {
+                                                            "type":  "boolean"
+                                                        },
+                                        "has_annotation":  {
+                                                               "type":  "boolean"
+                                                           },
                                         "crop_path":  {
                                                           "type":  "keyword"
                                                       }

@@ -371,18 +371,48 @@ class WeaviateRetriever:
 
         except Exception as e:
             logger.error(f"Tag-filtered Weaviate search failed: {e}")
-            # Graceful degradation: fallback to normal search
-            logger.warning("Falling back to normal Weaviate search")
-            from app.rag.query_transform import QueryFilters, TransformedQuery
 
-            transformed = TransformedQuery(
-                original=query,
-                normalized=query.lower(),
-                intent=None,
-                filters=QueryFilters(),
-                language="en",
-            )
-            return self.search(transformed, config_override)
+            # Fallback path for SDKs not supporting 'where' in near_vector
+            try:
+                logger.warning("Attempting client-side tag filtering fallback")
+                self._ensure_client()
+                query_vector = self._get_query_vector(query)
+                # Fetch without where, then filter by tags
+                raw_results = self._search_weaviate(
+                    query_vector=query_vector,
+                    where_filter=None,
+                    limit=limit,
+                )
+                # Filter by tags on properties
+                filtered = []
+                tag_set = set([t.upper() for t in (tag_filter or [])])
+                for res in raw_results:
+                    props = res.get("properties", {})
+                    raw_tags = props.get("tags") or []
+                    chunk_tags = [str(t).upper() for t in raw_tags]
+                    if not tag_set or (set(chunk_tags) & tag_set):
+                        filtered.append(res)
+                logger.info(
+                    f"Client-side tag filtering kept {len(filtered)}/{len(raw_results)} results"
+                )
+                retrieval_results = self._convert_to_retrieval_results(filtered)
+                for r in retrieval_results:
+                    r.source = "weaviate_tag_filtered_fallback"
+                return retrieval_results
+            except Exception as e2:
+                logger.error(f"Client-side tag filtering fallback failed: {e2}")
+                # Graceful degradation: fallback to normal search
+                logger.warning("Falling back to normal Weaviate search")
+                from app.rag.query_transform import QueryFilters, TransformedQuery
+
+                transformed = TransformedQuery(
+                    original=query,
+                    normalized=query.lower(),
+                    intent=None,
+                    filters=QueryFilters(),
+                    language="en",
+                )
+                return self.search(transformed, config_override)
 
     def _search_weaviate(
         self,
@@ -411,19 +441,19 @@ class WeaviateRetriever:
         """
         try:
             # Query Weaviate with near_vector
-            # Build query with all parameters upfront to avoid API issues
-            query_params = {
-                "near_vector": query_vector,
-                "limit": limit,
-                "return_metadata": MetadataQuery(distance=True, certainty=True),
-            }
+            # Use Weaviate v4 API with proper method chaining
+            query_builder = self._collection.query.near_vector(
+                near_vector=query_vector,
+                limit=limit,
+                return_metadata=MetadataQuery(distance=True, certainty=True),
+            )
 
-            # Apply filters if any
+            # Apply filters if any using method chaining
             if where_filter is not None:
-                query_params["where"] = where_filter
+                query_builder = query_builder.with_where(where_filter)
 
-            # Execute query using the collection's query.near_vector method
-            response = self._collection.query.near_vector(**query_params)
+            # Execute query
+            response = query_builder
 
             # Convert to list of dicts
             results = []
@@ -465,6 +495,17 @@ class WeaviateRetriever:
             doc_id = props.get("doc_id")
             page = props.get("page")
             bbox = props.get("bbox")  # Assuming bbox is stored as list
+
+            # Fallback: If page is missing or 0, try extracting from content markers
+            if page in (None, 0):
+                try:
+                    from app.utils.page_utils import extract_page_from_content
+
+                    extracted_page = extract_page_from_content(text)
+                    if extracted_page is not None:
+                        page = extracted_page
+                except Exception:
+                    pass
 
             # Calculate score from distance (lower distance = higher score)
             # Handle both dict and MetadataReturn object
@@ -554,25 +595,34 @@ class WeaviateRetriever:
             # Chunk-level reranking (default)
             reranked_chunks = reranker.rerank_chunks(query, chunks, top_k=top_k)
 
+            # Create mapping from chunk_id to original result for preserving metadata
+            chunk_id_to_result = {r.chunk_id: r for r in results}
+
             # Convert back to RetrievalResult
-            return [
-                RetrievalResult(
-                    chunk_id=chunk["chunk_id"],
-                    text=chunk["text"],
-                    score=float(score),  # BGE rerank score
-                    source="weaviate_bge_reranked",
-                    metadata={
-                        **chunk["metadata"],
-                        "bge_rerank_score": float(score),
-                        "original_weaviate_score": chunk["original_score"],
-                    },
-                    doc_id=chunk["doc_id"],
-                    page=results[i].page if i < len(results) else None,
-                    bbox=results[i].bbox if i < len(results) else None,
-                    parent_id=None,
+            reranked_results = []
+            for chunk, score in reranked_chunks:
+                # Find original result to preserve page, bbox, etc.
+                original = chunk_id_to_result.get(chunk["chunk_id"])
+
+                reranked_results.append(
+                    RetrievalResult(
+                        chunk_id=chunk["chunk_id"],
+                        text=chunk["text"],
+                        score=float(score),  # BGE rerank score
+                        source="weaviate_bge_reranked",
+                        metadata={
+                            **chunk["metadata"],
+                            "bge_rerank_score": float(score),
+                            "original_weaviate_score": chunk["original_score"],
+                        },
+                        doc_id=chunk["doc_id"],
+                        page=original.page if original else None,
+                        bbox=original.bbox if original else None,
+                        parent_id=None,
+                    )
                 )
-                for i, (chunk, score) in enumerate(reranked_chunks)
-            ]
+
+            return reranked_results
 
         elif level == "doc":
             # Document-level reranking

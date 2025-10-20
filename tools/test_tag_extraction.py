@@ -8,17 +8,17 @@ Usage:
 """
 
 import argparse
+import json
 import sys
-from pathlib import (  # Force reload .env`nload_dotenv(override=True)
-    Path`nfrom,
-    dotenv,
-    import,
-    load_dotenv`n`n,
-)
+from pathlib import Path
 
+from dotenv import load_dotenv
 from loguru import logger
 from rich.console import Console
 from rich.json import JSON
+
+# Force reload .env
+load_dotenv(override=True)
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -72,12 +72,8 @@ def main():
         )
 
         if not orchestrator.enabled:
-            console.print(
-                "[red]Tag extraction is disabled![/red]", style="bold"
-            )
-            console.print(
-                "Enable with: ENABLE_PID_TAGS=true in .env", style="yellow"
-            )
+            console.print("[red]Tag extraction is disabled![/red]", style="bold")
+            console.print("Enable with: ENABLE_PID_TAGS=true in .env", style="yellow")
             sys.exit(1)
 
     except Exception as e:
@@ -116,7 +112,9 @@ def main():
         # Crops directory
         if args.enable_crops:
             crops_count = len(list(config.CROPS_DIR.glob("*.png")))
-            console.print(f"  [green]✓[/green] {config.CROPS_DIR} ({crops_count} PNG files)")
+            console.print(
+                f"  [green]✓[/green] {config.CROPS_DIR} ({crops_count} PNG files)"
+            )
 
         # Telemetry log
         log_file = config.LOGS_DIR / "tag_extraction_telemetry.jsonl"
@@ -130,6 +128,7 @@ def main():
     except Exception as e:
         console.print(f"[red bold]✗ Processing failed: {e}[/red bold]")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

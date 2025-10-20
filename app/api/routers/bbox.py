@@ -228,22 +228,38 @@ async def batch_bbox_detection(
                     )
                     continue
 
-                # Detect bbox
-                detection_result = find_bbox_by_quote(
+                # Detect bbox (tools.pdf_renderer returns a list of matches)
+                from tools.pdf_renderer import normalize_bbox as _normalize_bbox
+
+                raw_matches = find_bbox_by_quote(
                     pdf_path=pdf_path,
                     page_num=bbox_req.page,
-                    quote_text=bbox_req.quote,
-                    match_type=bbox_req.match_type,
-                    fuzzy_threshold=bbox_req.fuzzy_threshold,
+                    quote=bbox_req.quote,
+                    fuzzy=(bbox_req.match_type.lower() == "fuzzy"),
+                    use_cache=True,
                 )
 
-                if detection_result and detection_result.get("found"):
+                if raw_matches:
+                    # Pick best match by confidence
+                    best = max(
+                        raw_matches, key=lambda m: float(m.get("confidence", 0.0))
+                    )
+                    # Normalize bbox to [0,1]
+                    bbox_abs = best.get("bbox")
+                    pw = best.get("page_width")
+                    ph = best.get("page_height")
+                    bbox_norm = (
+                        _normalize_bbox(tuple(bbox_abs), pw, ph)
+                        if bbox_abs and pw and ph
+                        else None
+                    )
+
                     results.append(
                         BboxDetectionResult(
                             found=True,
-                            bbox=detection_result.get("bbox"),
-                            confidence=detection_result.get("confidence", 0.0),
-                            match_text=detection_result.get("match_text"),
+                            bbox=list(bbox_norm) if bbox_norm else None,
+                            confidence=float(best.get("confidence", 0.0)),
+                            match_text=best.get("text"),
                             error=None,
                         )
                     )

@@ -1,6 +1,9 @@
 """
 Tag Extractor - Geometry-first extraction
-Vertical triplet assembly (AREA + CODE + NUM) with suffix attachment
+Vertical triplet assembly (UNIT + PREFIX + SUFFIX) with variant/annotation attachment
+
+Updated schema: UNIT (1-3 digits), PREFIX (2-6 letters), SUFFIX (digits only),
+                VARIANT (single letter), ANNOTATION (A/B/C, 1oo2 patterns)
 
 Spec: PVCFC_CADlike_Tag_Extraction_Handoff.md Section 6
 """
@@ -17,19 +20,27 @@ from app.config import get_config
 from app.ingestion.layout.page_layout_builder import PageLayout, TextSpan
 
 from .schemas import TagEntity, TagParts
+from .span_merger import merge_adjacent_digits
 
 
 class TagExtractor:
     """
-    Extract instrument tags from page layout using CODE-anchored vertical assembly
+    Extract instrument tags from page layout using PREFIX-anchored vertical assembly
 
     Pipeline:
     1. ROI proposals (text-centric vertical columns)
-    2. Token role classification (AREA/CODE/NUM/SUFFIX)
-    3. CODE-anchored assembler (find AREA above, NUM below)
+    2. Token role classification (UNIT/PREFIX/SUFFIX/VARIANT/ANNOTATION)
+    3. PREFIX-anchored assembler (find UNIT and SUFFIX near PREFIX)
     4. Scoring and threshold filtering
-    5. Suffix attachment within radius
+    5. Variant and annotation attachment within radius
     6. Exclusion zones (LEGEND/NOTES)
+
+    Updated schema:
+    - UNIT: 1-3 digits (was AREA with 2 digits only)
+    - PREFIX: 2-6 letters (was CODE with 2-4 letters)
+    - SUFFIX: 3-5 digits only (was NUM with optional letter)
+    - VARIANT: Single letter (A/B/C) - NEW
+    - ANNOTATION: A/B/C, 1oo2 patterns - NEW
     """
 
     def __init__(self):
@@ -44,24 +55,28 @@ class TagExtractor:
         with open(self.config.PAGE_FILTERS_CONFIG, "r", encoding="utf-8") as f:
             self.filters = yaml.safe_load(f)
 
-        # Compile regexes
-        self.area_regex = re.compile(self.grammar["area_regex"])
-        self.code_regex = re.compile(self.grammar["code_regex"])
-        self.num_regex = re.compile(self.grammar["num_regex"])
-        self.suffix_regexes = [re.compile(p) for p in self.grammar["suffix_patterns"]]
+        # Compile regexes (updated names)
+        self.unit_regex = re.compile(self.grammar["unit_regex"])
+        self.prefix_regex = re.compile(self.grammar["prefix_regex"])
+        self.suffix_regex = re.compile(self.grammar["suffix_regex"])
+        self.variant_regex = re.compile(self.grammar["variant_regex"])
+        self.annotation_regexes = [
+            re.compile(p) for p in self.grammar["annotation_patterns"]
+        ]
 
-        # CODE whitelist
-        self.code_whitelist = set(self.grammar["code_whitelist"])
+        # PREFIX whitelist (was code_whitelist)
+        self.prefix_whitelist = set(self.grammar["prefix_whitelist"])
 
         # Assembler config
-        self.anchor = self.grammar["anchor"]  # "CODE"
+        self.anchor = self.grammar["anchor"]  # "PREFIX"
         self.x_tolerance_ratio = self.grammar["x_center_tolerance_ratio"]
         self.y_gap_range = self.grammar["y_gap_ratio_range"]
         self.font_delta_pt = self.grammar["font_size_delta_pt"]
         self.rotation_tolerance = self.grammar["rotation_tolerance_deg"]
         self.score_weights = self.grammar["score_weights"]
         self.pass_threshold = self.grammar["pass_threshold"]
-        self.suffix_radius_em = self.grammar["suffix_radius_em"]
+        self.variant_radius_em = self.grammar["variant_radius_em"]
+        self.annotation_radius_em = self.grammar["annotation_radius_em"]
 
         # Exclusion patterns
         self.exclude_titles = [re.compile(p) for p in self.filters["exclude_titles"]]
@@ -84,33 +99,37 @@ class TagExtractor:
         if not layout.spans:
             return []
 
+        # Step 0: Merge fragmented digit spans (e.g., "2" "0" "4" "9" → "2049")
+        merged_spans = merge_adjacent_digits(layout.spans)
+        logger.debug(f"After digit merging: {len(merged_spans)} spans")
+
         # Step 1: Classify token roles
-        roles = self._classify_token_roles(layout.spans)
+        roles = self._classify_token_roles(merged_spans)
 
         # Step 2: Filter exclusion zones
-        valid_spans = self._filter_exclusion_zones(layout, layout.spans)
+        valid_spans = self._filter_exclusion_zones(layout, merged_spans)
         logger.debug(f"After exclusion filter: {len(valid_spans)} spans remain")
 
-        # Step 3: Find CODE anchors (from whitelist)
-        code_anchors = [s for s in valid_spans if s.text in self.code_whitelist]
-        logger.debug(f"Found {len(code_anchors)} CODE anchor candidates")
+        # Step 3: Find PREFIX anchors (from whitelist)
+        prefix_anchors = [s for s in valid_spans if s.text in self.prefix_whitelist]
+        logger.debug(f"Found {len(prefix_anchors)} PREFIX anchor candidates")
 
-        if not code_anchors:
+        if not prefix_anchors:
             return []
 
-        # Step 4: Assemble triplets (CODE-anchored)
+        # Step 4: Assemble triplets (PREFIX-anchored)
         triplets = []
-        for code_span in code_anchors:
-            triplet = self._assemble_triplet(code_span, valid_spans, layout)
+        for prefix_span in prefix_anchors:
+            triplet = self._assemble_triplet(prefix_span, valid_spans, layout)
             if triplet:
                 triplets.append(triplet)
 
         logger.debug(f"Assembled {len(triplets)} triplets")
 
-        # Step 5: Attach suffixes
+        # Step 5: Attach variant and annotation, then build entities
         tags = []
         for triplet_data in triplets:
-            tag_entity = self._attach_suffix_and_build_entity(
+            tag_entity = self._attach_variant_annotation_and_build_entity(
                 triplet_data, valid_spans, layout
             )
             if tag_entity:
@@ -124,7 +143,7 @@ class TagExtractor:
 
     def _classify_token_roles(self, spans: List[TextSpan]) -> Dict[int, str]:
         """
-        Classify each span as AREA/CODE/NUM/SUFFIX/OTHER
+        Classify each span as UNIT/PREFIX/SUFFIX/VARIANT/ANNOTATION/OTHER
 
         Args:
             spans: List of text spans
@@ -137,19 +156,28 @@ class TagExtractor:
         for span in spans:
             text = span.text.strip()
 
-            if self.area_regex.match(text):
-                roles[span.span_id] = "AREA"
-            elif text in self.code_whitelist:
-                roles[span.span_id] = "CODE"
-            elif self.num_regex.match(text):
-                roles[span.span_id] = "NUM"
+            # Check UNIT (was AREA) - 1-3 digits
+            if self.unit_regex.match(text):
+                roles[span.span_id] = "UNIT"
+
+            # Check PREFIX (was CODE) - from whitelist
+            elif text in self.prefix_whitelist:
+                roles[span.span_id] = "PREFIX"
+
+            # Check SUFFIX (was NUM) - 3-5 digits only, no letters!
+            elif self.suffix_regex.match(text):
+                roles[span.span_id] = "SUFFIX"
+
+            # Check VARIANT - single letter (A/B/C)
+            elif self.variant_regex.match(text):
+                roles[span.span_id] = "VARIANT"
+
+            # Check ANNOTATION - A/B/C, 1oo2 patterns
+            elif any(p.match(text) for p in self.annotation_regexes):
+                roles[span.span_id] = "ANNOTATION"
+
             else:
-                # Check suffix patterns
-                is_suffix = any(p.match(text) for p in self.suffix_regexes)
-                if is_suffix:
-                    roles[span.span_id] = "SUFFIX"
-                else:
-                    roles[span.span_id] = "OTHER"
+                roles[span.span_id] = "OTHER"
 
         return roles
 
@@ -205,94 +233,91 @@ class TagExtractor:
 
     def _assemble_triplet(
         self,
-        code_span: TextSpan,
+        prefix_span: TextSpan,
         all_spans: List[TextSpan],
         layout: PageLayout,
     ) -> Optional[Dict]:
         """
-        Assemble vertical triplet with CODE as anchor
+        Assemble vertical triplet with PREFIX as anchor
 
-        Find AREA above and NUM below within tolerances
+        Find UNIT and SUFFIX near PREFIX with x-alignment and y-gap tolerance (order-agnostic)
 
         Args:
-            code_span: CODE span (anchor)
+            prefix_span: PREFIX span (anchor)
             all_spans: All valid spans on page
             layout: Page layout
 
         Returns:
             Dict with triplet info if accepted, None otherwise
         """
-        code_bbox = code_span.bbox
-        code_x_center = (code_bbox[0] + code_bbox[2]) / 2
-        code_y_center = (code_bbox[1] + code_bbox[3]) / 2
-        code_font = code_span.font_size
+        prefix_bbox = prefix_span.bbox
+        prefix_x_center = (prefix_bbox[0] + prefix_bbox[2]) / 2
+        prefix_y_center = (prefix_bbox[1] + prefix_bbox[3]) / 2
+        prefix_font = prefix_span.font_size
 
-        # Find nearest AREA above
-        area_candidates = [
+        # Find UNIT and SUFFIX candidates near PREFIX (flexible vertical order)
+        unit_candidates = [
             s
             for s in all_spans
-            if self.area_regex.match(s.text)
-            and (s.bbox[1] + s.bbox[3]) / 2 < code_y_center  # Above CODE
+            if s.span_id != prefix_span.span_id and self.unit_regex.match(s.text)
         ]
 
-        # Find nearest NUM below
-        num_candidates = [
+        suffix_candidates = [
             s
             for s in all_spans
-            if self.num_regex.match(s.text)
-            and (s.bbox[1] + s.bbox[3]) / 2 > code_y_center  # Below CODE
+            if s.span_id != prefix_span.span_id and self.suffix_regex.match(s.text)
         ]
 
-        if not num_candidates:
-            # NUM is required; AREA is optional
+        if not suffix_candidates:
+            # SUFFIX is required; UNIT is optional
             return None
 
-        # Find best AREA (closest above, x-aligned)
-        best_area = None
-        best_area_score = -1
+        # Find best UNIT (x-aligned and within y-gap tolerance), regardless of above/below
+        best_unit = None
+        best_unit_score = -1.0
 
-        for area_span in area_candidates:
-            score = self._score_alignment(code_span, area_span, "above", code_font)
-            if score > best_area_score:
-                best_area_score = score
-                best_area = area_span
+        for unit_span in unit_candidates:
+            score = self._score_alignment(prefix_span, unit_span, "near", prefix_font)
+            if score > best_unit_score:
+                best_unit_score = score
+                best_unit = unit_span
 
-        # Find best NUM (closest below, x-aligned)
-        best_num = None
-        best_num_score = -1
+        # Find best SUFFIX (x-aligned and within y-gap tolerance), regardless of above/below
+        best_suffix = None
+        best_suffix_score = -1.0
 
-        for num_span in num_candidates:
-            score = self._score_alignment(code_span, num_span, "below", code_font)
-            if score > best_num_score:
-                best_num_score = score
-                best_num = num_span
+        for suffix_span in suffix_candidates:
+            score = self._score_alignment(prefix_span, suffix_span, "near", prefix_font)
+            if score > best_suffix_score:
+                best_suffix_score = score
+                best_suffix = suffix_span
 
-        # Must have NUM; AREA is optional
-        if best_num is None:
+        # Must have SUFFIX; UNIT is optional
+        if best_suffix is None or best_suffix_score <= 0:
             return None
 
         # Compute triplet score
-        triplet_score = self._score_triplet(best_area, code_span, best_num, layout)
+        triplet_score = self._score_triplet(best_unit, prefix_span, best_suffix, layout)
 
         # Pass threshold check
         if triplet_score < self.pass_threshold:
             logger.debug(
                 f"Triplet rejected (score {triplet_score:.1f} < {self.pass_threshold}): "
-                f"{best_area.text if best_area else ''} {code_span.text} {best_num.text}"
+                f"{best_unit.text if best_unit else ''} {prefix_span.text} {best_suffix.text}"
             )
             return None
 
         # Build triplet data
         triplet = {
-            "area_span": best_area,
-            "code_span": code_span,
-            "num_span": best_num,
+            "unit_span": best_unit,
+            "prefix_span": prefix_span,
+            "suffix_span": best_suffix,
             "score": triplet_score,
         }
 
         logger.debug(
             f"Accepted triplet (score {triplet_score:.1f}): "
-            f"{best_area.text if best_area else ''} {code_span.text} {best_num.text}"
+            f"{best_unit.text if best_unit else ''} {prefix_span.text} {best_suffix.text}"
         )
 
         return triplet
@@ -301,12 +326,12 @@ class TagExtractor:
         self, anchor: TextSpan, candidate: TextSpan, direction: str, anchor_font: float
     ) -> float:
         """
-        Score alignment between anchor and candidate span
+        Score alignment between anchor and candidate span (rotation-aware)
 
         Args:
-            anchor: Anchor span (CODE)
-            candidate: Candidate span (AREA or NUM)
-            direction: "above" or "below"
+            anchor: Anchor span (PREFIX)
+            candidate: Candidate span (UNIT or SUFFIX)
+            direction: "near" (order-agnostic proximity check)
             anchor_font: Anchor font size
 
         Returns:
@@ -321,19 +346,39 @@ class TagExtractor:
         anchor_y_center = (anchor_bbox[1] + anchor_bbox[3]) / 2
         cand_y_center = (cand_bbox[1] + cand_bbox[3]) / 2
 
-        # X-center alignment
+        # Compute rotation delta
+        anchor_rot = anchor.rotation_deg
+        cand_rot = candidate.rotation_deg
+        delta_rot = (cand_rot - anchor_rot) % 360
+        if delta_rot > 180:
+            delta_rot -= 360
+
+        # Transform to anchor's reference frame
+        dx_raw = cand_x_center - anchor_x_center
+        dy_raw = cand_y_center - anchor_y_center
+
+        # If candidate rotated ~90° relative to anchor, swap axes
+        # (vertical text appears horizontal in PDF coords)
+        if 75 <= abs(delta_rot) <= 105:  # ~90° rotation
+            # Swap: what appears as Y-distance is actually X-distance
+            x_delta = abs(dy_raw)  # Cross-axis alignment
+            y_delta = abs(dx_raw)  # Along-axis distance
+        else:
+            # Normal case: same orientation
+            x_delta = abs(dx_raw)
+            y_delta = abs(dy_raw)
+
+        # X-center alignment (cross-axis in anchor's frame)
         anchor_width = anchor_bbox[2] - anchor_bbox[0]
         cand_width = cand_bbox[2] - cand_bbox[0]
         min_width = min(anchor_width, cand_width)
 
-        x_delta = abs(anchor_x_center - cand_x_center)
         x_tolerance = self.x_tolerance_ratio * min_width
 
         if x_delta > x_tolerance:
             return 0.0  # Not aligned
 
-        # Y-spacing check
-        y_delta = abs(cand_y_center - anchor_y_center)
+        # Y-spacing check (along-axis distance in anchor's frame)
 
         # Font-based spacing tolerance
         median_font = anchor_font  # Simplified; should use ROI median
@@ -357,18 +402,18 @@ class TagExtractor:
 
     def _score_triplet(
         self,
-        area_span: Optional[TextSpan],
-        code_span: TextSpan,
-        num_span: TextSpan,
+        unit_span: Optional[TextSpan],
+        prefix_span: TextSpan,
+        suffix_span: TextSpan,
         layout: PageLayout,
     ) -> float:
         """
         Score complete triplet using weighted features
 
         Args:
-            area_span: AREA span (optional)
-            code_span: CODE span
-            num_span: NUM span
+            unit_span: UNIT span (optional)
+            prefix_span: PREFIX span
+            suffix_span: SUFFIX span
             layout: Page layout
 
         Returns:
@@ -376,45 +421,50 @@ class TagExtractor:
         """
         score = 0.0
 
-        # +4: Regex triplet match (AREA+CODE+NUM in correct order)
-        if area_span:
-            area_text = area_span.text
-            code_text = code_span.text
-            num_text = num_span.text
+        # +4: Regex triplet match (UNIT+PREFIX+SUFFIX in correct order)
+        if unit_span:
+            unit_text = unit_span.text
+            prefix_text = prefix_span.text
+            suffix_text = suffix_span.text
 
             # Check regex match
-            if self.area_regex.match(area_text) and code_text in self.code_whitelist:
-                if self.num_regex.match(num_text):
+            if (
+                self.unit_regex.match(unit_text)
+                and prefix_text in self.prefix_whitelist
+            ):
+                if self.suffix_regex.match(suffix_text):
                     score += self.score_weights["triplet_regex"]
         else:
-            # CODE + NUM only (no AREA) - give partial score
-            if code_span.text in self.code_whitelist and self.num_regex.match(
-                num_span.text
+            # PREFIX + SUFFIX only (no UNIT) - give partial score
+            if prefix_span.text in self.prefix_whitelist and self.suffix_regex.match(
+                suffix_span.text
             ):
                 score += self.score_weights["triplet_regex"] * 0.75
 
         # +2: X-center alignment quality
-        code_bbox = code_span.bbox
-        num_bbox = num_span.bbox
+        prefix_bbox = prefix_span.bbox
+        suffix_bbox = suffix_span.bbox
 
-        code_x_center = (code_bbox[0] + code_bbox[2]) / 2
-        num_x_center = (num_bbox[0] + num_bbox[2]) / 2
+        prefix_x_center = (prefix_bbox[0] + prefix_bbox[2]) / 2
+        suffix_x_center = (suffix_bbox[0] + suffix_bbox[2]) / 2
 
-        x_delta = abs(code_x_center - num_x_center)
-        min_width = min(code_bbox[2] - code_bbox[0], num_bbox[2] - num_bbox[0])
+        x_delta = abs(prefix_x_center - suffix_x_center)
+        min_width = min(
+            prefix_bbox[2] - prefix_bbox[0], suffix_bbox[2] - suffix_bbox[0]
+        )
 
         if min_width > 0:
             x_alignment = 1.0 - min(x_delta / (self.x_tolerance_ratio * min_width), 1.0)
             score += self.score_weights["x_align"] * x_alignment
 
         # +2: Vertical spacing uniformity
-        code_y = (code_bbox[1] + code_bbox[3]) / 2
-        num_y = (num_bbox[1] + num_bbox[3]) / 2
+        prefix_y = (prefix_bbox[1] + prefix_bbox[3]) / 2
+        suffix_y = (suffix_bbox[1] + suffix_bbox[3]) / 2
 
-        if area_span:
-            area_y = (area_span.bbox[1] + area_span.bbox[3]) / 2
-            gap1 = abs(code_y - area_y)
-            gap2 = abs(num_y - code_y)
+        if unit_span:
+            unit_y = (unit_span.bbox[1] + unit_span.bbox[3]) / 2
+            gap1 = abs(prefix_y - unit_y)
+            gap2 = abs(suffix_y - prefix_y)
 
             # Uniform if gaps are similar
             gap_diff = abs(gap1 - gap2)
@@ -423,113 +473,143 @@ class TagExtractor:
                 uniformity = 1.0 - min(gap_diff / avg_gap, 1.0)
                 score += self.score_weights["y_uniform"] * uniformity
         else:
-            # No AREA, give partial score if CODE-NUM gap is reasonable
+            # No UNIT, give partial score if PREFIX-SUFFIX gap is reasonable
             score += self.score_weights["y_uniform"] * 0.5
 
         # +2: Font size similarity
-        fonts = [code_span.font_size, num_span.font_size]
-        if area_span:
-            fonts.append(area_span.font_size)
+        fonts = [prefix_span.font_size, suffix_span.font_size]
+        if unit_span:
+            fonts.append(unit_span.font_size)
 
         font_variance = max(fonts) - min(fonts)
         font_similarity = 1.0 - min(font_variance / self.font_delta_pt, 1.0)
         score += self.score_weights["font_sim"] * font_similarity
 
         # +1: Alarm hint (optional bonus)
-        # Check if CODE is alarm type (PAL, PSAL, PSAH) and alarm triangle near ROI
-        # Simplified: just check CODE type
-        if code_span.text in {"PAL", "PSAL", "PSAH", "PALL"}:
+        # Check if PREFIX is alarm type (PAL, PSAL, PSAH, PAHH, PALL) and alarm triangle near ROI
+        # Simplified: just check PREFIX type
+        if prefix_span.text in {"PAL", "PSAL", "PSAH", "PAHH", "PALL"}:
             score += self.score_weights["alarm_hint"] * 0.5  # Partial bonus
 
         return score
 
-    def _attach_suffix_and_build_entity(
+    def _attach_variant_annotation_and_build_entity(
         self,
         triplet: Dict,
         all_spans: List[TextSpan],
         layout: PageLayout,
     ) -> Optional[TagEntity]:
         """
-        Attach suffix to triplet and build TagEntity
+        Attach variant and annotation to triplet and build TagEntity
 
         Args:
-            triplet: Dict with area_span, code_span, num_span, score
+            triplet: Dict with unit_span, prefix_span, suffix_span, score
             all_spans: All spans on page
             layout: Page layout
 
         Returns:
             TagEntity if valid, None otherwise
         """
-        area_span = triplet["area_span"]
-        code_span = triplet["code_span"]
-        num_span = triplet["num_span"]
+        unit_span = triplet["unit_span"]
+        prefix_span = triplet["prefix_span"]
+        suffix_span = triplet["suffix_span"]
         score = triplet["score"]
 
+        # Extract suffix text (digits only)
+        suffix_text = suffix_span.text
+
+        # Check if suffix_span contains a variant letter at the end (e.g., "2207A")
+        # This handles cases where the digit+letter are in a single span
+        variant_from_suffix = None
+        if re.match(r"^\d{3,5}[A-Z]$", suffix_text):
+            # Extract variant letter and clean suffix
+            variant_from_suffix = suffix_text[-1]
+            suffix_text = suffix_text[:-1]
+            logger.debug(
+                f"Extracted variant '{variant_from_suffix}' from suffix span '{suffix_span.text}'"
+            )
+
         # Compute union bbox
-        bboxes = [code_span.bbox, num_span.bbox]
-        if area_span:
-            bboxes.append(area_span.bbox)
+        bboxes = [prefix_span.bbox, suffix_span.bbox]
+        if unit_span:
+            bboxes.append(unit_span.bbox)
 
         union_bbox = self._union_bbox(bboxes)
 
-        # Expand by suffix radius to search for suffixes
-        median_font = code_span.font_size  # Simplified
-        radius = self.suffix_radius_em * median_font
+        # Search for VARIANT (single letter, very close)
+        median_font = prefix_span.font_size  # Simplified
+        variant_radius = self.variant_radius_em * median_font
 
-        expanded_bbox = [
-            union_bbox[0] - radius,
-            union_bbox[1] - radius,
-            union_bbox[2] + radius,
-            union_bbox[3] + radius,
+        variant_bbox = [
+            union_bbox[0] - variant_radius,
+            union_bbox[1] - variant_radius,
+            union_bbox[2] + variant_radius,
+            union_bbox[3] + variant_radius,
         ]
 
-        # Find suffix candidates within radius
-        suffix_candidates = []
-        for span in all_spans:
-            if span.span_id in [code_span.span_id, num_span.span_id]:
-                continue
-            if area_span and span.span_id == area_span.span_id:
-                continue
+        variant_span = self._find_nearby_span_by_role(
+            all_spans,
+            variant_bbox,
+            "VARIANT",
+            exclude_ids=[prefix_span.span_id, suffix_span.span_id]
+            + ([unit_span.span_id] if unit_span else []),
+        )
 
-            # Check if any suffix pattern matches
-            is_suffix = any(p.match(span.text) for p in self.suffix_regexes)
-            if not is_suffix:
-                continue
+        # Use variant from suffix if found, otherwise use nearby span
+        variant_text = (
+            variant_from_suffix
+            if variant_from_suffix
+            else (variant_span.text if variant_span else None)
+        )
 
-            # Check if within expanded bbox
-            span_center = [
-                (span.bbox[0] + span.bbox[2]) / 2,
-                (span.bbox[1] + span.bbox[3]) / 2,
-            ]
+        # Search for ANNOTATION (patterns, farther)
+        annotation_radius = self.annotation_radius_em * median_font
 
-            if self._point_in_bbox(span_center, expanded_bbox):
-                suffix_candidates.append(span)
+        annotation_bbox = [
+            union_bbox[0] - annotation_radius,
+            union_bbox[1] - annotation_radius,
+            union_bbox[2] + annotation_radius,
+            union_bbox[3] + annotation_radius,
+        ]
 
-        # Take first suffix if multiple
-        suffix_span = suffix_candidates[0] if suffix_candidates else None
-        suffix_text = suffix_span.text if suffix_span else None
+        annotation_span = self._find_nearby_span_by_role(
+            all_spans,
+            annotation_bbox,
+            "ANNOTATION",
+            exclude_ids=[prefix_span.span_id, suffix_span.span_id]
+            + ([unit_span.span_id] if unit_span else [])
+            + ([variant_span.span_id] if variant_span else []),
+        )
 
-        # Update union bbox if suffix found
-        if suffix_span:
-            union_bbox = self._union_bbox(bboxes + [suffix_span.bbox])
+        annotation_text = annotation_span.text if annotation_span else None
 
-        # Build tag text
+        # Update union bbox if variant/annotation found
+        bbox_components = bboxes.copy()
+        if variant_span:
+            bbox_components.append(variant_span.bbox)
+        if annotation_span:
+            bbox_components.append(annotation_span.bbox)
+        union_bbox = self._union_bbox(bbox_components)
+
+        # Build tag text (core tag only, without annotation)
         parts = []
-        if area_span:
-            parts.append(area_span.text)
-        parts.append(code_span.text)
-        parts.append(num_span.text)
+        if unit_span:
+            parts.append(unit_span.text)
+        parts.append(prefix_span.text)
+        parts.append(suffix_text)  # Clean suffix (digits only)
+        if variant_text:
+            parts[-1] += variant_text  # Append variant to suffix
 
         tag_text = " ".join(parts)
-        if suffix_text:
-            tag_text += f" {suffix_text}"
 
-        # Build TagEntity
-        evidence_ids = [code_span.span_id, num_span.span_id]
-        if area_span:
-            evidence_ids.append(area_span.span_id)
-        if suffix_span:
-            evidence_ids.append(suffix_span.span_id)
+        # Build TagEntity with new schema
+        evidence_ids = [prefix_span.span_id, suffix_span.span_id]
+        if unit_span:
+            evidence_ids.append(unit_span.span_id)
+        if variant_span:
+            evidence_ids.append(variant_span.span_id)
+        if annotation_span:
+            evidence_ids.append(annotation_span.span_id)
 
         # Normalize confidence from score (pass_threshold=6, max reasonable ~11)
         confidence = min(score / 11.0, 1.0)
@@ -539,19 +619,71 @@ class TagExtractor:
             page=layout.page,
             tag=tag_text,
             parts=TagParts(
-                area=area_span.text if area_span else None,
-                code=code_span.text,
-                num=num_span.text,
-                suffix=suffix_text,
+                unit=unit_span.text if unit_span else None,
+                prefix=prefix_span.text,
+                suffix=suffix_text,  # Digits only!
+                variant=variant_text,
+                annotation=annotation_text,
             ),
             bbox=union_bbox,
-            rotation=code_span.rotation_deg,
+            rotation=prefix_span.rotation_deg,
             confidence=confidence,
             evidence_span_ids=evidence_ids,
-            has_suffix=suffix_span is not None,
+            has_variant=variant_text is not None,
+            has_annotation=annotation_text is not None,
         )
 
         return tag_entity
+
+    def _find_nearby_span_by_role(
+        self,
+        all_spans: List[TextSpan],
+        search_bbox: List[float],
+        role: str,
+        exclude_ids: List[int] = None,
+    ) -> Optional[TextSpan]:
+        """
+        Find a span of specific role within search bbox
+
+        Args:
+            all_spans: All spans to search
+            search_bbox: Bounding box to search within
+            role: Role to match (VARIANT or ANNOTATION)
+            exclude_ids: Span IDs to exclude
+
+        Returns:
+            First matching span or None
+        """
+        exclude_ids = exclude_ids or []
+
+        candidates = []
+        for span in all_spans:
+            if span.span_id in exclude_ids:
+                continue
+
+            # Check role
+            text = span.text.strip()
+            is_match = False
+
+            if role == "VARIANT":
+                is_match = self.variant_regex.match(text) is not None
+            elif role == "ANNOTATION":
+                is_match = any(p.match(text) for p in self.annotation_regexes)
+
+            if not is_match:
+                continue
+
+            # Check if within search bbox
+            span_center = [
+                (span.bbox[0] + span.bbox[2]) / 2,
+                (span.bbox[1] + span.bbox[3]) / 2,
+            ]
+
+            if self._point_in_bbox(span_center, search_bbox):
+                candidates.append(span)
+
+        # Return first candidate (closest to triplet)
+        return candidates[0] if candidates else None
 
     def _union_bbox(self, bboxes: List[List[float]]) -> List[float]:
         """Compute union bounding box"""

@@ -75,8 +75,10 @@ class IndexManager:
         logger.info("Initializing Hybrid Modern Retriever...")
 
         try:
-            # Create hybrid modern retriever
-            self.retriever = create_hybrid_modern_retriever()
+            # Create hybrid modern retriever with P&ID tags support wrapper
+            from app.rag.hybrid_with_tags_retriever import HybridWithTagsRetriever
+
+            self.retriever = HybridWithTagsRetriever()
             self.retriever_type = "hybrid_modern"
 
             # Health check

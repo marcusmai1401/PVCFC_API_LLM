@@ -174,7 +174,7 @@ def format_citations(citations: List[Dict]) -> pd.DataFrame:
 def render(vision_mode=False):
     """Render query lab component with full functionality and logging"""
     # Use built-in implementation (iOS/macOS minimal). Delegation disabled for consistency.
-if vision_mode:
+    if vision_mode:
         st.header("Vision-Assisted Query Lab")
         st.caption("Query Lab with vision verification features enabled")
     else:
@@ -184,7 +184,7 @@ if vision_mode:
     # Initialize logger
     logger = get_logger(verbose=st.session_state.get("enable_verbose_logging", False))
 
-# Initialize session state
+    # Initialize session state
     if "query_results" not in st.session_state:
         st.session_state.query_results = None
     if "api_base_url" not in st.session_state:
@@ -386,9 +386,12 @@ if vision_mode:
         # Language
         language = st.radio("Language", ["vi", "en"], horizontal=True)
 
-# Loading indicator (linear) when processing
+        # Loading indicator (linear) when processing
         if st.session_state.get("ios_loading", False):
-            st.markdown('<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="ios-linear-loader" style="margin-bottom: 12px;"></div>',
+                unsafe_allow_html=True,
+            )
 
         # Run button
         if st.button(
@@ -423,68 +426,69 @@ if vision_mode:
                     performance_key="query_execution",
                 )
 
-# Overlay ON
-                    st.session_state.ios_loading = True
-                    st.markdown("""
-                    <div class=\"ios-overlay\" role=\"status\" aria-live=\"polite\">
-                      <div class=\"ios-overlay-content\">
-                        <div class=\"ios-spinner\" style=\"margin: 0 auto;\"></div>
-                        <p class=\"ios-caption\" style=\"margin: 12px 0 0 0;\">Generating answer...</p>
-                      </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                # Overlay ON
+                st.session_state.ios_loading = True
+                st.markdown(
+                    """
+                <div class=\"ios-overlay\" role=\"status\" aria-live=\"polite\">
+                  <div class=\"ios-overlay-content\">
+                    <div class=\"ios-spinner\" style=\"margin: 0 auto;\"></div>
+                    <p class=\"ios-caption\" style=\"margin: 12px 0 0 0;\">Generating answer...</p>
+                  </div>
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
 
-                    # Prepare parameters
-                    params = {
-                        "max_context": top_k_context,
-                        "execution_mode": execution_mode,
-                        "language": language,
-                        "hyde": enable_hyde,
-                    }
+                # Prepare parameters
+                params = {
+                    "max_context": top_k_context,
+                    "execution_mode": execution_mode,
+                    "language": language,
+                    "hyde": enable_hyde,
+                }
 
-                    # Call API with logger
-                    result = call_ask_api(
-                        query, st.session_state.api_base_url, params, logger
+                # Call API with logger
+                result = call_ask_api(
+                    query, st.session_state.api_base_url, params, logger
+                )
+
+                if result["success"]:
+                    st.session_state.query_results = result["data"]
+
+                    # Log successful completion
+                    logger.log_event(
+                        EventType.INFO,
+                        "Query completed successfully",
+                        {
+                            "run_id": st.session_state.run_id,
+                            "total_latency_ms": result["data"].get(
+                                "total_latency_ms", 0
+                            ),
+                            "answer_length": len(result["data"].get("answer", "")),
+                            "citations_count": len(result["data"].get("citations", [])),
+                            "confidence": result["data"].get("confidence", 0),
+                        },
+                        performance_key="query_execution",
                     )
 
-                    if result["success"]:
-                        st.session_state.query_results = result["data"]
+                    st.success("Query completed successfully")
+                    st.session_state.ios_loading = False
+                    st.rerun()
+                else:
+                    # Log failure
+                    logger.log_error(
+                        "Query execution failed",
+                        context={
+                            "run_id": st.session_state.run_id,
+                            "error": result["error"],
+                        },
+                    )
 
-                        # Log successful completion
-                        logger.log_event(
-                            EventType.INFO,
-                            "Query completed successfully",
-                            {
-                                "run_id": st.session_state.run_id,
-                                "total_latency_ms": result["data"].get(
-                                    "total_latency_ms", 0
-                                ),
-                                "answer_length": len(result["data"].get("answer", "")),
-                                "citations_count": len(
-                                    result["data"].get("citations", [])
-                                ),
-                                "confidence": result["data"].get("confidence", 0),
-                            },
-                            performance_key="query_execution",
-                        )
-
-                        st.success("Query completed successfully")
-                        st.session_state.ios_loading = False
-                        st.rerun()
-                    else:
-                        # Log failure
-                        logger.log_error(
-                            "Query execution failed",
-                            context={
-                                "run_id": st.session_state.run_id,
-                                "error": result["error"],
-                            },
-                        )
-
-                        st.error(f"Error: {result['error']}")
-                        st.session_state.query_results = None
-                        st.session_state.ios_loading = False
-                        st.rerun()
+                    st.error(f"Error: {result['error']}")
+                    st.session_state.query_results = None
+                    st.session_state.ios_loading = False
+                    st.rerun()
             else:
                 logger.log_event(
                     EventType.WARNING,
@@ -556,7 +560,7 @@ if vision_mode:
                 # Warnings
                 warnings = results.get("warnings", [])
                 if warnings:
-st.warning("Warnings:")
+                    st.warning("Warnings:")
                     for warn in warnings:
                         st.write(f"- {warn}")
 
@@ -572,7 +576,7 @@ st.warning("Warnings:")
                 total_retrieved = retrieval_details.get("total_retrieved", 0)
 
                 # Display mode indicator
-st.info(
+                st.info(
                     f"Retrieval Mode: **{retriever_type.upper()}** | Total Retrieved: **{total_retrieved}**"
                 )
 
@@ -636,7 +640,7 @@ st.info(
 
             with tab3:
                 # Rerank Tab
-st.markdown("### Reranking Details")
+                st.markdown("### Reranking Details")
 
                 rerank_info = meta.get("rerank", {})
 
@@ -673,7 +677,7 @@ st.markdown("### Reranking Details")
 
             with tab4:
                 # Generation Tab
-st.markdown("### Generation Details")
+                st.markdown("### Generation Details")
 
                 gen_info = meta.get("generation", {})
 
@@ -806,30 +810,30 @@ st.markdown("### Generation Details")
             )
 
             with tab1:
-st.info("Answer will appear here after running a query")
+                st.info("Answer will appear here after running a query")
                 st.caption(
                     "This tab will show the final answer, confidence score, and warnings"
                 )
 
             with tab2:
-st.info("Retrieval results will be shown here")
+                st.info("Retrieval results will be shown here")
                 st.caption("BM25, FAISS, and RRF fused results")
 
             with tab3:
-st.info("Reranking details will be displayed here")
+                st.info("Reranking details will be displayed here")
                 st.caption("Before/after scores and reranker explanation")
 
             with tab4:
-st.info("Generation details will appear here")
+                st.info("Generation details will appear here")
                 st.caption("Model info, prompt snapshot, timing")
 
             with tab5:
-st.info("Citations will be listed here")
+                st.info("Citations will be listed here")
                 st.caption("Click citations to open PDF viewer (Phase 2)")
 
             with tab6:
                 if st.session_state.get("enable_vision", False):
-st.info(
+                    st.info(
                         "Vision generation info will show here after running a query"
                     )
                     st.caption("PDF pages used, success rate, and page details")
@@ -839,11 +843,11 @@ st.info(
                     )
 
             with tab7:
-st.info("Performance metrics will be displayed here")
+                st.info("Performance metrics will be displayed here")
                 st.caption("Latency breakdown, token usage, cache hits")
 
             with tab8:
-st.info("Request logs will stream here")
+                st.info("Request logs will stream here")
                 st.caption("Structured logs filtered by trace_id")
 
     # Timeline visualization
@@ -870,6 +874,6 @@ st.info("Request logs will stream here")
     else:
         st.divider()
         st.subheader("Pipeline Timeline")
-st.info(
-            "Latency breakdown timeline will be visualized here after running a query"
-        )
+
+
+st.info("Latency breakdown timeline will be visualized here after running a query")

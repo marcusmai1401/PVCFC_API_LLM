@@ -101,19 +101,50 @@ class OpenSearchBM25Retriever:
             List of search results with scores (compatible format)
         """
         try:
-            # Build OpenSearch query
+            # Build OpenSearch query with tag entity boosting
+            # Strategy: Boost is_tag_entity=True docs by 10x
             body = {
                 "size": top_k,
                 "query": {
-                    "multi_match": {
-                        "query": query,
-                        "fields": [
-                            "text^3",  # Main content, highest boost
-                            "heading^2",  # Section headings, medium boost
-                            "title",  # Document title, default boost
+                    "bool": {
+                        "should": [
+                            # Normal multi_match query (boost 1.0)
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": [
+                                        "text^3",  # Main content, highest boost
+                                        "heading^2",  # Section headings, medium boost
+                                        "title",  # Document title, default boost
+                                    ],
+                                    "type": "best_fields",
+                                    "operator": "or",
+                                    "boost": 1.0,
+                                }
+                            },
+                            # Tag entities: multi_match + is_tag_entity=True (boost 10x)
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "multi_match": {
+                                                "query": query,
+                                                "fields": [
+                                                    "text^3",
+                                                    "heading^2",
+                                                    "title",
+                                                ],
+                                                "type": "best_fields",
+                                                "operator": "or",
+                                            }
+                                        },
+                                        {"term": {"is_tag_entity": True}},
+                                    ],
+                                    "boost": 10.0,  # 10x boost for tag entities!
+                                }
+                            },
                         ],
-                        "type": "best_fields",
-                        "operator": "or",  # Use 'and' for higher precision
+                        "minimum_should_match": 1,
                     }
                 },
                 "_source": [
@@ -128,6 +159,7 @@ class OpenSearchBM25Retriever:
                     "level",
                     "doc_type",
                     "tags",  # Include tags field
+                    "is_tag_entity",  # Include is_tag_entity flag
                 ],
             }
 
@@ -158,6 +190,7 @@ class OpenSearchBM25Retriever:
                     "level": src.get("level"),
                     "doc_type": src.get("doc_type"),
                     "tags": src.get("tags", []),  # Include tags
+                    "is_tag_entity": src.get("is_tag_entity", False),  # Tag flag
                 }
 
                 result = {

@@ -142,24 +142,65 @@ def show_home():
 
 def show_query_lab():
     """Show the Query Lab (RAG QA) interface."""
-    # Prefer the iOS/macOS minimal version
+    # Priority 1: Full-featured PDF Citation Viewer (ENABLED)
+    try:
+        from streamlit_app.components.query_lab_improved import (
+            render as query_lab_render,
+        )
+
+        # SUCCESS: Show indicator that full viewer is loaded
+        st.sidebar.markdown(
+            '<p style="font-size: 10px; color: #34c759; margin: 4px 0;">'
+            "✅ Full PDF Viewer Loaded</p>",
+            unsafe_allow_html=True,
+        )
+        query_lab_render()
+        return
+    except Exception as e:
+        # Show warning that fallback is being used
+        st.sidebar.warning(f"⚠️ Full viewer unavailable: {str(e)[:50]}...")
+        import logging
+
+        logging.error(f"query_lab_improved failed to load: {e}", exc_info=True)
+        pass
+
+    # Priority 2: iOS/macOS minimal version (fallback)
     try:
         from streamlit_app.components.query_lab_ios import render as query_lab_render
 
+        st.sidebar.markdown(
+            '<p style="font-size: 10px; color: #ff9500; margin: 4px 0;">'
+            "⚠️ Minimal Viewer (No PDF)</p>",
+            unsafe_allow_html=True,
+        )
         query_lab_render()
         return
-    except Exception:
+    except Exception as e:
+        st.sidebar.error(f"Fallback 2 failed: {str(e)[:30]}")
+        import logging
+
+        logging.error(f"query_lab_ios failed to load: {e}", exc_info=True)
         pass
 
-    # Fallback to legacy component if iOS version not available
+    # Priority 3: Legacy component (last resort)
     try:
         from streamlit_app.components.query_lab import render as query_lab_render
 
+        st.sidebar.markdown(
+            '<p style="font-size: 10px; color: #ff3b30; margin: 4px 0;">'
+            "⚠️ Legacy Viewer</p>",
+            unsafe_allow_html=True,
+        )
         query_lab_render()
     except ImportError:
         try:
             from components.query_lab import render as query_lab_render
 
+            st.sidebar.markdown(
+                '<p style="font-size: 10px; color: #ff3b30; margin: 4px 0;">'
+                "⚠️ Legacy Viewer</p>",
+                unsafe_allow_html=True,
+            )
             query_lab_render()
         except Exception as e:
             st.error(f"❌ Error loading Query Lab: {str(e)}")
@@ -212,9 +253,18 @@ def main():
         )
 
         if new_api_url != st.session_state.api_base_url:
-            st.session_state.api_base_url = new_api_url
-            st.success("API URL updated")
-            st.rerun()
+            # Validate URL format
+            import re
+
+            url_pattern = r"^https?://[\w\-\.]+(:\d+)?/?$"
+            if not re.match(url_pattern, new_api_url.rstrip("/")):
+                st.error("Invalid URL format. Use: http://hostname:port")
+            else:
+                st.session_state.api_base_url = new_api_url.rstrip(
+                    "/"
+                )  # Remove trailing slash
+                st.success("API URL updated")
+                st.rerun()
 
         # Minimal backend status indicator
         st.markdown("<hr>", unsafe_allow_html=True)

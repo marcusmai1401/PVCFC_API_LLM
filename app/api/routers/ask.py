@@ -126,7 +126,7 @@ async def ask_question(
         cache = get_retrieval_cache()
         cache_key_data = (
             transformed_query.normalized,
-            request.filters.dict() if request.filters else None,
+            request.filters,
             request.max_context,
         )
 
@@ -264,12 +264,60 @@ async def ask_question(
             f"[{trace_id}] Reranked to {len(reranked_results)} results in {rerank_time:.0f}ms"
         )
 
-        # Step 4: Generation (sync)
-        generate_start = time.time()
-        generated_answer = generator.generate(
-            query=transformed_query, retrieved_docs=reranked_results
-        )
-        generate_time = (time.time() - generate_start) * 1000
+        # Step 3.5: Check if this is a P&ID tag location query (special handling)
+        from app.rag.pid_tag_handler import get_tag_handler
+
+        tag_handler = get_tag_handler()
+        tag_detection = tag_handler.detect_tag_query(request.query)
+
+        if tag_detection.is_tag_query and tag_detection.tag_name:
+            # Special handling for tag location queries - bypass LLM
+            logger.info(
+                f"[{trace_id}] Tag location query detected: {tag_detection.tag_name}. "
+                f"Using direct answer from retrieval."
+            )
+
+            answer_text, tag_citations = tag_handler.create_tag_location_answer(
+                tag_name=tag_detection.tag_name,
+                retrieval_results=reranked_results,
+                language=request.language,
+            )
+
+            # Create a mock generated_answer structure
+            from dataclasses import dataclass, field
+            from typing import Any, Dict
+            from typing import List as ListType
+
+            @dataclass
+            class TagAnswer:
+                answer: str
+                confidence: float
+                citations: ListType
+                metadata: Dict[str, Any] = field(default_factory=dict)
+
+            generated_answer = TagAnswer(
+                answer=answer_text,
+                confidence=0.95,  # High confidence for direct matches
+                citations=tag_citations,
+                metadata={
+                    "tag_location_query": True,
+                    "tag_name": tag_detection.tag_name,
+                },
+            )
+            generate_time = 0  # No LLM generation time
+
+            logger.info(
+                f"[{trace_id}] Tag answer generated: {len(tag_citations)} citations, "
+                f"pages: {[c.page for c in tag_citations[:5] if hasattr(c, 'page')]}"
+            )
+        else:
+            # Normal LLM generation
+            # Step 4: Generation (sync)
+            generate_start = time.time()
+            generated_answer = generator.generate(
+                query=transformed_query, retrieved_docs=reranked_results
+            )
+            generate_time = (time.time() - generate_start) * 1000
 
         logger.debug(f"[{trace_id}] Generated answer in {generate_time:.0f}ms")
 
@@ -334,6 +382,14 @@ async def ask_question(
         if settings.enable_cove and request.execution_mode != "light_only":
             MetricsCollector.record_pipeline_step("cove_verification", cove_time / 1000)
 
+        # Build metadata lookup from reranked_results (for enriching citations with tags)
+        metadata_lookup = {}  # (doc_id, page) -> metadata
+        if reranked_results:
+            for r in reranked_results:
+                key = (r.doc_id, r.page)
+                if r.metadata:
+                    metadata_lookup[key] = r.metadata
+
         # Convert citations to response format
         citations_list = []
         for citation in generated_answer.citations:
@@ -342,20 +398,61 @@ async def ask_question(
 
             # Clamp confidence score to [0, 1] range
             confidence = None
-            if citation.relevance_score is not None:
+            # Handle both RetrievalResult (score) and GeneratedCitation (relevance_score)
+            score_value = None
+            if (
+                hasattr(citation, "relevance_score")
+                and citation.relevance_score is not None
+            ):
+                score_value = citation.relevance_score
+            elif hasattr(citation, "score") and citation.score is not None:
+                score_value = citation.score
+
+            if score_value is not None:
                 try:
-                    score = float(citation.relevance_score)
+                    score = float(score_value)
                     confidence = max(0.0, min(1.0, score))
                 except (ValueError, TypeError):
                     confidence = None
 
-            # Try to include pdf_path if available
-            kwargs = {}
+            # Extract pdf_path with multi-layer fallback
+            pdf_path_value = None
+
+            # Layer 1: From citation object directly
             try:
                 if hasattr(citation, "pdf_path") and citation.pdf_path:
-                    kwargs["pdf_path"] = citation.pdf_path
+                    pdf_path_value = citation.pdf_path
             except Exception:
                 pass
+
+            # Layer 2: From metadata_lookup (retrieval results)
+            if not pdf_path_value:
+                lookup_key = (citation.doc_id, page_num)
+                if lookup_key in metadata_lookup:
+                    retrieved_meta = metadata_lookup[lookup_key]
+                    pdf_path_value = retrieved_meta.get("pdf_path")
+
+            # Layer 3: From app.state.doc_id_map
+            if not pdf_path_value:
+                try:
+                    if hasattr(http_request.app.state, "doc_id_map"):
+                        doc_info = http_request.app.state.doc_id_map.get(
+                            citation.doc_id
+                        )
+                        if isinstance(doc_info, dict):
+                            pdf_path_value = doc_info.get("pdf_path")
+                        elif isinstance(doc_info, str):
+                            # Legacy format: doc_id -> pdf_path string directly
+                            pdf_path_value = doc_info
+                except Exception as e:
+                    logger.debug(
+                        f"Failed to lookup pdf_path for {citation.doc_id}: {e}"
+                    )
+
+            # Set kwargs
+            kwargs = {}
+            if pdf_path_value:
+                kwargs["pdf_path"] = pdf_path_value
 
             # Extract bbox if available
             bbox_data = None
@@ -365,12 +462,38 @@ async def ask_question(
             except Exception:
                 pass
 
+            # Get metadata: prioritize from citation object, fallback to lookup
+            citation_metadata = None
+
+            # First check if citation already has metadata (from generator)
+            if hasattr(citation, "metadata") and citation.metadata:
+                citation_metadata = citation.metadata
+            else:
+                # Fallback: lookup from reranked_results
+                lookup_key = (citation.doc_id, page_num)
+                if lookup_key in metadata_lookup:
+                    retrieved_meta = metadata_lookup[lookup_key]
+                    # Extract relevant fields for citation metadata
+                    citation_metadata = {}
+                    if "tags" in retrieved_meta:
+                        citation_metadata["tags"] = retrieved_meta["tags"]
+                    if "equipment_type" in retrieved_meta:
+                        citation_metadata["equipment_type"] = retrieved_meta[
+                            "equipment_type"
+                        ]
+                    if "doc_type" in retrieved_meta:
+                        citation_metadata["doc_type"] = retrieved_meta["doc_type"]
+                    # Only include if not empty
+                    if not citation_metadata:
+                        citation_metadata = None
+
             citations_list.append(
                 Citation(
                     doc_id=citation.doc_id,
                     page=page_num,
                     bbox=bbox_data,
                     confidence=confidence,
+                    metadata=citation_metadata,
                     **kwargs,
                 )
             )
@@ -392,24 +515,46 @@ async def ask_question(
                         except (ValueError, TypeError):
                             confidence = None
 
-                    # Enrich pdf_path if available from app state mapping
+                    # Enrich pdf_path with multi-layer fallback (same as generator citations)
                     pdf_path_value = None
-                    try:
-                        if hasattr(http_request.app.state, "doc_id_map"):
-                            _map = http_request.app.state.doc_id_map
-                            _docid = r.doc_id or (
-                                r.metadata.get("doc_id") if r.metadata else None
-                            )
-                            if _docid and _docid in _map:
-                                # Extract pdf_path from doc_info dict
-                                doc_info = _map[_docid]
-                                if isinstance(doc_info, dict):
-                                    pdf_path_value = doc_info.get("pdf_path")
-                                elif isinstance(doc_info, str):
-                                    # Legacy format: direct string path
-                                    pdf_path_value = doc_info
-                    except Exception:
-                        pass
+
+                    # Layer 1: From retrieval result metadata
+                    if r.metadata and r.metadata.get("pdf_path"):
+                        pdf_path_value = r.metadata.get("pdf_path")
+
+                    # Layer 2: From app.state.doc_id_map
+                    if not pdf_path_value:
+                        try:
+                            if hasattr(http_request.app.state, "doc_id_map"):
+                                _map = http_request.app.state.doc_id_map
+                                _docid = r.doc_id or (
+                                    r.metadata.get("doc_id") if r.metadata else None
+                                )
+                                if _docid and _docid in _map:
+                                    # Extract pdf_path from doc_info dict
+                                    doc_info = _map[_docid]
+                                    if isinstance(doc_info, dict):
+                                        pdf_path_value = doc_info.get("pdf_path")
+                                    elif isinstance(doc_info, str):
+                                        # Legacy format: direct string path
+                                        pdf_path_value = doc_info
+                        except Exception:
+                            pass
+
+                    # Extract metadata for fallback citations
+                    fallback_metadata = None
+                    if r.metadata:
+                        fallback_metadata = {}
+                        if "tags" in r.metadata:
+                            fallback_metadata["tags"] = r.metadata["tags"]
+                        if "equipment_type" in r.metadata:
+                            fallback_metadata["equipment_type"] = r.metadata[
+                                "equipment_type"
+                            ]
+                        if "doc_type" in r.metadata:
+                            fallback_metadata["doc_type"] = r.metadata["doc_type"]
+                        if not fallback_metadata:
+                            fallback_metadata = None
 
                     citations_list.append(
                         Citation(
@@ -418,7 +563,8 @@ async def ask_question(
                             page=page_num,
                             bbox=None,
                             confidence=confidence,
-                            pdf_path=pdf_path_value,
+                            pdf_path=pdf_path_value,  # Already enriched above
+                            metadata=fallback_metadata,
                         )
                     )
                 except Exception:
@@ -426,7 +572,38 @@ async def ask_question(
                     page_num = (
                         r.page if hasattr(r, "page") and r.page is not None else 1
                     )
-                    # No enrichment available in this branch
+
+                    # Enrich pdf_path even in exception path
+                    exception_pdf_path = None
+                    try:
+                        _docid = r.doc_id if hasattr(r, "doc_id") else None
+                        if _docid and hasattr(http_request.app.state, "doc_id_map"):
+                            doc_info = http_request.app.state.doc_id_map.get(_docid)
+                            if isinstance(doc_info, dict):
+                                exception_pdf_path = doc_info.get("pdf_path")
+                            elif isinstance(doc_info, str):
+                                exception_pdf_path = doc_info
+                    except Exception:
+                        pass
+
+                    # Try to extract metadata even in exception path
+                    exception_metadata = None
+                    try:
+                        if hasattr(r, "metadata") and r.metadata:
+                            exception_metadata = {}
+                            if "tags" in r.metadata:
+                                exception_metadata["tags"] = r.metadata["tags"]
+                            if "equipment_type" in r.metadata:
+                                exception_metadata["equipment_type"] = r.metadata[
+                                    "equipment_type"
+                                ]
+                            if "doc_type" in r.metadata:
+                                exception_metadata["doc_type"] = r.metadata["doc_type"]
+                            if not exception_metadata:
+                                exception_metadata = None
+                    except Exception:
+                        pass
+
                     citations_list.append(
                         Citation(
                             doc_id=r.doc_id
@@ -435,6 +612,8 @@ async def ask_question(
                             page=page_num,
                             bbox=None,
                             confidence=None,
+                            pdf_path=exception_pdf_path,
+                            metadata=exception_metadata,
                         )
                     )
 

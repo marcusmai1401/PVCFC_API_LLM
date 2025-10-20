@@ -121,6 +121,10 @@ class Citation(BaseModel):
     pdf_path: Optional[str] = Field(
         default=None, description="Full path to PDF file if available"
     )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Additional metadata including tags, equipment info, etc.",
+    )
 
 
 class AskResponse(BaseModel):

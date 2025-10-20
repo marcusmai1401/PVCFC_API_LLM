@@ -289,6 +289,9 @@ class Citation:
     bbox: Optional[
         List[float]
     ] = None  # Bounding box [x0, y0, x1, y1] in normalized coordinates
+    metadata: Optional[
+        Dict[str, Any]
+    ] = None  # Additional metadata (tags, equipment_type, etc.)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -745,9 +748,11 @@ class ResponseGenerator:
             if "metadata_extra" not in locals():
                 metadata_extra = {}
 
+            # Be robust if intent may be a string
+            intent_val = getattr(query.intent, "value", query.intent)
             metadata_extra.update(
                 {
-                    "intent": query.intent.value,
+                    "intent": intent_val,
                     "num_docs": len(retrieved_docs),
                     "has_filters": bool(query.filters),
                     "used_hyde": (len(query.hyde_queries) > 0)
@@ -1336,12 +1341,28 @@ Response:"""
                     if final_page is None or final_page == 0:
                         final_page = doc.metadata.get("page", 1) if doc.metadata else 1
 
+                    # Extract metadata for citation (tags, equipment_type, doc_type)
+                    citation_metadata = None
+                    if doc.metadata:
+                        citation_metadata = {}
+                        if "tags" in doc.metadata:
+                            citation_metadata["tags"] = doc.metadata["tags"]
+                        if "equipment_type" in doc.metadata:
+                            citation_metadata["equipment_type"] = doc.metadata[
+                                "equipment_type"
+                            ]
+                        if "doc_type" in doc.metadata:
+                            citation_metadata["doc_type"] = doc.metadata["doc_type"]
+                        if not citation_metadata:
+                            citation_metadata = None
+
                     citation = Citation(
                         doc_id=doc.doc_id,
                         source=doc.source,
                         page=final_page,
                         text_snippet=doc.text[:200],
                         relevance_score=doc.score,
+                        metadata=citation_metadata,
                     )
 
                     # Enrich with pdf_path from metadata (for vision results) or doc_id_map
@@ -1377,12 +1398,29 @@ Response:"""
             for doc_num in sorted(doc_mapping.keys())[:3]:  # Use top 3 docs
                 doc = doc_mapping[doc_num]
                 page = doc.page if doc.page else 1
+
+                # Extract metadata for implicit citation
+                implicit_metadata = None
+                if doc.metadata:
+                    implicit_metadata = {}
+                    if "tags" in doc.metadata:
+                        implicit_metadata["tags"] = doc.metadata["tags"]
+                    if "equipment_type" in doc.metadata:
+                        implicit_metadata["equipment_type"] = doc.metadata[
+                            "equipment_type"
+                        ]
+                    if "doc_type" in doc.metadata:
+                        implicit_metadata["doc_type"] = doc.metadata["doc_type"]
+                    if not implicit_metadata:
+                        implicit_metadata = None
+
                 citation = Citation(
                     doc_id=doc.doc_id,
                     source=doc.source,
                     page=page,
                     text_snippet=doc.text[:200],
                     relevance_score=doc.score,
+                    metadata=implicit_metadata,
                 )
 
                 # Enrich with pdf_path from metadata (for vision results) or doc_id_map
@@ -1574,48 +1612,72 @@ Response:"""
                 matched_via = "no_match"
 
                 # Check if this page is from a retrieved doc with high score
-                # FIXED: Match by doc_id instead of pdf_path+page (retrieved docs don't have pdf_path)
-                for doc in retrieved_docs[:20]:  # Top 20 docs
+                # FIXED: Match by doc_id + page proximity for accurate ranking
+                best_match_score = 0.0
+                best_match_rank = 999
+                best_match_doc = None
+
+                for rank_idx, doc in enumerate(retrieved_docs[:20]):  # Top 20 docs
                     result_doc_id = result.metadata.get("doc_id")
 
                     # Try matching by doc_id (most reliable for our case)
                     if doc.doc_id and result_doc_id and doc.doc_id == result_doc_id:
                         # Matched by doc_id - same document
-                        score += doc.score * 10  # Boost by retrieval score
-                        matched_via = "doc_id"
+                        # Check page proximity to find the best matching chunk
+                        page_distance = abs(result.page - doc.page) if doc.page else 999
 
-                        # Boost if doc text contains important tokens
-                        if doc.text:
-                            doc_text_lower = doc.text.lower()
+                        # Calculate match score with page proximity weight
+                        # Closer pages = better match
+                        proximity_bonus = max(
+                            0, 50 - (page_distance * 10)
+                        )  # ±0 pages=50, ±1=40, ±2=30, etc.
+                        rank_bonus = max(
+                            0, 100 - (rank_idx * 5)
+                        )  # Rank 0=100, 1=95, 2=90, etc.
+                        doc_score = doc.score * 10  # Retrieval score
 
-                            # Check for specific patterns (tags, numbers)
-                            # Use flexible pattern to catch variations like 04-FIC-2035 or 04/FIC/2035
-                            tag_patterns = re.findall(
-                                r"\b\d+[-/][A-Z]{2,}[-/]\d+\b", doc.text, re.IGNORECASE
-                            )
-                            if tag_patterns:
-                                for tag in tag_patterns:
-                                    if (
-                                        tag.lower() in original_query.lower()
-                                        or tag.lower() in english_query.lower()
-                                    ):
-                                        score += 50  # Strong boost for matching tags
-                                        matched_via = "tag_match"
-                                        logger.info(
-                                            f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page}"
-                                        )
+                        match_score = doc_score + rank_bonus + proximity_bonus
 
-                            # Check for keyword overlap
-                            keyword_count = 0
-                            for token in query_tokens:
-                                if len(token) > 3 and token in doc_text_lower:
-                                    score += 1
-                                    keyword_count += 1
+                        # Keep the best match (highest score)
+                        if match_score > best_match_score:
+                            best_match_score = match_score
+                            best_match_rank = rank_idx
+                            best_match_doc = doc
+                            score = match_score
+                            matched_via = "doc_id"
 
-                            if keyword_count > 5 and matched_via == "doc_id":
-                                matched_via = "doc_id+keywords"
+                # Apply tag matching bonus to best matched doc
+                if best_match_doc and best_match_doc.text:
+                    doc_text_lower = best_match_doc.text.lower()
 
-                        break
+                    # Check for specific patterns (tags, numbers)
+                    # Use flexible pattern to catch variations like 04-FIC-2035 or 04/FIC/2035
+                    tag_patterns = re.findall(
+                        r"\b\d+[-/][A-Z]{2,}[-/]\d+\b",
+                        best_match_doc.text,
+                        re.IGNORECASE,
+                    )
+                    if tag_patterns:
+                        for tag in tag_patterns:
+                            if (
+                                tag.lower() in original_query.lower()
+                                or tag.lower() in english_query.lower()
+                            ):
+                                score += 50  # Strong boost for matching tags
+                                matched_via = "tag_match"
+                                logger.info(
+                                    f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page}"
+                                )
+
+                    # Check for keyword overlap
+                    keyword_count = 0
+                    for token in query_tokens:
+                        if len(token) > 3 and token in doc_text_lower:
+                            score += 1
+                            keyword_count += 1
+
+                    if keyword_count > 5 and matched_via == "doc_id":
+                        matched_via = "doc_id+keywords"
 
                 page_scores.append((idx, result, score, matched_via))
                 logger.info(
@@ -1755,7 +1817,11 @@ Response:"""
             resp = client.models.generate_content(
                 model=model_name, contents=contents, config=cfg
             )
-            answer_text = resp.text if hasattr(resp, "text") else ""
+            # Check both hasattr and not None to avoid NoneType error in regex
+            answer_text = resp.text if (hasattr(resp, "text") and resp.text) else ""
+            if not answer_text:
+                logger.warning("Vision generation returned empty response from Gemini")
+                return None
         except Exception as e:
             logger.error(f"Gemini multimodal generation failed: {e}")
             return None
@@ -1981,10 +2047,14 @@ Response:"""
                 return True
             return False
 
-        # Iterate over top retrieved docs, preserving rank order
-        for doc in retrieved_docs:
-            if len(pages) >= max_pages:
-                break
+        # IMPROVED: Prioritize top-k chunks without dedupe by doc_id
+        # Old logic: stopped at max_pages, causing some high-rank chunks to be skipped
+        # New logic: extract unique pages from ALL top-k chunks first, then limit to max_pages
+
+        # Step 1: Collect all candidate pages from retrieved docs with their scores
+        candidate_pages: List[Dict[str, Any]] = []
+
+        for rank_idx, doc in enumerate(retrieved_docs):
             doc_id = doc.doc_id or (
                 doc.metadata.get("doc_id") if doc.metadata else None
             )
@@ -2103,17 +2173,13 @@ Response:"""
                     or "P_ID" in doc_id_upper
                 )
 
-                # Use tag_pattern_found computed above (from doc.text, not query)
-                if is_pid and center > 20 and tag_pattern_found and page_end > 30:
-                    # P&ID + center too far + doc has tag pattern → force small-page-bias
-                    old_center = center
-                    center = min(10, page_end // 4)
-                    logger.info(
-                        f"[DIAGNOSTIC] P&ID override: center {old_center} -> {center} (doc has tag pattern, forcing early pages)"
-                    )
+                # REMOVED: P&ID override logic was causing incorrect page selection
+                # When retrieval correctly identifies page 71 with tag "MYLP 04504",
+                # forcing to page 10 causes wrong citations.
+                # Tag patterns in doc.text are accurate content, not false positives.
 
-                start = max(1, center - 2)
-                end = center + 2
+                start = max(1, center - 1)  # Reduced from center-2 to center-1
+                end = center + 1  # Reduced from center+2 to center+1 (3 pages total)
                 logger.info(
                     f"[DIAGNOSTIC] Final page window: [{start}-{end}] (center={center})"
                 )
@@ -2145,13 +2211,44 @@ Response:"""
                 except Exception:
                     pass
 
-            # Add pages in range
+            # Collect candidate pages with metadata (rank, score)
             for p in range(start, end + 1):
-                if len(pages) >= max_pages:
-                    break
-                add_page(pdf_path, p, doc_id_for_page=doc_id)
+                candidate_pages.append(
+                    {
+                        "pdf_path": pdf_path,
+                        "page": p,
+                        "doc_id": doc_id,
+                        "rank": rank_idx,  # Lower is better
+                        "score": doc.score
+                        if hasattr(doc, "score") and doc.score
+                        else 0.0,
+                    }
+                )
 
-        return pages, {"selected": len(pages), "max": max_pages}
+        # Step 2: Sort candidates by rank (lower is better), then by page number
+        # This ensures top-k chunks are prioritized
+        candidate_pages.sort(key=lambda x: (x["rank"], x["page"]))
+
+        # Step 3: Dedupe by (pdf_path, page) tuple and limit to max_pages
+        for candidate in candidate_pages:
+            if len(pages) >= max_pages:
+                break
+            add_page(
+                candidate["pdf_path"],
+                candidate["page"],
+                doc_id_for_page=candidate["doc_id"],
+            )
+
+        logger.info(
+            f"Vision page selection: {len(candidate_pages)} candidates → "
+            f"{len(pages)} unique pages (max={max_pages})"
+        )
+
+        return pages, {
+            "selected": len(pages),
+            "max": max_pages,
+            "candidates": len(candidate_pages),
+        }
 
     def _calculate_confidence(
         self, answer: str, citations: List[Citation], docs: List[RetrievalResult]
@@ -2394,26 +2491,44 @@ Response:"""
                             f"quote_len={len(quote_text)}, threshold={fuzzy_threshold}"
                         )
 
-                        bbox_result = find_bbox_by_quote(
+                        # Find bbox candidates (list)
+                        from tools.pdf_renderer import normalize_bbox as _normalize_bbox
+
+                        matches = find_bbox_by_quote(
                             pdf_path=citation.pdf_path,
                             page_num=citation.page or 1,
-                            quote_text=quote_text,
-                            match_type="fuzzy",
-                            fuzzy_threshold=fuzzy_threshold,
+                            quote=quote_text,
+                            fuzzy=True,
+                            use_cache=True,
                         )
 
-                        if bbox_result and bbox_result.get("found"):
-                            bbox_found = True
-                            bbox_confidence = bbox_result.get("confidence", 0.0)
-                            citation.bbox = bbox_result.get("bbox")
-                            detail["bbox_found"] = True
-                            detail["bbox_confidence"] = bbox_confidence
-                            detail["bbox_quote_length"] = len(quote_text)
-
-                            logger.debug(
-                                f"✓ Bbox detected: {citation.doc_id} p.{citation.page} "
-                                f"confidence={bbox_confidence:.2f}, bbox={citation.bbox}"
+                        if matches:
+                            # Pick best by confidence
+                            best = max(
+                                matches, key=lambda m: float(m.get("confidence", 0.0))
                             )
+                            bbox_abs = best.get("bbox")
+                            pw = best.get("page_width")
+                            ph = best.get("page_height")
+                            if bbox_abs and pw and ph:
+                                citation.bbox = list(
+                                    _normalize_bbox(tuple(bbox_abs), pw, ph)
+                                )
+                                bbox_found = True
+                                bbox_confidence = float(best.get("confidence", 0.0))
+                                detail["bbox_found"] = True
+                                detail["bbox_confidence"] = bbox_confidence
+                                detail["bbox_quote_length"] = len(quote_text)
+
+                                logger.debug(
+                                    f"✓ Bbox detected: {citation.doc_id} p.{citation.page} "
+                                    f"confidence={bbox_confidence:.2f}, bbox={citation.bbox}"
+                                )
+                            else:
+                                detail["bbox_found"] = False
+                                logger.debug(
+                                    f"✗ Bbox result missing geometry for {citation.doc_id} p.{citation.page}"
+                                )
                         else:
                             detail["bbox_found"] = False
                             logger.debug(

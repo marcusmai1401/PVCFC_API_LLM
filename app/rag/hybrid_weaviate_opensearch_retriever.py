@@ -10,6 +10,7 @@ Combines:
 This is the production retriever replacing legacy FAISS + BM25 offline.
 """
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -151,19 +152,26 @@ class HybridWeaviateOpenSearchRetriever:
     def search(
         self,
         transformed_query: TransformedQuery,
+        top_k: Optional[int] = None,
         config_override: Optional[HybridModernConfig] = None,
+        **kwargs,
     ) -> List[RetrievalResult]:
         """
         Hybrid search with Weaviate + OpenSearch
 
         Args:
             transformed_query: Transformed query with filters
+            top_k: Optional top_k override (if provided, overrides config.bge_top_k)
             config_override: Optional config override
+            **kwargs: Additional arguments (ignored, for compatibility)
 
         Returns:
             List of retrieval results (fused and optionally reranked)
         """
         config = config_override or self.config
+
+        # Use top_k override if provided, otherwise use config value
+        effective_top_k = top_k if top_k is not None else config.bge_top_k
 
         logger.info(f"Hybrid Modern search: '{transformed_query.normalized[:100]}...'")
 
@@ -214,16 +222,19 @@ class HybridWeaviateOpenSearchRetriever:
                     results=fused_results,
                     level=config.bge_level,
                     aggregation=config.bge_aggregation,
-                    top_k=config.bge_top_k,
+                    top_k=effective_top_k,
                 )
                 logger.info(f"BGE reranking complete: {len(fused_results)} results")
             except Exception as e:
                 logger.error(f"BGE reranking failed: {e}, using RRF results")
                 # Graceful degradation: use RRF results
-                fused_results = fused_results[: config.bge_top_k]
+                fused_results = fused_results[:effective_top_k]
         else:
             # No BGE, just limit to top_k
-            fused_results = fused_results[: config.bge_top_k]
+            fused_results = fused_results[:effective_top_k]
+
+        # Final sanitation: ensure page numbers are consistent (avoid 0/None when possible)
+        fused_results = self._sanitize_pages(fused_results)
 
         logger.info(f"Final result count: {len(fused_results)}")
         return fused_results
@@ -373,7 +384,10 @@ class HybridWeaviateOpenSearchRetriever:
                     source=r.get("source", "unknown"),
                     metadata=r.get("metadata", {}),
                     doc_id=r.get("doc_id") or r.get("metadata", {}).get("doc_id"),
-                    page=r.get("page") or r.get("metadata", {}).get("page"),
+                    # Use 'is not None' to handle page=0 correctly
+                    page=r.get("page")
+                    if r.get("page") is not None
+                    else r.get("metadata", {}).get("page"),
                     bbox=None,
                     parent_id=None,
                 )
@@ -392,6 +406,9 @@ class HybridWeaviateOpenSearchRetriever:
                 final_results = fused_results[:top_k]
         else:
             final_results = fused_results[:top_k]
+
+        # Sanitize pages before returning
+        final_results = self._sanitize_pages(final_results)
 
         logger.info("=" * 80)
         logger.info(f"ENHANCED RETRIEVAL COMPLETE: {len(final_results)} final results")
@@ -666,25 +683,34 @@ class HybridWeaviateOpenSearchRetriever:
             # Chunk-level reranking
             reranked_chunks = reranker.rerank_chunks(query, chunks, top_k=top_k)
 
+            # Create a mapping from chunk_id to original result for preserving metadata
+            chunk_id_to_result = {r.chunk_id: r for r in results}
+
             # Convert back to RetrievalResult
-            return [
-                RetrievalResult(
-                    chunk_id=chunk["chunk_id"],
-                    text=chunk["text"],
-                    score=float(score),
-                    source=f"hybrid_modern_bge_{chunk['source']}",
-                    metadata={
-                        **chunk["metadata"],
-                        "bge_rerank_score": float(score),
-                        "original_rrf_score": chunk["original_score"],
-                    },
-                    doc_id=chunk["doc_id"],
-                    page=results[i].page if i < len(results) else None,
-                    bbox=results[i].bbox if i < len(results) else None,
-                    parent_id=results[i].parent_id if i < len(results) else None,
+            reranked_results = []
+            for chunk, score in reranked_chunks:
+                # Find the original result to preserve page, bbox, etc.
+                original = chunk_id_to_result.get(chunk["chunk_id"])
+
+                reranked_results.append(
+                    RetrievalResult(
+                        chunk_id=chunk["chunk_id"],
+                        text=chunk["text"],
+                        score=float(score),
+                        source=f"hybrid_modern_bge_{chunk['source']}",
+                        metadata={
+                            **chunk["metadata"],
+                            "bge_rerank_score": float(score),
+                            "original_rrf_score": chunk["original_score"],
+                        },
+                        doc_id=chunk["doc_id"],
+                        page=original.page if original else None,
+                        bbox=original.bbox if original else None,
+                        parent_id=original.parent_id if original else None,
+                    )
                 )
-                for i, (chunk, score) in enumerate(reranked_chunks)
-            ]
+
+            return reranked_results
         else:
             # For doc/page level, use chunk-level as fallback for now
             logger.warning(
@@ -693,6 +719,69 @@ class HybridWeaviateOpenSearchRetriever:
             return self._apply_bge_reranking(
                 query, results, level="chunk", aggregation=aggregation, top_k=top_k
             )
+
+    def _sanitize_pages(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
+        """Ensure each result has a valid page if possible.
+
+        Strategy:
+        - If result.page in (None, 0):
+            - Use metadata['page'] if valid
+            - Else extract from content markers <!-- Page N -->
+            - Else parse from chunk_id patterns like '_p13_' or 'p13'
+        - Keep page unchanged if already valid (>0)
+        - Mirror back to metadata['page'] for consistency
+        """
+        try:
+            from app.utils.page_utils import extract_page_from_content
+        except Exception:
+            extract_page_from_content = None
+
+        for r in results:
+            page = r.page
+            if page in (None, 0):
+                # 1) metadata
+                meta_page = None
+                try:
+                    meta_page = r.metadata.get("page") if r.metadata else None
+                except Exception:
+                    meta_page = None
+                if isinstance(meta_page, int) and meta_page > 0:
+                    page = meta_page
+                # 2) content markers
+                if (
+                    (page in (None, 0))
+                    and extract_page_from_content is not None
+                    and r.text
+                ):
+                    try:
+                        p = extract_page_from_content(r.text)
+                        if isinstance(p, int) and p > 0:
+                            page = p
+                    except Exception:
+                        pass
+                # 3) chunk_id pattern
+                if page in (None, 0) and r.chunk_id:
+                    try:
+                        m = re.search(
+                            r"[_\-]p(\d+)[_\-]", r.chunk_id, flags=re.IGNORECASE
+                        )
+                        if not m:
+                            m = re.search(r"p(\d+)$", r.chunk_id, flags=re.IGNORECASE)
+                        if m:
+                            p = int(m.group(1))
+                            if p > 0:
+                                page = p
+                    except Exception:
+                        pass
+                # Final fallback: avoid returning 0/None pages
+                if page in (None, 0):
+                    page = 1
+                # Apply back
+                r.page = page
+                if r.metadata is None:
+                    r.metadata = {}
+                r.metadata["page"] = page
+        return results
 
     def get_statistics(self) -> Dict[str, Any]:
         """

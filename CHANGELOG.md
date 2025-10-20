@@ -4,7 +4,36 @@ All notable changes to the PVCFC RAG System.
 
 ## [Unreleased]
 
-### Added - P&ID Retrieval Enhancement (2025-10-16)
+### Added - P&ID Search Enhancement v2 (2025-10-18)
+
+**Major enhancement to P&ID tag extraction and search based on data analysis**
+
+**New Capabilities:**
+- SUFFIX-only search (e.g., "5153" finds all tags with that number)
+- Component-based search (e.g., "04 5153", "PAHH 5153", "04 PAHH")
+- Multi-prefix grouping and ambiguity warnings (43% of suffixes have multiple prefixes)
+- Annotation separation (A/B/C, 1oo2 patterns)
+- Variant extraction (A/B/C single letters)
+
+**Schema Changes (BREAKING):**
+- `area` → `unit` (1-3 digits now, was 2 only)
+- `code` → `prefix` (2-6 letters now, was 2-4)
+- `num` → `suffix` (digits only, no letters)
+- Added `variant` field (single letter)
+- Added `annotation` field (A/B/C, 1oo2)
+
+**Files:**
+- See `docs/CHANGELOG_PID_ENHANCEMENT.md` for complete details
+- Migration guide: `scripts/migration/README_MIGRATION.md`
+- User guide: `docs/PID_SEARCH_ENHANCEMENT_GUIDE.md`
+
+**Migration Required:** Hard migration with full re-indexing
+- Run: `python scripts/migration/run_migration.py`
+- Rollback: `python scripts/migration/restore_backup.py`
+
+---
+
+### Added - P&ID Retrieval Enhancement v1 (2025-10-16)
 
 **New Features:**
 - Tag-aware query processing for P&ID and technical drawings

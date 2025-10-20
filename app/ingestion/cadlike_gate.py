@@ -476,7 +476,12 @@ class CADLikeGate:
         with open(self.config.TAG_GRAMMAR_CONFIG, "r", encoding="utf-8") as f:
             grammar_config = yaml.safe_load(f)
 
-        code_whitelist = set(grammar_config["code_whitelist"])
+        # Use prefix_whitelist (renamed from code_whitelist)
+        prefix_whitelist = set(
+            grammar_config.get(
+                "prefix_whitelist", grammar_config.get("code_whitelist", [])
+            )
+        )
 
         # Load page filters
         with open(self.config.PAGE_FILTERS_CONFIG, "r", encoding="utf-8") as f:
@@ -498,7 +503,7 @@ class CADLikeGate:
 
             # Check condition 2: CODE whitelist tokens
             tokens = text.split()
-            code_count = sum(1 for t in tokens if t in code_whitelist)
+            code_count = sum(1 for t in tokens if t in prefix_whitelist)
 
             # Accept if either condition met
             if regex_hits >= min_regex_hits or code_count >= min_code_tokens:

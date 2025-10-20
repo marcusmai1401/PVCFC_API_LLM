@@ -67,7 +67,8 @@ class PDFRenderer:
     ) -> str:
         """Generate cache key for rendered page."""
         pdf_hash = self._get_pdf_hash(pdf_path)
-        return f"{pdf_hash}_{page_num}_{dpi}_{format}"
+        # Include version suffix to invalidate cache when watermark is added
+        return f"{pdf_hash}_{page_num}_{dpi}_{format}_v2"
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """Get file path for cached image."""
@@ -146,6 +147,132 @@ class PDFRenderer:
             logger.warning(f"Failed to load from cache: {e}")
 
         return None
+
+    # Sizing tiers for consistent watermark scaling
+    # Optimized for LLM visibility: 2.5-3% of image height
+    WATERMARK_SIZE_TIERS = [
+        (1000, 28),  # Small images (low DPI): 28px
+        (1500, 40),  # Medium: 40px (+4px)
+        (2000, 56),  # Large: 56px (+8px, 2.3% for 2400px P&ID)
+        (3000, 72),  # Very large (high DPI): 72px (+8px)
+        (float("inf"), 96),  # Huge (very high DPI): 96px max (+16px)
+    ]
+
+    def _get_watermark_font_size(self, img_height: int) -> int:
+        """
+        Get optimal font size based on image height using predefined tiers
+
+        Args:
+            img_height: Image height in pixels
+
+        Returns:
+            Font size in pixels (28-80px range)
+        """
+        for threshold, size in PDFRenderer.WATERMARK_SIZE_TIERS:
+            if img_height < threshold:
+                return size
+        return 96  # Fallback max (updated to match new tier)
+
+    def _add_page_watermark(self, img: Image.Image, page_num: int) -> Image.Image:
+        """
+        Add page number watermark for LLM visibility
+
+        Design (optimized for P&ID diagrams):
+        - Position: Top-left corner (less conflict with P&ID labels at top-right)
+        - Style: Yellow background + black text + white outline
+        - Size: Adaptive tiers (28-80px based on image height)
+        - Font: Bold Arial/DejaVu with fallbacks
+
+        Args:
+            img: PIL Image object
+            page_num: Page number to display
+
+        Returns:
+            Image with watermark (or original if watermark fails)
+        """
+        try:
+            from PIL import ImageDraw, ImageFont
+
+            draw = ImageDraw.Draw(img)
+
+            # Get adaptive font size using tiers
+            font_size = self._get_watermark_font_size(img.height)
+
+            # Load BOLD font with fallbacks
+            font = None
+            font_candidates = [
+                "arialbd.ttf",  # Windows bold
+                "Arial-Bold.ttf",  # macOS bold
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux bold
+                "arial.ttf",  # Regular Arial fallback
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Regular DejaVu
+            ]
+
+            for font_path in font_candidates:
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except:
+                    continue
+
+            if not font:
+                # Last resort: default font
+                font = ImageFont.load_default()
+                font_size = 20  # Default font is smaller
+
+            # Text (shorter format for less space)
+            text = f"P. {page_num}"
+
+            # Calculate text dimensions
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Position: TOP-LEFT corner with padding (optimized for P&ID)
+            padding = int(font_size * 0.5)  # Padding scales with font
+            x = padding
+            y = padding
+
+            # Background box padding
+            bg_padding = int(font_size * 0.25)
+
+            # Draw YELLOW background box with BLACK border
+            bg_box = [
+                x - bg_padding,
+                y - bg_padding,
+                x + text_width + bg_padding,
+                y + text_height + bg_padding,
+            ]
+
+            # Yellow fill (high visibility on both light and dark backgrounds)
+            draw.rectangle(bg_box, fill=(255, 255, 0), outline=(0, 0, 0), width=2)
+
+            # Draw text with WHITE outline for maximum contrast
+            # Outline: draw white text at 8 surrounding positions
+            for offset_x in [-1, 0, 1]:
+                for offset_y in [-1, 0, 1]:
+                    if offset_x == 0 and offset_y == 0:
+                        continue
+                    draw.text(
+                        (x + offset_x, y + offset_y),
+                        text,
+                        fill=(255, 255, 255),  # White outline
+                        font=font,
+                    )
+
+            # Main text (BLACK for readability on yellow background)
+            draw.text((x, y), text, fill=(0, 0, 0), font=font)
+
+            logger.debug(
+                f"Added watermark: Page {page_num}, font_size={font_size}px, position=top-left"
+            )
+
+            return img
+
+        except Exception as e:
+            logger.warning(f"Failed to add page watermark: {e}")
+            # Graceful degradation: return original image
+            return img
 
     def validate_pdf_path(self, pdf_path: str) -> Tuple[bool, str]:
         """
@@ -245,6 +372,9 @@ class PDFRenderer:
 
                 # Convert to PIL Image
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+                # Add page number watermark to help LLM identify page
+                img = self._add_page_watermark(img, page_num)
 
                 # Convert to requested format
                 output = io.BytesIO()
