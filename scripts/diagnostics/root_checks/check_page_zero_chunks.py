@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Check chunks with page=0 in OpenSearch to determine if they are valid"""
 
+import os
+
 from loguru import logger
 from opensearchpy import OpenSearch
 
@@ -15,9 +17,19 @@ suspicious_chunks = [
 def check_chunks_in_opensearch():
     """Check what page values are stored for these chunks"""
 
+    # Load credentials from environment variables
+    OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
+    OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD")
+
+    if not OPENSEARCH_PASSWORD:
+        raise ValueError(
+            "OPENSEARCH_PASSWORD environment variable is required. "
+            "Please set it before running this script."
+        )
+
     client = OpenSearch(
         hosts=[{"host": "localhost", "port": 9200}],
-        http_auth=("admin", "PvcfcRAG2024@Secure"),
+        http_auth=(OPENSEARCH_USER, OPENSEARCH_PASSWORD),
         use_ssl=False,
         verify_certs=False,
         ssl_show_warn=False,

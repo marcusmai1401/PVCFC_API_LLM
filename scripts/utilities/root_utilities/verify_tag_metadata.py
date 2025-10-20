@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Verify tag metadata in OpenSearch index"""
 
+import os
+
 from opensearchpy import OpenSearch
+
+# Load credentials from environment variables
+OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
+OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD")
+
+if not OPENSEARCH_PASSWORD:
+    raise ValueError(
+        "OPENSEARCH_PASSWORD environment variable is required. "
+        "Please set it before running this script."
+    )
 
 # Connect to OpenSearch
 client = OpenSearch(
     hosts=[{"host": "localhost", "port": 9200}],
-    http_auth=("admin", "PhuVinhChemical@2024"),
+    http_auth=(OPENSEARCH_USER, OPENSEARCH_PASSWORD),
     use_ssl=False,
     verify_certs=False,
     ssl_show_warn=False,
