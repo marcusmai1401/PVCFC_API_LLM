@@ -2,6 +2,77 @@
 
 All notable changes to the PVCFC RAG System.
 
+## [2025-10-20] - Complete P&ID Pipeline with Security Hardening
+
+### 🎯 Major Milestone: Production-Ready P&ID Query Pipeline
+
+**Complete end-to-end pipeline for P&ID tag search and document retrieval**
+
+#### ✨ Features Completed
+
+**P&ID Tag Detection & Extraction:**
+- ✅ Robust tag assembly with span merging
+- ✅ Context validation for tag queries
+- ✅ PID-specific query enhancement
+- ✅ Response formatter with metrics tracking
+- ✅ Hybrid retrieval optimization for P&ID documents
+
+**Infrastructure & Performance:**
+- ✅ Hybrid Weaviate + OpenSearch retrieval
+- ✅ BGE reranker integration
+- ✅ Adaptive RRF fusion
+- ✅ Tag-specific boost parameters
+- ✅ PID metrics collection
+
+**Documentation & Testing:**
+- ✅ Complete test suite (integration + unit tests)
+- ✅ Migration scripts and guides
+- ✅ Diagnostic tools for troubleshooting
+- ✅ Performance evaluation framework
+
+#### 🔒 Security Hardening
+
+**Critical Security Fixes:**
+- 🔴 Removed hardcoded OpenSearch credentials (61 files deleted)
+- ✅ Implemented environment variable-based authentication
+- ✅ Optional auth mode for no-security deployments
+- ✅ Scripts compatible with both security modes
+- ✅ Updated .gitignore to prevent future credential leaks
+
+**Files Modified:**
+- `scripts/diagnostics/root_checks/*` (5 scripts)
+- `scripts/utilities/root_utilities/*`
+- `.env.example` with security documentation
+
+#### 📁 Project Cleanup
+
+**Removed Redundant Files:**
+- Deleted 61 files with hardcoded passwords
+- Removed 15+ obsolete report files (.md, .txt)
+- Cleaned up legacy backup directories
+- Removed temporary test scripts
+
+**Total Cleanup:** ~5,800 lines of code removed
+
+#### 🚀 Deployment Status
+
+- ✅ Code formatted with Black & isort
+- ✅ Linter warnings addressed
+- ✅ All tests passing
+- ✅ Documentation updated
+- ✅ Production-ready configuration
+
+### Technical Details
+
+**Commits:**
+- `30206a6` - Initial P&ID pipeline implementation (18,737 insertions)
+- `6102a9f` - Security fix: Remove hardcoded credentials (5,741 deletions)
+- `4f29717` - Optional auth mode for no-security deployments
+
+**Repository:** `marcusmai1401/PVCFC_API_LLM`
+
+---
+
 ## [Unreleased]
 
 ### Added - P&ID Search Enhancement v2 (2025-10-18)
