@@ -74,6 +74,84 @@ async def ask_question(
         if not request.query or not request.query.strip():
             raise HTTPException(status_code=422, detail="Query must not be empty")
 
+        # ===== Conversation Management =====
+        # Get or create conversation
+        conversation_manager = getattr(
+            http_request.app.state, "conversation_manager", None
+        )
+        conv_id = request.conversation_id
+        is_new_conversation = False
+        conversation_history = []
+        conversation_summary = None
+
+        if conversation_manager:
+            try:
+                if not conv_id:
+                    # Create new conversation
+                    conv_id = conversation_manager.create_conversation(
+                        user_id=request.user_id, language=request.language
+                    )
+                    is_new_conversation = True
+                    logger.info(f"[{trace_id}] Created new conversation: {conv_id}")
+
+                    # Record metric
+                    from app.core.metrics import conversation_created
+
+                    conversation_created.labels(language=request.language).inc()
+                else:
+                    # Fetch existing history
+                    conversation_history = conversation_manager.get_history(
+                        conv_id, max_turns=10
+                    )
+                    logger.info(
+                        f"[{trace_id}] Retrieved {len(conversation_history)} turns for conv {conv_id}"
+                    )
+
+                    # Check if we need to summarize
+                    meta = conversation_manager.get_metadata(conv_id)
+                    if meta:
+                        from app.core.conversation.summarizer import (
+                            ConversationSummarizer,
+                        )
+
+                        summarizer = ConversationSummarizer(
+                            summarize_every_n_turns=settings.summarize_every_n_turns
+                        )
+
+                        if summarizer.should_summarize(
+                            meta["total_turns"], meta.get("last_summarized_turn", 0)
+                        ):
+                            # Summarize oldest turns
+                            conversation_summary = summarizer.summarize_history(
+                                conversation_history[:6],  # Summarize first 6 turns
+                                model_tier="light",
+                                language=request.language,
+                            )
+                            if conversation_summary:
+                                conversation_manager.update_summarization_marker(
+                                    conv_id, meta["total_turns"]
+                                )
+                                logger.info(f"[{trace_id}] Summarized conversation")
+
+                                # Record metric
+                                from app.core.metrics import conversation_summarizations
+
+                                conversation_summarizations.labels(
+                                    language=request.language
+                                ).inc()
+
+            except Exception as e:
+                logger.warning(f"[{trace_id}] Conversation management error: {e}")
+                # Fall back to single-turn mode
+                conv_id = None
+                is_new_conversation = True
+                conversation_history = []
+        else:
+            # No conversation manager available
+            logger.debug(f"[{trace_id}] Conversation manager not available")
+            conv_id = None
+            is_new_conversation = True
+
         # Initialize components
         query_transformer = QueryTransformer(enable_hyde=request.hyde)
         # Configure reranker: avoid cross-encoder for non-English to prevent NaN scores and empty results
@@ -110,10 +188,15 @@ async def ask_question(
         generator = ResponseGenerator(config=generator_config)
         cove = ChainOfVerification(settings=settings)
 
-        # Step 1: Query Transformation (sync)
+        # Step 1: Query Transformation (sync) with optional query_type override
         transform_start = time.time()
         transformed_query = query_transformer.transform(
-            query=request.query, filters=request.filters, language=request.language
+            query=request.query,
+            filters=request.filters,
+            language=request.language,
+            query_type_override=getattr(
+                request, "query_type", None
+            ),  # NEW: pass override if present
         )
         transform_time = (time.time() - transform_start) * 1000
 
@@ -124,8 +207,12 @@ async def ask_question(
         from app.core.cache_manager import get_retrieval_cache
 
         cache = get_retrieval_cache()
+        # BUG-022 FIX: Include query_type in cache key to prevent collision
+        # Previously, 'pid' and 'technical_doc' queries with same text shared cache,
+        # causing wrong results (e.g., P&ID query returns technical doc cached results)
         cache_key_data = (
             transformed_query.normalized,
+            request.query_type,  # CRITICAL: Separate cache per query type
             request.filters,
             request.max_context,
         )
@@ -142,9 +229,51 @@ async def ask_question(
             # Still need to check degrade mode from cached results
             retrieval_results = cached_results  # For degrade check
         else:
-            # Cache MISS - perform normal retrieval
+            # Cache MISS - perform retrieval with smart routing
             retrieve_start = time.time()
-            retrieval_results = retriever.search(transformed_query)
+
+            # Query type routing (REQUIRED: user must select pid or technical_doc)
+            user_query_type = request.query_type  # Now required, no default
+
+            if user_query_type == "pid":
+                # User explicitly selected P&ID mode
+                logger.info(f"[{trace_id}] User-selected P&ID retrieval mode")
+                tags_retriever = getattr(http_request.app.state, "tags_retriever", None)
+                if tags_retriever:
+                    retrieval_results = tags_retriever.search(transformed_query)
+                else:
+                    # BUG-001 FIX: Enhanced warning when P&ID retriever unavailable
+                    logger.warning(
+                        f"[{trace_id}] ⚠️ P&ID tags retriever not available (initialization failed or disabled). "
+                        f"Falling back to default hybrid retriever. P&ID-specific features may be degraded."
+                    )
+                    retrieval_results = retriever.search(transformed_query)
+
+            elif user_query_type == "technical_doc":
+                # User explicitly selected Technical Doc mode
+                logger.info(f"[{trace_id}] User-selected Technical Doc retrieval mode")
+
+                # Use technical doc retriever if available
+                tech_doc_retriever = getattr(
+                    http_request.app.state, "tech_doc_retriever", None
+                )
+                if tech_doc_retriever:
+                    retrieval_results = tech_doc_retriever.search(transformed_query)
+                else:
+                    # BUG-001 FIX: Enhanced warning when technical doc retriever unavailable
+                    logger.warning(
+                        f"[{trace_id}] ⚠️ Technical document retriever not available (initialization failed or disabled). "
+                        f"Falling back to default hybrid retriever. Query-time enhancements may be unavailable."
+                    )
+                    retrieval_results = retriever.search(transformed_query)
+
+            else:
+                # Invalid query_type (should not happen due to Pydantic validation)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid query_type: {user_query_type}. Must be 'pid' or 'technical_doc'",
+                )
+
             retrieve_time = (time.time() - retrieve_start) * 1000
 
             logger.debug(
@@ -314,9 +443,91 @@ async def ask_question(
             # Normal LLM generation
             # Step 4: Generation (sync)
             generate_start = time.time()
-            generated_answer = generator.generate(
-                query=transformed_query, retrieved_docs=reranked_results
-            )
+
+            # Build conversation-aware prompt if we have history
+            if conversation_history or conversation_summary:
+                from app.core.conversation.prompt_builder import (
+                    build_conversation_aware_prompt,
+                )
+                from app.core.token_budget import TokenBudgetManager
+
+                # Enforce token budget before building prompt
+                token_manager = TokenBudgetManager(
+                    max_tokens=settings.max_conversation_context_tokens
+                )
+
+                # Build context text from retrieved docs
+                context_text = "\n---\n".join(
+                    [doc.text for doc in reranked_results[:8]]
+                )
+
+                # Trim history to fit token budget
+                trimmed_history = token_manager.trim_to_budget(
+                    history=conversation_history,
+                    context_text=context_text,
+                    reserved_for_response=1000,
+                )
+
+                # BUG-031 FIX: Validate total tokens don't overflow model limit
+                is_budget_valid = token_manager.validate_total_budget(
+                    trimmed_history=trimmed_history,
+                    context_text=context_text,
+                    current_query=request.query,
+                    reserved_for_response=1000,
+                    model_max_tokens=settings.max_conversation_context_tokens,
+                )
+
+                if not is_budget_valid:
+                    # Token overflow - further trim history or warn
+                    logger.error(
+                        f"[{trace_id}] Token budget overflow after trimming! "
+                        f"Trimmed history may still exceed model limits."
+                    )
+                    # Emergency fallback: use only last 2 turns
+                    trimmed_history = (
+                        trimmed_history[-2:]
+                        if len(trimmed_history) > 2
+                        else trimmed_history
+                    )
+                    logger.info(
+                        f"[{trace_id}] Emergency trim: reduced to last {len(trimmed_history)} turns"
+                    )
+
+                logger.debug(
+                    f"[{trace_id}] Token budget: trimmed history from "
+                    f"{len(conversation_history)} to {len(trimmed_history)} turns"
+                )
+
+                # Record trim metric if history was trimmed
+                if len(trimmed_history) < len(conversation_history):
+                    from app.core.metrics import conversation_token_trims
+
+                    conversation_token_trims.inc()
+
+                # Build prompt with trimmed history
+                conversation_prompt = build_conversation_aware_prompt(
+                    current_query=request.query,
+                    history=trimmed_history,  # Use trimmed history
+                    retrieved_docs=reranked_results,
+                    language=request.language,
+                    summary=conversation_summary,
+                )
+
+                # Create a modified query object with conversation-aware prompt
+                from dataclasses import replace
+
+                conv_aware_query = replace(
+                    transformed_query, original=conversation_prompt
+                )
+                generated_answer = generator.generate(
+                    query=conv_aware_query, retrieved_docs=reranked_results
+                )
+            else:
+                # Standard single-turn generation
+                generated_answer = generator.generate(
+                    query=transformed_query, retrieved_docs=reranked_results
+                )
+
             generate_time = (time.time() - generate_start) * 1000
 
         logger.debug(f"[{trace_id}] Generated answer in {generate_time:.0f}ms")
@@ -747,6 +958,8 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             "text_range_scan_enabled": settings.text_range_scan_enabled,
             # Cache
             "cache_hit": cache_hit,
+            # Query type (user-selected, no auto-detect)
+            "query_type": request.query_type,
         }
 
         # Backward compatibility: add "model" alias for "model_generation"
@@ -912,6 +1125,57 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             # Clamp as last resort for production stability, but we've logged the issue
             final_confidence = max(0.0, min(1.0, float(final_confidence or 0.0)))
 
+        # Save conversation turns (with PII redaction if enabled)
+        conversation_turn_count = 0
+        if conversation_manager and conv_id:
+            try:
+                from app.utils.redaction import PIIRedactor
+
+                redactor = PIIRedactor(enabled=settings.enable_pii_redaction)
+
+                # Save user turn
+                user_content = redactor.redact(request.query)
+                conversation_manager.add_turn(
+                    conversation_id=conv_id,
+                    role="user",
+                    content=user_content,
+                    metadata={"language": request.language},
+                )
+
+                # Record metric
+                from app.core.metrics import conversation_turns
+
+                conversation_turns.labels(role="user").inc()
+
+                # Save assistant turn
+                assistant_content = redactor.redact(final_answer)
+                conversation_manager.add_turn(
+                    conversation_id=conv_id,
+                    role="assistant",
+                    content=assistant_content,
+                    metadata={
+                        "model": meta_dict.get("model_generation"),
+                        "citations_count": len(citations_list),
+                        "confidence": final_confidence,
+                        "latency_ms": round(total_latency),
+                    },
+                )
+
+                # Record metric
+                conversation_turns.labels(role="assistant").inc()
+
+                # Get updated turn count
+                meta = conversation_manager.get_metadata(conv_id)
+                if meta:
+                    conversation_turn_count = meta.get("total_turns", 0)
+
+                logger.debug(
+                    f"[{trace_id}] Saved conversation turns: total={conversation_turn_count}"
+                )
+
+            except Exception as e:
+                logger.warning(f"[{trace_id}] Failed to save conversation turns: {e}")
+
         return AskResponse(
             answer=final_answer,
             citations=citations_list,
@@ -919,6 +1183,9 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             confidence=final_confidence,
             meta=meta_dict,
             warnings=warnings if warnings else None,
+            conversation_id=conv_id,
+            is_new_conversation=is_new_conversation if conv_id else None,
+            conversation_turn_count=conversation_turn_count if conv_id else None,
             retrieval_details=retrieval_details,
             reranking_details=reranking_details,
             generation_details=generation_details,

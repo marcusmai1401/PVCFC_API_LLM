@@ -156,12 +156,12 @@ class OpenSearchTagsRetriever:
 
             if prefix and suffix:
                 must_clauses = [
-                    {"term": {"prefix": prefix}},
-                    {"term": {"suffix": suffix}},
+                    {"term": {"parts.prefix.keyword": prefix}},
+                    {"term": {"parts.suffix.keyword": suffix}},
                 ]
 
                 if unit:
-                    must_clauses.append({"term": {"unit": unit}})
+                    must_clauses.append({"term": {"parts.unit.keyword": unit}})
 
                 should_clauses.append(
                     {
@@ -206,7 +206,7 @@ class OpenSearchTagsRetriever:
         return {
             "multi_match": {
                 "query": query,
-                "fields": ["tag^3", "prefix^2", "suffix^2"],
+                "fields": ["tag^3", "parts.prefix^2", "parts.suffix^2"],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
@@ -240,13 +240,13 @@ class OpenSearchTagsRetriever:
         filters = []
 
         if unit:
-            filters.append({"term": {"unit": unit}})
+            filters.append({"term": {"parts.unit.keyword": unit}})
         if prefix:
-            filters.append({"term": {"prefix": prefix}})
+            filters.append({"term": {"parts.prefix.keyword": prefix}})
         if suffix:
-            filters.append({"term": {"suffix": suffix}})
+            filters.append({"term": {"parts.suffix.keyword": suffix}})
         if variant:
-            filters.append({"term": {"variant": variant}})
+            filters.append({"term": {"parts.variant.keyword": variant}})
 
         if not filters:
             logger.warning("No component filters provided for search")
@@ -294,7 +294,11 @@ class OpenSearchTagsRetriever:
         query = {
             "bool": {
                 "should": [
-                    {"term": {"suffix": {"value": suffix, "boost": 10.0}}},
+                    {
+                        "term": {
+                            "parts.suffix.keyword": {"value": suffix, "boost": 10.0}
+                        }
+                    },
                     {"match": {"tag": {"query": suffix, "boost": 1.0}}},
                 ]
             }

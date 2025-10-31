@@ -4,6 +4,7 @@ Provides PaddleOCR PP-OCRv5 initialization with GPU/CPU auto-detection
 Replaces Tesseract OCR with PaddleOCR for higher accuracy
 """
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -229,20 +230,26 @@ def initialize_paddleocr(
         return None
 
 
+# Thread-local storage for PaddleOCR instances
+_thread_local = threading.local()
+
+
 def get_paddleocr_instance() -> Optional[Any]:
     """
-    Get the global PaddleOCR instance (singleton pattern).
-    Initializes if not already done.
+    Get a thread-local PaddleOCR instance.
+    Each thread gets its own instance to avoid GPU tensor conflicts.
 
     Returns:
         PaddleOCR instance or None
     """
-    global PADDLE_OCR
+    # Check if current thread has an instance
+    if not hasattr(_thread_local, "paddle_ocr") or _thread_local.paddle_ocr is None:
+        logger.debug(
+            f"Creating new PaddleOCR instance for thread {threading.current_thread().name}"
+        )
+        _thread_local.paddle_ocr = initialize_paddleocr()
 
-    if PADDLE_OCR is None:
-        PADDLE_OCR = initialize_paddleocr()
-
-    return PADDLE_OCR
+    return _thread_local.paddle_ocr
 
 
 def get_ocr_status() -> Dict[str, Any]:

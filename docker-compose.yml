@@ -57,6 +57,29 @@ services:
           cpus: '1.0'
           memory: 2G
 
+  redis:
+    image: redis:7-alpine
+    container_name: pvcfc_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
+volumes:
+  redis_data:
+
 networks:
   default:
     name: page-first-network

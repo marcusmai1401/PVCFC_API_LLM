@@ -9,6 +9,7 @@ Spec: PVCFC_CADlike_Tag_Extraction_Handoff.md Section 8
 """
 
 import time
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +27,20 @@ from app.rag.query_processing.pid_context_validator import (
 )
 from app.rag.query_transform import TransformedQuery
 from app.rag.retriever import RetrievalResult
+
+# Request-scoped context variables to prevent race conditions (BUG-021 FIX)
+# Previously, instance variables were shared across concurrent requests, causing
+# Request A to get Request B's cached analysis, leading to wrong retrieval results.
+# ContextVar provides thread-safe, request-scoped storage in async contexts.
+_request_validation: ContextVar[Optional[Dict]] = ContextVar(
+    "request_validation", default=None
+)
+_request_analysis: ContextVar[Optional[Dict]] = ContextVar(
+    "request_analysis", default=None
+)
+_request_grouped_results: ContextVar[Optional[Dict]] = ContextVar(
+    "request_grouped_results", default=None
+)
 
 
 class HybridWithTagsRetriever:
@@ -103,6 +118,7 @@ class HybridWithTagsRetriever:
         Determine if tags retrieval should be used
 
         UPDATED: Multi-layer validation with safety checks
+        - Layer 0: QUICK FILTER for technical doc queries (NEW)
         - Layer 1: Strategy detection
         - Layer 2: Context validation (false positive prevention)
         - Layer 3: Confidence threshold check
@@ -114,6 +130,36 @@ class HybridWithTagsRetriever:
         Returns:
             True if tags retrieval applicable
         """
+
+        # LAYER 0: Quick filter for obvious technical doc queries (NEW)
+        query_lower = transformed_query.original.lower()
+
+        # Strong indicators this is a TECHNICAL DOC query, not P&ID
+        tech_doc_patterns = [
+            "according to",  # "according to the manual"
+            "manual",
+            "datasheet",
+            "specification",
+            "setpoint",  # "what are the setpoints"
+            "alarm",  # "alarm settings"
+            "operating speed",
+            "performance curve",
+            "rpm",
+            "operating condition",
+            "maintenance",
+            "operation and maintenance",
+            "o&m",
+        ]
+
+        # Check and log matched pattern
+        matched_pattern = next((p for p in tech_doc_patterns if p in query_lower), None)
+        if matched_pattern:
+            log_pid_decision(
+                transformed_query.original,
+                "use_semantic",
+                f"Technical doc query detected (has '{matched_pattern}' pattern)",
+            )
+            return False
         if not self.pid_enhancer:
             log_pid_decision(
                 transformed_query.original,
@@ -174,9 +220,9 @@ class HybridWithTagsRetriever:
                 },
             )
 
-            # Store validation and analysis for later use
-            self._last_validation = validation
-            self._last_analysis = analysis
+            # Store validation and analysis in request-scoped context (BUG-021 FIX)
+            _request_validation.set(validation)
+            _request_analysis.set(analysis)
 
             return True
 
@@ -222,8 +268,8 @@ class HybridWithTagsRetriever:
         """
         start_time = time.time()
 
-        # Get analysis from validation phase
-        analysis = getattr(self, "_last_analysis", None) or self.pid_enhancer.enhance(
+        # Get analysis from request-scoped context (BUG-021 FIX)
+        analysis = _request_analysis.get() or self.pid_enhancer.enhance(
             transformed_query.original
         )
 
@@ -243,8 +289,8 @@ class HybridWithTagsRetriever:
                 grouped_results = self.tags_retriever.search_by_suffix(suffix, top_k=50)
                 tags_results = self._flatten_grouped_results(grouped_results)
 
-                # Store grouped format for potential response formatting
-                self._last_grouped_results = grouped_results
+                # Store grouped format in request-scoped context (BUG-021 FIX)
+                _request_grouped_results.set(grouped_results)
 
                 logger.info(
                     f"SUFFIX search '{suffix}': {len(tags_results)} tags, "
@@ -299,7 +345,7 @@ class HybridWithTagsRetriever:
                     timestamp=datetime.now().isoformat(),
                     query=transformed_query.original,
                     strategy=strategy,
-                    validation_confidence=getattr(self, "_last_validation", {}).get(
+                    validation_confidence=(_request_validation.get() or {}).get(
                         "confidence", 0
                     ),
                     tags_found=len(tags_results)
@@ -339,7 +385,7 @@ class HybridWithTagsRetriever:
                 timestamp=datetime.now().isoformat(),
                 query=transformed_query.original,
                 strategy=strategy,
-                validation_confidence=getattr(self, "_last_validation", {}).get(
+                validation_confidence=(_request_validation.get() or {}).get(
                     "confidence", 0.5
                 ),
                 tags_found=len(tags_results) if isinstance(tags_results, list) else 0,
@@ -452,6 +498,7 @@ class HybridWithTagsRetriever:
                 doc_id=tag_result["doc_id"],
                 page=tag_result["page"],
                 score=tag_result["score"],
+                source="tags",
                 metadata={
                     "source": "tags",
                     "bbox": tag_result.get("bbox"),

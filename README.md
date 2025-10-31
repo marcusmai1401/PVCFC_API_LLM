@@ -7,6 +7,7 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
   * **Tìm & trích xuất**: nhanh chóng tìm đúng *tài liệu và **trang*** nhắc tới nội dung câu hỏi.
   * **Hỏi-đáp có trích dẫn**: trả lời ngắn gọn, **đính kèm nguồn (doc_id + page)** để kiểm chứng.
+  * **💬 Hội thoại đa lượt (NEW)**: chat liên tục với ghi nhớ ngữ cảnh, tự động suy luận "nó", "thiết bị đó" từ câu hỏi trước.
   * **Báo cáo tự động**: sinh báo cáo từ ngôn ngữ tự nhiên (AI), có danh mục trích dẫn.
   * **Metadata từ tín hiệu/thiết bị**: suy luận **equipment_id**, **doc_type**, vendor, revision… từ ngữ cảnh và nội dung tài liệu, **thay cho thao tác thủ công**.
 
@@ -39,14 +40,44 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 ---
 
-## 3) Kiến trúc tổng thể
+## 3) Kiến trúc tổng thể - DUAL PIPELINE
+
+> **⚠️ QUAN TRỌNG**: Hệ thống có **2 PIPELINE SONG SONG** tự động phân loại theo loại tài liệu:
+
+```
+                    PDF INPUT
+                        │
+                        ↓
+                ┌───────────────┐
+                │ CAD-like Gate │ ← AUTO-DETECT
+                │  (8 features) │
+                └───────┬───────┘
+                        │
+            ┌───────────┴────────────┐
+            │                        │
+      score ≥ 0.55              score < 0.55
+            │                        │
+            ↓                        ↓
+    ╔═══════════════╗        ╔═══════════════╗
+    ║ P&ID PIPELINE ║        ║ TECH DOC      ║
+    ║ (Extended)    ║        ║ PIPELINE      ║
+    ╚═══════════════╝        ║ (Standard)    ║
+         │                   ╚═══════════════╝
+         ├─ Layout + Tags            │
+         ├─ Bbox + Crops      ✅     ├─ Text + Chunks
+         ├─ 2 Indexes         ✅     └─ 1 Index
+         └─ Parallel Search   ✅
+```
+
+### 3.1 **Technical Doc Pipeline** (Standard - Mặc định)
+
+**Áp dụng cho:** Manuals, Datasheets, Specifications, Operating Procedures
 
 **Offline (Build):**
 
 1. **Ingest**: đọc PDF (vector/scan), OCR khi cần → chuẩn hoá văn bản → **chunk** + metadata.
 2. **Dedup**: `content_hash` để gộp **trùng nội dung** (đại diện: *vector > scan > size > mtime > path ngắn*).
 3. **Index**:
-
    * **BM25**: chỉ mục từ khóa (nhẹ, dễ bảo trì).
    * **Weaviate**: vector database (embedding 768D), production-grade với gRPC.
 
@@ -54,11 +85,50 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 1. **Query transform** (HyDE/chuẩn hoá ngôn ngữ — tuỳ chọn).
 2. **Hybrid retrieval** (BM25 ∪ Weaviate) → hợp nhất + **BGE rerank**.
-3. **Generation**:
+3. **Generation**: Text-only hoặc Multimodal (Vision) khi cần.
+4. **Trả về**: **answer**, **citations (doc_id + page)**, **metadata**.
 
-   * **Text-only** (mặc định).
-   * **Multimodal (Vision)** khi **có trang PDF liên quan** (kết hợp **văn bản + ảnh trang** để tăng độ chính xác theo ngữ cảnh).
-4. **Trả về**: **answer**, **citations (doc_id + page)**, **metadata**, và **báo cáo** nếu yêu cầu.
+### 3.2 **P&ID Pipeline** (Extended - Khi enable)
+
+**Áp dụng cho:** P&ID, PFD, Instrument Drawings, ISO Diagrams
+
+> **Enable**: Set `ENABLE_PID_TAGS=true` trong `.env`
+
+**Offline (Build) - MỞ RỘNG:**
+
+1. **CAD-like Gate**: Tự động phát hiện P&ID (8 features scoring).
+2. **Page Layout Extraction**: Trích xuất **spatial layout** (bbox, font, rotation, vector drawings).
+3. **Tag Extraction**: Trích xuất instrument tags (PREFIX-anchored triplet: UNIT-PREFIX-SUFFIX-VARIANT).
+4. **Crop Generation**: Tạo PNG crops của tag bounding boxes.
+5. **Dual Indexing**:
+   * **Index 1**: `rag_chunks` (BM25 + Weaviate) ← *Giống Technical Doc*
+   * **Index 2**: `pvcfc_pid_tags` (OpenSearch sidecar) ← *⭐ UNIQUE cho P&ID*
+
+**Online (Serve) - KHÁC HOÀN TOÀN:**
+
+1. **Query Enhancement**: Phát hiện tags (04 PSAL 2207), parse components, tạo variants.
+2. **Context Validation**: Multi-layer false positive prevention.
+3. **Parallel Retrieval** (2 branches):
+   * **Branch A**: Search `pvcfc_pid_tags` index → tags với bbox + crops
+   * **Branch B**: Search `rag_chunks` index → standard chunks
+4. **RRF Fusion**: Kết hợp 2 branches với adaptive weights.
+5. **Tag Reranking**: Boost exact tag matches (×10.0), fuzzy matches (×2.0-3.0).
+6. **Generation**: Có thể sử dụng **tag crops** cho vision citations.
+7. **Trả về**: **answer** + **citations** (có `bbox` + `crop_path` nếu từ tags).
+
+### 3.3 So sánh nhanh
+
+| Aspect | Technical Doc | P&ID |
+|--------|--------------|------|
+| **Auto-detect** | score < 0.55 | score ≥ 0.55 (CAD-like Gate) |
+| **Ingestion** | Text + Chunks | Text + Chunks + **Layout + Tags + Crops** |
+| **Số indexes** | 1 (`rag_chunks`) | 2 (`rag_chunks` + `pvcfc_pid_tags`) |
+| **Retrieval** | 1 branch (chunks) | 2 branches parallel (tags + chunks) |
+| **Bbox tracking** | ❌ No | ✅ **Yes** (stored in tags) |
+| **Crops** | ❌ No | ✅ **Yes** (PNG images) |
+| **Query routing** | Equipment boosting | Tag parsing + validation |
+
+> **Lưu ý**: P&ID documents **VẪN CÓ** standard chunks index → cho phép fallback sang semantic search nếu tag search không tìm thấy kết quả.
 
 ---
 
@@ -269,6 +339,17 @@ BGE_RERANK_AGGREGATION=max  # max|mean|top3_mean
 VISION_PAGE_SELECTOR_ENABLED=true
 TEXT_RANGE_SCAN_ENABLED=false
 
+# P&ID Tags Extraction (Dual Pipeline - Optional)
+# Default: false (disabled to avoid indexing overhead if not needed)
+# Set to true to enable P&ID auto-detect & tag extraction
+ENABLE_PID_TAGS=false
+GATE_MODE=auto         # auto|always|never
+GATE_THRESHOLD=0.55    # CAD-like score threshold (adjusted from 0.60)
+GRAY_ZONE_LOW=0.45     # Gray zone lower bound
+LAZY_CROP_GENERATION=true  # true: generate crops on-demand, false: at ingestion
+ARTIFACTS_DIR=artifacts/ingestion_production  # Artifacts location (venv context dependent)
+TAGS_INDEX_NAME=pvcfc_pid_tags    # OpenSearch tags sidecar index
+
 # API keys
 GEMINI_API_KEY=your_gemini_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here  # nếu dùng OpenAI
@@ -276,56 +357,65 @@ OPENAI_API_KEY=your_openai_api_key_here  # nếu dùng OpenAI
 
 **Cài đặt (Windows PowerShell)**
 
+> **⚠️ LƯU Ý:** Hệ thống cần **2 môi trường ảo riêng** do protobuf conflict
+
 ```powershell
+# Môi trường 1: Cho ingestion (có PaddleOCR)
+py -3.11 -m venv venv_ingest
+venv_ingest\Scripts\Activate.ps1
+pip install -r requirements_ingest.txt
+
+# Môi trường 2: Cho API/indexing (có Weaviate)
 py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-**Ingest**
+**Ingest** (Dùng venv_ingest)
 
 ```powershell
+# Activate venv_ingest (có PaddleOCR)
+venv_ingest\Scripts\Activate.ps1
+
+# Chạy ingestion
 python tools\ingest.py `
   --source-dir "D:\\Data_Raw" `
-  --output-dir "artifacts\\ingestion" `
-  --enable-ocr --ocr-lang "vie+eng" --parser auto `
-  --chunk-size 1000 --chunk-overlap 200
+  --output-dir "artifacts\\ingestion_production" `
+  --enable-ocr --ocr-lang "vie+eng" `
+  --workers 2 `
+  --enable-pid-tags
+
+# Output: chunks.jsonl (5,000+) + tags.jsonl (200+)
 ```
 
-**Build Production Indices**
+**Build Production Indices** (Dùng .venv)
 
 ```powershell
-# Build both BM25 and FAISS/Weaviate indices
-python tools\\ops\\build_production_indices.py
+# Switch sang .venv (có Weaviate)
+deactivate
+.venv\Scripts\Activate.ps1
+
+# 1. Create OpenSearch indexes
+python scripts\\opensearch\\create_rag_chunks_index.py --delete-if-exists
+python scripts\\opensearch\\create_tags_index.py --delete-if-exists
+
+# 2. Index chunks to OpenSearch + Weaviate (35-40 phút)
+python scripts\\utilities\\index_production_chunks.py
+
+# 3. Index P&ID tags to OpenSearch
+python scripts\\opensearch\\bulk_upsert_tags.py `
+  --tags-file "artifacts\\ingestion_production\\entities\\tags.jsonl"
 ```
 
-This will:
-- Build BM25 index from chunks (4,883 documents)
-- Build FAISS vector index (if WEAVIATE_ENABLED=false)
-- Output to `artifacts/index_production/`
+**Kết quả:**
+- OpenSearch rag_chunks: ~10,000 documents
+- Weaviate Chunk: ~10,000 objects
+- OpenSearch pvcfc_pid_tags: ~200 tags
 
-**OR: Setup Weaviate (Recommended for Production)**
-
-```powershell
-# 1. Start Weaviate with Docker
-docker-compose -f docker-compose-weaviate.yml up -d
-
-# 2. Ingest data to Weaviate
-python scripts\\phase1_index_to_weaviate.py
-
-# 3. Verify data
-python scripts\\weaviate\\test_weaviate_search.py "CO2 compressor"
-```
-
-> **Lưu ý:** Weaviate là production-ready với gRPC support. FAISS vẫn hoạt động cho local development.
-
-**Chạy API**
+**Chạy API** (Cùng .venv)
 
 ```powershell
-# Option 1: Direct uvicorn
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-
-# Option 2: Using launcher script (recommended)
+# .venv đang active
 .\launchers\start_api.ps1
 ```
 
@@ -524,6 +614,7 @@ Code - API_LLM_PVCFC/
 - 🔧 Scripts: [`scripts/README.md`](scripts/README.md)
 - 🚀 Getting Started: [`docs/guides/QUICK_START.md`](docs/guides/QUICK_START.md)
 - ✅ Pre-launch checklist: [`docs/guides/PRE_LAUNCH_CHECKLIST.md`](docs/guides/PRE_LAUNCH_CHECKLIST.md)
+- 💬 **NEW** Multi-turn Chat Guide: [`docs/MULTI_TURN_CHAT_GUIDE.md`](docs/MULTI_TURN_CHAT_GUIDE.md)
 
 ---
 

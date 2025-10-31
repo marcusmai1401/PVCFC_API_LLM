@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
 from app.core.metrics import get_metrics, get_metrics_content_type
 from app.core.rate_limit import RateLimitMiddleware, configure_rate_limiter
+from app.core.redis_client import get_redis_factory
 from app.core.tracing import TracingMiddleware, get_current_trace
 from app.deps.indices import get_index_manager, startup_indices
 
@@ -32,6 +33,20 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"Port: {settings.api_port}")
     logger.info(f"Version: {settings.version} ({settings.commit_sha[:8]})")
+
+    # Initialize Redis client factory
+    try:
+        redis_factory = get_redis_factory()
+        redis_factory.initialize()
+        logger.info(f"Redis client initialized in {redis_factory.mode} mode")
+        app.state.redis_factory = redis_factory
+    except Exception as e:
+        logger.error(
+            f"Failed to initialize Redis client: {e}. "
+            "Redis-dependent features (conversation history, distributed cache) will be unavailable.",
+            exc_info=True,
+        )
+        app.state.redis_factory = None
 
     # Initialize indices and dependencies
     try:
@@ -52,6 +67,27 @@ async def lifespan(app: FastAPI):
             manager = get_index_manager(settings)
             app.state.retriever = manager.get_retriever()
             app.state.settings = settings
+
+            # Initialize specialized retrievers
+            try:
+                # P&ID Tags Retriever (if enabled)
+                from app.rag.hybrid_with_tags_retriever import HybridWithTagsRetriever
+
+                app.state.tags_retriever = HybridWithTagsRetriever()
+                logger.info("Initialized P&ID tags retriever")
+            except Exception as e:
+                logger.warning(f"Failed to init tags retriever: {e}")
+                app.state.tags_retriever = None
+
+            try:
+                # Technical Document Retriever (NEW)
+                from app.rag.technical_doc_retriever import TechnicalDocRetriever
+
+                app.state.tech_doc_retriever = TechnicalDocRetriever()
+                logger.info("Initialized Technical Document retriever")
+            except Exception as e:
+                logger.warning(f"Failed to init technical doc retriever: {e}")
+                app.state.tech_doc_retriever = None
 
             # Attach OpenSearch client to app state for routers needing direct access (e.g., /tags)
             try:
@@ -87,27 +123,96 @@ async def lifespan(app: FastAPI):
             legacy_path = Path("artifacts/ingestion/doc_id_map.json")
 
             loaded = False
+            production_map = None
+            legacy_map = None
+
+            # BUG-027 FIX: Load both maps and validate consistency
             if production_path.exists():
                 try:
                     with open(production_path, "r", encoding="utf-8") as f:
-                        app.state.doc_id_map = json.load(f)
+                        production_map = json.load(f)
                     logger.info(
-                        f"Loaded doc_id_map from production with {len(app.state.doc_id_map)} entries"
+                        f"Loaded production doc_id_map with {len(production_map)} entries"
                     )
-                    loaded = True
                 except Exception as e:
                     logger.warning(f"Failed to load doc_id_map from production: {e}")
 
-            if not loaded and legacy_path.exists():
+            if legacy_path.exists():
                 try:
                     with open(legacy_path, "r", encoding="utf-8") as f:
-                        app.state.doc_id_map = json.load(f)
+                        legacy_map = json.load(f)
                     logger.info(
-                        f"Loaded doc_id_map from legacy path with {len(app.state.doc_id_map)} entries"
+                        f"Loaded legacy doc_id_map with {len(legacy_map)} entries"
                     )
-                    loaded = True
                 except Exception as e:
                     logger.warning(f"Failed to load doc_id_map from legacy path: {e}")
+
+            # BUG-027 FIX: Validate consistency if both exist
+            if production_map and legacy_map:
+                logger.info(
+                    "Both production and legacy doc_id_maps exist, validating consistency..."
+                )
+
+                # Check if maps have different sizes
+                if len(production_map) != len(legacy_map):
+                    logger.warning(
+                        f"⚠️ Doc ID map size mismatch: "
+                        f"production={len(production_map)}, legacy={len(legacy_map)}. "
+                        f"This may indicate incomplete re-ingestion or version mismatch."
+                    )
+
+                # Sample check: verify common doc_ids point to same PDFs
+                common_ids = set(production_map.keys()) & set(legacy_map.keys())
+                if common_ids:
+                    sample_ids = list(common_ids)[:5]  # Check first 5 common IDs
+                    mismatches = []
+                    for doc_id in sample_ids:
+                        prod_val = production_map[doc_id]
+                        legacy_val = legacy_map[doc_id]
+                        # Extract pdf_path from dict or use string directly
+                        prod_path = (
+                            prod_val.get("pdf_path")
+                            if isinstance(prod_val, dict)
+                            else prod_val
+                        )
+                        legacy_path_str = (
+                            legacy_val.get("pdf_path")
+                            if isinstance(legacy_val, dict)
+                            else legacy_val
+                        )
+
+                        if prod_path != legacy_path_str:
+                            mismatches.append((doc_id, prod_path, legacy_path_str))
+
+                    if mismatches:
+                        logger.error(
+                            f"⚠️ CRITICAL: Doc ID mapping inconsistency detected! "
+                            f"{len(mismatches)} mismatches in sample. Examples:"
+                        )
+                        for doc_id, prod, leg in mismatches[:2]:
+                            logger.error(
+                                f"  - {doc_id}: production={prod}, legacy={leg}"
+                            )
+                        logger.error(
+                            "This will cause citations to point to wrong PDFs! "
+                            "Consider re-ingesting to sync maps."
+                        )
+                    else:
+                        logger.info(
+                            "✓ Doc ID maps appear consistent (sample check passed)"
+                        )
+
+            # Use production if available, otherwise legacy
+            if production_map:
+                app.state.doc_id_map = production_map
+                loaded = True
+                logger.info(
+                    f"Using production doc_id_map ({len(production_map)} entries)"
+                )
+            elif legacy_map:
+                app.state.doc_id_map = legacy_map
+                loaded = True
+                logger.info(f"Using legacy doc_id_map ({len(legacy_map)} entries)")
 
             if not loaded:
                 logger.info("No doc_id_map.json found, citations will use doc_id only")
@@ -118,6 +223,27 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize indices: {str(e)}")
         # App can still run without indices for health checks
 
+    # Initialize conversation manager (multi-turn chat)
+    try:
+        from app.core.conversation.manager import ConversationManager
+
+        conversation_manager = ConversationManager(
+            redis_url=settings.redis_url,
+            redis_password=settings.redis_password,
+            ttl_hours=settings.conversation_ttl_hours,
+            max_turns_per_conversation=settings.max_turns_per_conversation,
+            max_context_tokens=settings.max_conversation_context_tokens,
+        )
+        app.state.conversation_manager = conversation_manager
+        health = conversation_manager.health_check()
+        logger.info(f"Conversation manager initialized: {health}")
+    except Exception as e:
+        logger.warning(
+            f"Failed to initialize conversation manager (Redis unavailable): {e}. "
+            "Multi-turn chat will be disabled."
+        )
+        app.state.conversation_manager = None
+
     # Configure rate limiter
     configure_rate_limiter(requests_per_minute=60, burst_size=20, per_ip=True)
 
@@ -127,6 +253,15 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("PVCFC RAG API shutting down...")
+
+    # Close Redis connections
+    if hasattr(app.state, "redis_factory") and app.state.redis_factory:
+        try:
+            await app.state.redis_factory.close()
+            logger.info("Redis client shutdown complete")
+        except Exception as e:
+            logger.error(f"Error closing Redis client: {e}", exc_info=True)
+
     logger.info("Shutdown completed")
 
 

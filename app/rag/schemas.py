@@ -31,6 +31,19 @@ class AskRequest(BaseModel):
             "Enable multimodal answer generation with Gemini 2.5 Pro when documents/pages are available"
         ),
     )
+    # Conversation fields (multi-turn chat)
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Conversation ID for multi-turn chat. Auto-generated if not provided.",
+    )
+    user_id: Optional[str] = Field(
+        default=None, description="Optional user ID for conversation tracking"
+    )
+    # REQUIRED: Query type selection (no auto-detect)
+    query_type: Literal["pid", "technical_doc"] = Field(
+        ...,
+        description="Query type: 'pid' for P&ID diagrams, 'technical_doc' for manuals/datasheets/specs",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -137,6 +150,16 @@ class AskResponse(BaseModel):
     meta: Dict[str, Any] = Field(..., description="Metadata (latency, model, k, etc.)")
     warnings: Optional[List[str]] = Field(
         default=None, description="Any warnings or degraded mode indicators"
+    )
+    # Conversation fields (multi-turn chat)
+    conversation_id: Optional[str] = Field(
+        default=None, description="Conversation ID for this interaction"
+    )
+    is_new_conversation: Optional[bool] = Field(
+        default=None, description="True if this is the first turn in a new conversation"
+    )
+    conversation_turn_count: Optional[int] = Field(
+        default=None, description="Total number of turns in this conversation"
     )
     # Debug fields for UI
     retrieval_details: Optional[Dict[str, Any]] = Field(

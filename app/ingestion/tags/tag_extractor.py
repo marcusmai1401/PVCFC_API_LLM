@@ -81,6 +81,11 @@ class TagExtractor:
         # Exclusion patterns
         self.exclude_titles = [re.compile(p) for p in self.filters["exclude_titles"]]
 
+        # Divider line handling (NEW)
+        self.ignore_divider_lines = self.grammar.get(
+            "ignore_divider_lines_in_bubbles", True
+        )
+
     def extract_tags(self, layout: PageLayout) -> List[TagEntity]:
         """
         Extract tags from page layout
@@ -255,18 +260,33 @@ class TagExtractor:
         prefix_y_center = (prefix_bbox[1] + prefix_bbox[3]) / 2
         prefix_font = prefix_span.font_size
 
-        # Find UNIT and SUFFIX candidates near PREFIX (flexible vertical order)
-        unit_candidates = [
-            s
-            for s in all_spans
-            if s.span_id != prefix_span.span_id and self.unit_regex.match(s.text)
-        ]
+        # Define search radius for candidates (font-based, ~100pt max)
+        # This prevents picking up distant noise like legend/note numbers
+        search_radius = max(100, 20 * prefix_font)  # At least 100pt or 20x font height
 
-        suffix_candidates = [
-            s
-            for s in all_spans
-            if s.span_id != prefix_span.span_id and self.suffix_regex.match(s.text)
-        ]
+        # Find UNIT and SUFFIX candidates near PREFIX (flexible vertical order)
+        # NEW: Pre-filter by spatial proximity before scoring
+        unit_candidates = []
+        for s in all_spans:
+            if s.span_id == prefix_span.span_id or not self.unit_regex.match(s.text):
+                continue
+            # Check if within search radius
+            s_x = (s.bbox[0] + s.bbox[2]) / 2
+            s_y = (s.bbox[1] + s.bbox[3]) / 2
+            dist = ((s_x - prefix_x_center) ** 2 + (s_y - prefix_y_center) ** 2) ** 0.5
+            if dist <= search_radius:
+                unit_candidates.append(s)
+
+        suffix_candidates = []
+        for s in all_spans:
+            if s.span_id == prefix_span.span_id or not self.suffix_regex.match(s.text):
+                continue
+            # Check if within search radius
+            s_x = (s.bbox[0] + s.bbox[2]) / 2
+            s_y = (s.bbox[1] + s.bbox[3]) / 2
+            dist = ((s_x - prefix_x_center) ** 2 + (s_y - prefix_y_center) ** 2) ** 0.5
+            if dist <= search_radius:
+                suffix_candidates.append(s)
 
         if not suffix_candidates:
             # SUFFIX is required; UNIT is optional
@@ -275,6 +295,7 @@ class TagExtractor:
         # Find best UNIT (x-aligned and within y-gap tolerance), regardless of above/below
         best_unit = None
         best_unit_score = -1.0
+        unit_has_divider = False
 
         for unit_span in unit_candidates:
             score = self._score_alignment(prefix_span, unit_span, "near", prefix_font)
@@ -282,9 +303,21 @@ class TagExtractor:
                 best_unit_score = score
                 best_unit = unit_span
 
+        # If UNIT score is low/zero but divider exists, retry with relaxed constraints
+        if best_unit_score <= 0 and best_unit is not None:
+            if self._has_horizontal_divider_between(prefix_span, best_unit, layout):
+                logger.debug(
+                    f"Horizontal divider detected between UNIT '{best_unit.text}' and PREFIX '{prefix_span.text}'"
+                )
+                best_unit_score = self._score_alignment_with_divider(
+                    prefix_span, best_unit, prefix_font
+                )
+                unit_has_divider = True
+
         # Find best SUFFIX (x-aligned and within y-gap tolerance), regardless of above/below
         best_suffix = None
         best_suffix_score = -1.0
+        suffix_has_divider = False
 
         for suffix_span in suffix_candidates:
             score = self._score_alignment(prefix_span, suffix_span, "near", prefix_font)
@@ -293,11 +326,31 @@ class TagExtractor:
                 best_suffix = suffix_span
 
         # Must have SUFFIX; UNIT is optional
-        if best_suffix is None or best_suffix_score <= 0:
-            return None
+        if best_suffix is None:
+            return None  # No valid SUFFIX found
 
-        # Compute triplet score
-        triplet_score = self._score_triplet(best_unit, prefix_span, best_suffix, layout)
+        if best_suffix_score <= 0:
+            # Check if there's a horizontal divider (instrument bubble case)
+            # If divider exists, relax y-gap constraint and retry scoring
+            if self._has_horizontal_divider_between(prefix_span, best_suffix, layout):
+                logger.debug(
+                    f"Horizontal divider detected between PREFIX '{prefix_span.text}' and SUFFIX '{best_suffix.text}'"
+                )
+                # Recompute score with relaxed y-gap tolerance for divider case
+                best_suffix_score = self._score_alignment_with_divider(
+                    prefix_span, best_suffix, prefix_font
+                )
+                suffix_has_divider = True
+                if best_suffix_score <= 0:
+                    return None
+            else:
+                return None  # SUFFIX exists but failed alignment, no divider
+
+        # Compute triplet score (pass divider flag to adjust y_uniform penalty)
+        has_divider = unit_has_divider or suffix_has_divider
+        triplet_score = self._score_triplet(
+            best_unit, prefix_span, best_suffix, layout, has_divider
+        )
 
         # Pass threshold check
         if triplet_score < self.pass_threshold:
@@ -313,6 +366,7 @@ class TagExtractor:
             "prefix_span": prefix_span,
             "suffix_span": best_suffix,
             "score": triplet_score,
+            "has_divider": has_divider,
         }
 
         logger.debug(
@@ -357,14 +411,21 @@ class TagExtractor:
         dx_raw = cand_x_center - anchor_x_center
         dy_raw = cand_y_center - anchor_y_center
 
-        # If candidate rotated ~90° relative to anchor, swap axes
-        # (vertical text appears horizontal in PDF coords)
-        if 75 <= abs(delta_rot) <= 105:  # ~90° rotation
-            # Swap: what appears as Y-distance is actually X-distance
+        # Determine if we need to swap axes based on anchor's absolute rotation
+        # If anchor is rotated ~90° (vertical text), swap axes regardless of delta
+        # Otherwise, only swap if candidate is rotated ~90° relative to anchor
+        # Check if rotation is near 90° or 270° (within 15° tolerance)
+        rot_normalized = anchor_rot % 360
+        anchor_is_vertical = (75 <= rot_normalized <= 105) or (
+            255 <= rot_normalized <= 285
+        )
+
+        if anchor_is_vertical or (75 <= abs(delta_rot) <= 105):
+            # Swap: what appears as Y-distance is actually X-distance for vertical text
             x_delta = abs(dy_raw)  # Cross-axis alignment
             y_delta = abs(dx_raw)  # Along-axis distance
         else:
-            # Normal case: same orientation
+            # Normal case: horizontal orientation
             x_delta = abs(dx_raw)
             y_delta = abs(dy_raw)
 
@@ -400,12 +461,93 @@ class TagExtractor:
 
         return alignment_score
 
+    def _score_alignment_with_divider(
+        self, anchor: TextSpan, candidate: TextSpan, anchor_font: float
+    ) -> float:
+        """
+        Score alignment with relaxed y-gap constraint for divider cases
+
+        When a horizontal divider line separates spans (e.g., instrument bubble),
+        the y-gap can be larger than normal while still being a valid triplet.
+
+        Args:
+            anchor: Anchor span (PREFIX)
+            candidate: Candidate span (SUFFIX)
+            anchor_font: Anchor font size
+
+        Returns:
+            Alignment score with relaxed y-gap tolerance
+        """
+        anchor_bbox = anchor.bbox
+        cand_bbox = candidate.bbox
+
+        anchor_x_center = (anchor_bbox[0] + anchor_bbox[2]) / 2
+        cand_x_center = (cand_bbox[0] + cand_bbox[2]) / 2
+
+        anchor_y_center = (anchor_bbox[1] + anchor_bbox[3]) / 2
+        cand_y_center = (cand_bbox[1] + cand_bbox[3]) / 2
+
+        # Compute rotation delta
+        anchor_rot = anchor.rotation_deg
+        cand_rot = candidate.rotation_deg
+        delta_rot = (cand_rot - anchor_rot) % 360
+        if delta_rot > 180:
+            delta_rot -= 360
+
+        # Transform to anchor's reference frame
+        dx_raw = cand_x_center - anchor_x_center
+        dy_raw = cand_y_center - anchor_y_center
+
+        # Same logic as _score_alignment
+        rot_normalized = anchor_rot % 360
+        anchor_is_vertical = (75 <= rot_normalized <= 105) or (
+            255 <= rot_normalized <= 285
+        )
+
+        if anchor_is_vertical or (75 <= abs(delta_rot) <= 105):
+            x_delta = abs(dy_raw)
+            y_delta = abs(dx_raw)
+        else:
+            x_delta = abs(dx_raw)
+            y_delta = abs(dy_raw)
+
+        # X-center alignment (same as normal)
+        anchor_width = anchor_bbox[2] - anchor_bbox[0]
+        cand_width = cand_bbox[2] - cand_bbox[0]
+        min_width = min(anchor_width, cand_width)
+
+        x_tolerance = self.x_tolerance_ratio * min_width
+
+        if x_delta > x_tolerance:
+            return 0.0  # Not aligned
+
+        # RELAXED Y-spacing for divider case
+        # Allow up to 3x the normal max gap (to account for divider line thickness + padding)
+        median_font = anchor_font
+        y_min = self.y_gap_range[0] * median_font
+        y_max = self.y_gap_range[1] * median_font * 3.0  # 3x relaxation
+
+        if not (y_min <= y_delta <= y_max):
+            return 0.0  # Still too far even with relaxation
+
+        # Font size similarity (same as normal)
+        font_delta = abs(candidate.font_size - anchor_font)
+        if font_delta > self.font_delta_pt:
+            return 0.0
+
+        # Scoring with relaxed distance
+        distance = (x_delta / x_tolerance) + (y_delta / y_max)
+        alignment_score = 1.0 / (1.0 + distance)
+
+        return alignment_score
+
     def _score_triplet(
         self,
         unit_span: Optional[TextSpan],
         prefix_span: TextSpan,
         suffix_span: TextSpan,
         layout: PageLayout,
+        has_divider: bool = False,
     ) -> float:
         """
         Score complete triplet using weighted features
@@ -415,6 +557,7 @@ class TagExtractor:
             prefix_span: PREFIX span
             suffix_span: SUFFIX span
             layout: Page layout
+            has_divider: Whether a divider line exists between components
 
         Returns:
             Total score
@@ -458,6 +601,7 @@ class TagExtractor:
             score += self.score_weights["x_align"] * x_alignment
 
         # +2: Vertical spacing uniformity
+        # If divider exists, reduce penalty for non-uniform spacing (expected due to divider)
         prefix_y = (prefix_bbox[1] + prefix_bbox[3]) / 2
         suffix_y = (suffix_bbox[1] + suffix_bbox[3]) / 2
 
@@ -471,10 +615,14 @@ class TagExtractor:
             avg_gap = (gap1 + gap2) / 2
             if avg_gap > 0:
                 uniformity = 1.0 - min(gap_diff / avg_gap, 1.0)
-                score += self.score_weights["y_uniform"] * uniformity
+                # Reduce weight if divider exists (spacing non-uniformity is expected)
+                weight = self.score_weights["y_uniform"] * (0.5 if has_divider else 1.0)
+                score += weight * uniformity
         else:
             # No UNIT, give partial score if PREFIX-SUFFIX gap is reasonable
-            score += self.score_weights["y_uniform"] * 0.5
+            # Reduce weight if divider exists
+            weight = self.score_weights["y_uniform"] * (0.5 if has_divider else 1.0)
+            score += weight * 0.5
 
         # +2: Font size similarity
         fonts = [prefix_span.font_size, suffix_span.font_size]
@@ -553,6 +701,8 @@ class TagExtractor:
             "VARIANT",
             exclude_ids=[prefix_span.span_id, suffix_span.span_id]
             + ([unit_span.span_id] if unit_span else []),
+            reference_rotation=prefix_span.rotation_deg,  # NEW: pass rotation for checking
+            strict_alignment=True,  # NEW: require strict spatial alignment
         )
 
         # Use variant from suffix if found, otherwise use nearby span
@@ -641,6 +791,8 @@ class TagExtractor:
         search_bbox: List[float],
         role: str,
         exclude_ids: List[int] = None,
+        reference_rotation: float = 0.0,
+        strict_alignment: bool = False,
     ) -> Optional[TextSpan]:
         """
         Find a span of specific role within search bbox
@@ -673,6 +825,15 @@ class TagExtractor:
             if not is_match:
                 continue
 
+            # NEW: Check rotation alignment if strict mode enabled
+            if strict_alignment:
+                delta_rot = abs((span.rotation_deg - reference_rotation) % 360)
+                if delta_rot > 180:
+                    delta_rot = 360 - delta_rot
+                if delta_rot > self.rotation_tolerance:
+                    # Rotation mismatch - skip this candidate
+                    continue
+
             # Check if within search bbox
             span_center = [
                 (span.bbox[0] + span.bbox[2]) / 2,
@@ -702,6 +863,182 @@ class TagExtractor:
         x, y = point
         x0, y0, x1, y1 = bbox
         return x0 <= x <= x1 and y0 <= y <= y1
+
+    def _has_horizontal_divider_between(
+        self, span1: TextSpan, span2: TextSpan, layout: PageLayout
+    ) -> bool:
+        """
+        Check if there's a divider line between two spans (rotation-aware)
+
+        Used for instrument bubbles with internal dividers:
+        ┌─────┐
+        │ 04  │
+        │ PI  │
+        ├─────┤  ← Divider line (horizontal for 0°, vertical for 90°)
+        │3200 │
+        └─────┘
+
+        Handles rotated pages:
+        - 0°/180°: horizontal divider (Y constant)
+        - 90°/270°: vertical divider (X constant)
+
+        Args:
+            span1: First span (e.g., PREFIX)
+            span2: Second span (e.g., SUFFIX)
+            layout: Page layout with drawings
+
+        Returns:
+            True if divider line found between spans
+        """
+        # Check config flag
+        if not self.ignore_divider_lines:
+            return False
+
+        if not layout.drawings:
+            return False
+
+        # Define the region between the two spans
+        bbox1 = span1.bbox
+        bbox2 = span2.bbox
+
+        # Determine orientation based on span rotation
+        # Assume both spans have similar rotation (they're in the same bubble)
+        rotation = span1.rotation_deg
+        is_rotated_90 = (
+            75 <= abs(rotation % 360 - 90) <= 15
+            or 75 <= abs(rotation % 360 - 270) <= 15
+        )
+
+        # Use median font size for scaling
+        median_font = (span1.font_size + span2.font_size) / 2
+        margin = max(5, 0.3 * median_font)  # At least 5pt or 30% of font height
+
+        if is_rotated_90:
+            # 90°/270° rotation: divider is vertical, spans separated horizontally
+            # X-range: between the two spans
+            x_min = min(bbox1[2], bbox2[2])  # Right edge of left span
+            x_max = max(bbox1[0], bbox2[0])  # Left edge of right span
+
+            if x_min >= x_max:  # Spans don't have horizontal gap
+                return False
+
+            # Y-range: union of both spans (with margin)
+            y_min = min(bbox1[1], bbox2[1]) - margin
+            y_max = max(bbox1[3], bbox2[3]) + margin
+            span_height = y_max - y_min
+
+            # Gap must be small (divider in tight bubble)
+            gap_width = x_max - x_min
+            max_gap = (
+                max(bbox1[2] - bbox1[0], bbox2[2] - bbox2[0]) * 1.5
+            )  # 1.5x span width
+            if gap_width > max_gap:
+                return False  # Gap too large, not a bubble divider
+        else:
+            # 0°/180° rotation: divider is horizontal, spans separated vertically
+            # Y-range: between the two spans
+            y_min = min(bbox1[3], bbox2[3])  # Bottom of upper span
+            y_max = max(bbox1[1], bbox2[1])  # Top of lower span
+
+            if y_min >= y_max:  # Spans don't have vertical gap
+                return False
+
+            # X-range: union of both spans (with margin)
+            x_min = min(bbox1[0], bbox2[0]) - margin
+            x_max = max(bbox1[2], bbox2[2]) + margin
+            span_width = x_max - x_min
+
+            # Gap must be small (divider in tight bubble)
+            gap_height = y_max - y_min
+            max_gap = (
+                max(bbox1[3] - bbox1[1], bbox2[3] - bbox2[1]) * 1.5
+            )  # 1.5x span height
+            if gap_height > max_gap:
+                return False  # Gap too large, not a bubble divider
+
+        # Check for divider lines in this region (horizontal or vertical based on rotation)
+        for drawing in layout.drawings:
+            if drawing.type != "line":
+                continue
+
+            # Line coords: [x0, y0, x1, y1]
+            coords = drawing.coords
+            if len(coords) < 4:
+                continue
+
+            line_x0, line_y0, line_x1, line_y1 = coords[:4]
+
+            # Scale tolerance by page dimensions
+            orientation_tolerance = max(
+                2, 0.002 * max(layout.page_width, layout.page_height)
+            )
+
+            if is_rotated_90:
+                # Check for VERTICAL divider (X constant, Y varies)
+                if abs(line_x0 - line_x1) > orientation_tolerance:  # Not vertical
+                    continue
+
+                line_x = (line_x0 + line_x1) / 2
+
+                # Check if line X is within the gap
+                if not (x_min <= line_x <= x_max):
+                    continue
+
+                # Check if line Y overlaps with span Y range
+                line_y_min = min(line_y0, line_y1)
+                line_y_max = max(line_y0, line_y1)
+                line_length = abs(line_y_max - line_y_min)
+
+                # Line must be substantial portion of span height (not just tiny segment)
+                if line_length < span_height * 0.4:  # At least 40% of span height
+                    continue
+
+                # Check if line is too long (crossing multiple bubbles)
+                if line_length > span_height * 2.0:  # No more than 2x span height
+                    continue
+
+                # Check overlap
+                if line_y_max >= y_min and line_y_min <= y_max:
+                    logger.debug(
+                        f"Found vertical divider (rotated 90°) between spans: "
+                        f"line X={line_x:.1f}, gap=[{x_min:.1f}, {x_max:.1f}], "
+                        f"line_len={line_length:.1f}, span_height={span_height:.1f}"
+                    )
+                    return True
+            else:
+                # Check for HORIZONTAL divider (Y constant, X varies)
+                if abs(line_y0 - line_y1) > orientation_tolerance:  # Not horizontal
+                    continue
+
+                line_y = (line_y0 + line_y1) / 2
+
+                # Check if line Y is within the gap
+                if not (y_min <= line_y <= y_max):
+                    continue
+
+                # Check if line X overlaps with span X range
+                line_x_min = min(line_x0, line_x1)
+                line_x_max = max(line_x0, line_x1)
+                line_length = abs(line_x_max - line_x_min)
+
+                # Line must be substantial portion of span width (not just tiny segment)
+                if line_length < span_width * 0.4:  # At least 40% of span width
+                    continue
+
+                # Check if line is too long (crossing multiple bubbles)
+                if line_length > span_width * 2.0:  # No more than 2x span width
+                    continue
+
+                # Check overlap
+                if line_x_max >= x_min and line_x_min <= x_max:
+                    logger.debug(
+                        f"Found horizontal divider between spans: "
+                        f"line Y={line_y:.1f}, gap=[{y_min:.1f}, {y_max:.1f}], "
+                        f"line_len={line_length:.1f}, span_width={span_width:.1f}"
+                    )
+                    return True
+
+        return False
 
     def save_tags(self, tags: List[TagEntity], output_file: Path):
         """

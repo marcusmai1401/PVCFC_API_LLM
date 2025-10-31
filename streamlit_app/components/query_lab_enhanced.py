@@ -255,12 +255,37 @@ def render(vision_mode=False):
         st.session_state.query_results = None
     if "query_history" not in st.session_state:
         st.session_state.query_history = []
+    # Initialize conversation state (multi-turn chat)
+    if "conversation_id" not in st.session_state:
+        st.session_state.conversation_id = None
+    if "conversation_history" not in st.session_state:
+        st.session_state.conversation_history = []
 
     # Main layout
     col1, col2 = st.columns([1, 2])
 
     with col1:
         st.subheader("⚙️ Query Configuration")
+
+        # Conversation controls
+        st.markdown("**💬 Conversation**")
+        col_conv1, col_conv2 = st.columns([2, 1])
+        with col_conv1:
+            if st.session_state.conversation_id:
+                st.success(f"Active: ...{st.session_state.conversation_id[-8:]}")
+                st.caption(f"{len(st.session_state.conversation_history)} turns")
+            else:
+                st.info("No active conversation")
+        with col_conv2:
+            if st.button(
+                "🔄 New", key="new_conversation_btn", help="Start new conversation"
+            ):
+                st.session_state.conversation_id = None
+                st.session_state.conversation_history = []
+                st.success("New conversation started")
+                st.rerun()
+
+        st.divider()
 
         # Show API endpoint status
         with st.expander("🌐 API Status", expanded=True):
@@ -467,6 +492,10 @@ def render(vision_mode=False):
                 api_params["vision_confidence_threshold"] = confidence_threshold
                 api_params["ocr_fallback"] = enable_ocr_fallback
 
+            # Add conversation_id if exists (multi-turn chat)
+            if st.session_state.conversation_id:
+                api_params["conversation_id"] = st.session_state.conversation_id
+
             # Show spinner while processing
             with st.spinner("🔄 Processing query..."):
                 start_time = time.time()
@@ -487,6 +516,27 @@ def render(vision_mode=False):
                 if result["success"]:
                     # Store results
                     st.session_state.query_results = result["data"]
+
+                    # Update conversation state (multi-turn chat)
+                    response_data = result["data"]
+                    if "conversation_id" in response_data:
+                        st.session_state.conversation_id = response_data[
+                            "conversation_id"
+                        ]
+                    if "conversation_turn_count" in response_data:
+                        # Add to conversation history display
+                        st.session_state.conversation_history.append(
+                            {
+                                "role": "user",
+                                "content": query,
+                            }
+                        )
+                        st.session_state.conversation_history.append(
+                            {
+                                "role": "assistant",
+                                "content": response_data.get("answer", ""),
+                            }
+                        )
 
                     # Add to history
                     st.session_state.query_history.append(

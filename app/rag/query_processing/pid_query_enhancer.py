@@ -277,22 +277,60 @@ class PIDQueryEnhancer:
         Returns:
             Dict with detected components or None
         """
-        # Try to use TagNormalizer's parse_tag_components first
-        parsed = self.tag_normalizer.parse_tag_components(query)
-        if parsed:
-            # Build components dict from parsed result
+        # NEW: Extract actual tag from query first (handles Vietnamese queries)
+        # E.g., "Tìm thiết bị 04 PI 3200" → "04 PI 3200"
+        tag_match = re.search(
+            r"\b(\d{1,2})\s+([A-Z]{1,6})\s+(\d{3,5})([A-Z])?\b", query.upper()
+        )
+        if tag_match:
             components = {}
-            if parsed.get("unit"):
-                components["unit"] = parsed["unit"]
-            if parsed.get("prefix"):
-                components["prefix"] = parsed["prefix"]
-            if parsed.get("suffix"):
-                components["suffix"] = parsed["suffix"]
-            if parsed.get("variant"):
-                components["variant"] = parsed["variant"]
+            components["unit"] = tag_match.group(1).zfill(2)  # Pad unit to 2 digits
+            components["prefix"] = tag_match.group(2)
+            components["suffix"] = tag_match.group(3)
+            if tag_match.group(4):  # Variant (optional)
+                components["variant"] = tag_match.group(4)
+            logger.debug(f"Extracted tag components from query: {components}")
+            return components
 
-            logger.debug(f"Parsed components from full tag: {components}")
-            return components if components else None
+        # Fallback: Try to use TagNormalizer's parse_tag_components
+        # (only for queries that are already clean tags)
+        parsed = self.tag_normalizer.parse_tag_components(query)
+        if parsed and parsed.get("prefix") and len(parsed.get("prefix", "")) <= 6:
+            # Validate prefix is not a Vietnamese word (all caps, 2-6 letters)
+            prefix = parsed.get("prefix", "")
+            # Skip if prefix looks like Vietnamese word (contains common VI patterns)
+            # Common Vietnamese words that might appear in queries
+            vietnamese_words = [
+                "TRONG",
+                "NGOAI",
+                "GIUA",
+                "TREN",
+                "DUOI",
+                "BEN",
+                "CANH",
+                "PHIA",
+                "DAU",
+                "CUOI",
+            ]
+            vietnamese_pattern = (
+                r"(ONG|UNG|ANG|ING|UAO|UYE|TRONG|NGOAI|GIUA)"  # Common VI patterns
+            )
+            if prefix in vietnamese_words or re.search(vietnamese_pattern, prefix):
+                logger.debug(f"Skipping Vietnamese word as prefix: {prefix}")
+            else:
+                # Build components dict from parsed result
+                components = {}
+                if parsed.get("unit"):
+                    components["unit"] = parsed["unit"]
+                if parsed.get("prefix"):
+                    components["prefix"] = parsed["prefix"]
+                if parsed.get("suffix"):
+                    components["suffix"] = parsed["suffix"]
+                if parsed.get("variant"):
+                    components["variant"] = parsed["variant"]
+
+                logger.debug(f"Parsed components from full tag: {components}")
+                return components if components else None
 
         # Fallback: Token-based parsing for partial queries
         tokens = query.upper().strip().split()

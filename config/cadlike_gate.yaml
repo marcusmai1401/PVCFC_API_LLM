@@ -36,8 +36,8 @@ regex_3piece:
 
 # Thresholds
 thresholds:
-  cadlike: 0.60              # S >= 0.60 → CAD-like
-  gray_zone_low: 0.45        # Gray zone [0.45, 0.60)
+  cadlike: 0.55              # S >= 0.55 → CAD-like (lowered from 0.60 for P&ID Ammonia Unit)
+  gray_zone_low: 0.45        # Gray zone [0.45, 0.55)
   gray_zone_boost_keywords: true  # Boost gray zone if filename has keywords
 
 # Gray zone filename boost keywords

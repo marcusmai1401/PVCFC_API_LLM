@@ -15,6 +15,7 @@ from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
+from app.core.logging_filter import redact_secrets
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -134,13 +135,21 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             "openai_api_key",
             "gemini_api_key",
             "api-key",
+            "password",
+            "token",
+            "access_token",
+            "refresh_token",
         }
 
         for key, value in data.items():
             if key.lower() in sensitive_keys:
                 masked[key] = "***MASKED***"
             else:
-                masked[key] = value
+                # Also apply redaction filter to header values
+                if isinstance(value, str):
+                    masked[key] = redact_secrets(value)
+                else:
+                    masked[key] = value
 
         return masked
 
@@ -151,32 +160,50 @@ def setup_logging():
     # Remove default handler
     logger.remove()
 
-    # Custom JSON formatter for structured logging
+    # Custom JSON formatter for structured logging with secret redaction
     def json_formatter(record):
-        """Format log record as JSON with structured fields"""
+        """Format log record as JSON with structured fields and secret redaction"""
         extra = record["extra"]
+
+        # Redact message
+        message = redact_secrets(str(record["message"]))
+
         log_entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "level": record["level"].name,
             "logger": record["name"],
             "function": record["function"],
             "line": record["line"],
-            "message": record["message"],
+            "message": message,
             "app_env": settings.app_env,
         }
-        # Merge extra fields
-        log_entry.update(extra)
+        # Merge extra fields (also redact string values)
+        for key, value in extra.items():
+            if isinstance(value, str):
+                log_entry[key] = redact_secrets(value)
+            else:
+                log_entry[key] = value
+
         return json.dumps(log_entry) + "\n"
+
+    # Custom format function with redaction for console
+    def redacted_format(record):
+        """Format with secret redaction for console output"""
+        # Redact message before formatting
+        record["message"] = redact_secrets(str(record["message"]))
+        return (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}:{function}:{line}</cyan> - "
+            "<level>{message}</level> | "
+            "<dim>{extra}</dim>\n"
+        )
 
     # Console handler với format đẹp cho dev
     if settings.app_env in ["local", "dev"]:
         logger.add(
             sink=sys.stdout,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}:{function}:{line}</cyan> - "
-            "<level>{message}</level> | "
-            "<dim>{extra}</dim>",
+            format=redacted_format,
             level=settings.log_level,
             colorize=True,
         )
@@ -214,7 +241,7 @@ def setup_logging():
     )
 
     logger.info(
-        f"Logging initialized - Level: {settings.log_level}, Env: {settings.app_env}"
+        f"Logging initialized with secret redaction - Level: {settings.log_level}, Env: {settings.app_env}"
     )
 
 

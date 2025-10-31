@@ -18,9 +18,10 @@
 8. [Phase 5: Reranking](#8-phase-5-reranking)
 9. [Phase 6: Answer Generation](#9-phase-6-answer-generation)
 10. [Phase 7: Response Building](#10-phase-7-response-building)
-11. [Components Deep Dive](#11-components-deep-dive)
-12. [Error Handling & Resilience](#12-error-handling--resilience)
-13. [Performance & Optimization](#13-performance--optimization)
+11. [Phase 8: Multi-turn Conversation Management](#11-phase-8-multi-turn-conversation-management-new)
+12. [Components Deep Dive](#12-components-deep-dive)
+13. [Error Handling & Resilience](#13-error-handling--resilience)
+14. [Performance & Optimization](#14-performance--optimization)
 
 ---
 
@@ -33,6 +34,65 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 - ✅ **Multimodal**: Hỗ trợ cả text và vision (PDF pages)
 - ✅ **Production-ready**: Weaviate + OpenSearch, defensive programming
 - ✅ **Scalable**: Xử lý hàng nghìn tài liệu, hỗ trợ mở rộng
+- ✅ **Dual Pipeline**: Tự động phân loại và xử lý P&ID vs Technical Doc
+
+### 1.0 Dual Pipeline Architecture (⭐ QUAN TRỌNG)
+
+> **Hệ thống có 2 PIPELINE SONG SONG** tự động phân loại tài liệu ngay từ ingestion:
+
+```
+                         PDF INPUT
+                             │
+                             ↓
+                    ┌────────────────┐
+                    │ CAD-like Gate  │ ← AUTO-DETECT (8 features)
+                    │ Score = Σw×f   │
+                    └────────┬───────┘
+                             │
+                ┌────────────┴─────────────┐
+                │                          │
+          score ≥ 0.55               score < 0.55
+                │                          │
+                ↓                          ↓
+    ╔═══════════════════════╗    ╔═══════════════════════╗
+    ║  P&ID PIPELINE        ║    ║  TECH DOC PIPELINE    ║
+    ║  (Extended)           ║    ║  (Standard)           ║
+    ╚═══════════════════════╝    ╚═══════════════════════╝
+
+    INGESTION:                    INGESTION:
+    ├─ Text extraction            ├─ Text extraction
+    ├─ PageLayout (bbox+font)⭐   └─ Chunking
+    ├─ TagExtractor (triplets)⭐
+    ├─ Crop generation (PNG) ⭐
+    └─ Standard chunking
+
+    INDEXING:                     INDEXING:
+    ├─ rag_chunks (shared)        └─ rag_chunks
+    └─ pvcfc_pid_tags ⭐
+
+    RETRIEVAL:                    RETRIEVAL:
+    ├─ Branch A: Tags index ⭐    └─ Single branch
+    ├─ Branch B: Chunks index         (BM25 + Weaviate)
+    └─ RRF Fusion (2 branches)
+```
+
+**Key Differences:**
+
+| Aspect | P&ID Pipeline | Technical Doc Pipeline |
+|--------|--------------|------------------------|
+| **Auto-detect** | CAD-like Gate score ≥ 0.55 | score < 0.55 |
+| **Ingestion** | Text + **Layout + Tags + Crops** | Text + Chunks only |
+| **Indexes** | **2**: rag_chunks + pvcfc_pid_tags | **1**: rag_chunks |
+| **Retrieval** | **2 branches** parallel | **1 branch** |
+| **Bbox** | ✅ Stored in tags | ❌ Not tracked |
+| **Crops** | ✅ PNG crops generated | ❌ Not generated |
+| **Enable** | `ENABLE_PID_TAGS=true` | Always on |
+
+**Critical Notes:**
+- P&ID documents **ALSO HAVE** standard chunks → fallback to semantic search
+- Auto-detection at ingestion is automatic via CAD-like Gate; no manual labeling required
+- Both pipelines share BM25 + Weaviate foundation
+- Query routing at query-time is NOT automatic. The client must explicitly select `query_type` = `pid` or `technical_doc`. Auto-route is not implemented and not planned.
 
 ### 1.2 Tech Stack
 
@@ -52,175 +112,165 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 
 > **Note**: Hybrid Modern mode (`USE_HYBRID_MODERN=true`) is the **default production mode**, combining Weaviate + OpenSearch for best performance.
 
-### 1.3 Architecture Diagram
+### 1.3 Architecture Diagram - Dual Pipeline
+
+#### OFFLINE PIPELINE (Build Time) - 2 Nhánh Song Song
 
 ```
-┌─────────────┐
-│  Documents  │  (PDF files in D:\Data_Raw)
-└──────┬──────┘
-       │
-       ↓
-┌───────────────────────────────────────────────────────────────────┐
-│              OFFLINE PIPELINE (Build Time)                        │
-├───────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌────────────┐    ┌──────────┐    ┌──────────────┐               │
-│  │  Ingest    │ →  │  Chunk   │ →  │   Dedup      │               │
-│  │ (PaddleOCR)│    │(Semantic)│    │  (content)   │               │
-│  └──────┬─────┘    └──────────┘    └──────┬───────┘               │
-│         │                                  │                      │
-│         │ P&ID Detection                   │                      │
-│         ↓                                  ↓                      │
-│  ┌──────────────────────────┐   ┌──────────────┐                  │
-│  │  CAD-like Gate           │   │  chunks.jsonl│                  │
-│  │  (Auto-detect P&ID)      │   │              │                  │
-│  └──────┬───────────────────┘   └──────┬───────┘                  │
-│         │ is_cadlike=true              │                          │
-│         ↓                              │                          │
-│  ┌──────────────────────────┐          │                          │
-│  │  Page Layout Builder     │          │                          │
-│  │  • PyMuPDF vector text   │          │                          │
-│  │  • OCR fallback          │          │                          │
-│  │  • Vector drawings       │          │                          │
-│  └──────┬───────────────────┘          │                          │
-│         │                              │                          │
-│         ↓                              │                          │
-│  ┌──────────────────────────┐          │                          │
-│  │  Tag Extractor           │          │                          │
-│  │  • CODE-anchored triplet │          │                          │
-│  │  • AREA-CODE-NUM-SUFFIX  │          │                          │
-│  │  • Exclusion zones       │          │                          │
-│  └──────┬───────────────────┘          │                          │
-│         │                              │                          │
-│         ↓                              ↓                          │
-│  ┌──────────────┐           ┌──────────────────────────┐          │
-│  │  tags.jsonl  │           │   Standard Indexing      │          │
-│  │  telemetry   │           │                          │          │
-│  └──────┬───────┘           └──────┬───────────────────┘          │
-│         │                          │                              │
-│         ↓                    ┌─────┴──────────┐                   │
-│  ┌──────────────────┐        ↓                ↓                   │
-│  │  OpenSearch      │  ┌──────────────┐  ┌──────────────┐         │
-│  │  Index:          │  │  Weaviate    │  │  OpenSearch  │         │
-│  │  pvcfc_pid_tags  │  │  Collection  │  │  Index       │         │
-│  │  (Tag sidecar)   │  │  "Chunk"     │  │  "rag_chunks"│         │
-│  └──────────────────┘  └──────────────┘  └──────────────┘         │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
-                           │
-                           ↓
-┌───────────────────────────────────────────────────────────────────┐
-│                 ONLINE PIPELINE (Query Time)                      │
-├───────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────┐                                                     │
-│  │  Query   │  "What is 04-PIC-2046C max pressure?"               │
-│  └────┬─────┘                                                     │
-│       │                                                           │
-│       ↓                                                           │
-│  ┌─────────────────────────────────────────┐                      │
-│  │   Query Transform + P&ID Enhancement    │                      │
-│  │  • Normalize, intent detection          │                      │
-│  │  • Tag detection: [04-PIC-2046C]        │                      │
-│  │  • Variants: [PIC2046C, 04PIC2046C, ... │                      │
-│  │  • Query type: tag_focused              │                      │
-│  └──────────────────┬──────────────────────┘                      │
-│                     │                                             │
-│                     ↓                                             │
-│  ┌────────────────────────────────────────────┐                   │
-│  │      HYBRID RETRIEVAL (Parallel)           │                   │
-│  │                                            │                   │
-│  │  ┌──────────────┐      ┌──────────────┐    │                   │
-│  │  │  Weaviate    │      │  OpenSearch  │    │                   │
-│  │  │  (Semantic)  │      │   (BM25)     │    │                   │
-│  │  │  + Tag       │      │  + Tag       │    │                   │
-│  │  │    filter    │      │    boosting  │    │                   │
-│  │  └──────┬───────┘      └──────┬───────┘    │                   │
-│  │         │                     │            │                   │
-│  │         └──────────┬──────────┘            │                   │
-│  │                    ↓                       │                   │
-│  │         ┌────────────────────┐             │                   │
-│  │         │   Adaptive RRF     │             │                   │
-│  │         │   (Query-type      │             │                   │
-│  │         │    aware weights)  │             │                   │
-│  │         └──────────┬─────────┘             │                   │
-│  └────────────────────┼───────────────────────┘                   │
-│                       │                                           │
-│                       ↓                                           │
-│  ┌─────────────────────────────────────┐                          │
-│  │   PID Tag Reranking (Optional)      │                          │
-│  │  • Exact metadata match: ×10.0      │                          │
-│  │  • Text phrase match: ×5.0          │                          │
-│  │  • Fuzzy match (≥90%): ×2.0-3.0     │                          │
-│  │  • Tag-parameter proximity: ×3.0    │                          │
-│  └──────────────────┬──────────────────┘                          │
-│                     │                                             │
-│                     ↓                                             │
-│  ┌───────────────────────────────────┐                            │
-│  │   BGE CrossEncoder Rerank         │  (Currently ENABLED)       │
-│  │   BAAI/bge-reranker-base          │                            │
-│  └────────────────┬──────────────────┘                            │
-│                   │                                               │
-│                   ↓                                               │
-│  ┌────────────────────────────────┐                               │
-│  │   Top-K Reranked Results       │  (k=8 default)                │
-│  └──────────────┬─────────────────┘                               │
-│                 │                                                 │
-│                 ↓                                                 │
-│  ┌────────────────────────────────────┐                           │
-│  │      GENERATION PIPELINE           │                           │
-│  │                                    │                           │
-│  │  ┌──────────────────────────┐      │                           │
-│  │  │ Strategy: Text or Vision?│      │                           │
-│  │  └────────┬────────┬────────┘      │                           │
-│  │           │        │               │                           │
-│  │      Text │        │ Vision        │                           │
-│  │           ↓        ↓               │                           │
-│  │  ┌─────────────┐  ┌─────────────┐  │                           │
-│  │  │ Text Models │  │ Gemini 2.5  │  │                           │
-│  │  │ Production: │  │ Pro (Vision)│  │                           │
-│  │  │ 2.5 Pro     │  │ + PDF Pages │  │                           │
-│  │  │ Light Mode: │  │             │  │                           │
-│  │  │ 2.5 Flash   │  │             │  │                           │
-│  │  └──────┬──────┘  └──────┬──────┘  │                           │
-│  │         │                │         │                           │
-│  │         └────────┬───────┘         │                           │
-│  │                  ↓                 │                           │
-│  │        ┌──────────────────┐        │                           │
-│  │        │ Answer+Citation  │        │                           │
-│  │        │   Extraction     │        │                           │
-│  │        └────────┬─────────┘        │                           │
-│  │                 ↓                  │                           │
-│  │        ┌──────────────────┐        │                           │
-│  │        │ Post-validation  │        │                           │
-│  │        │  (CiteFix-lite)  │        │                           │
-│  │        └────────┬─────────┘        │                           │
-│  │                 ↓                  │                           │
-│  │        ┌──────────────────┐        │                           │
-│  │        │ Confidence Score │        │                           │
-│  │        │   Calculation    │        │                           │
-│  │        └────────┬─────────┘        │                           │
-│  └─────────────────┼──────────────────┘                           │
-│                    ↓                                              │
-│  ┌───────────────────────────────┐                                │
-│  │    BUILD API RESPONSE         │                                │
-│  │  • Answer text                │                                │
-│  │  • Citations (doc_id + page)  │                                │
-│  │  • Confidence [0,1]           │                                │
-│  │  • Metadata                   │                                │
-│  │  • Timing breakdown           │                                │
-│  └─────────────────┬─────────────┘                                │
-│                    │                                              │
-└────────────────────┼──────────────────────────────────────────────┘
-                     ↓
-              ┌──────────────┐
-              │ JSON Response│
-              └──────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PDF DOCUMENTS (D:\Data_Raw)                           │
+└────────────────────────────────┬─────────────────────────────────────────┘
+                                 │
+                                 ↓
+                    ┌────────────────────────┐
+                    │   CAD-LIKE GATE        │
+                    │   Score = Σ(w×f)       │
+                    │   Threshold: 0.55      │
+                    └────────┬───────┬───────┘
+                             │       │
+                   score < 0.55     score ≥ 0.55
+                             │       │
+        ┌────────────────────┘       └──────────────────┐
+        │                                               │
+        ↓                                               ↓
+╔═══════════════════════════════╗       ╔═══════════════════════════════╗
+║  TECHNICAL DOC PIPELINE       ║       ║     P&ID PIPELINE             ║
+║  (Standard - Always On)       ║       ║  (Extended - if enabled)      ║
+╚═══════════════════════════════╝       ╚═══════════════════════════════╝
+
+┌─ TECH DOC ─────────────────┐   ┌─ P&ID ──────────────────────────────┐
+│                             │   │                                     │
+│ 1. PDF Parse (PyMuPDF)      │   │ 1. PDF Parse (PyMuPDF)              │
+│    ↓                        │   │    ↓                                │
+│ 2. OCR if needed            │   │ 2. OCR if needed                    │
+│    (PaddleOCR)              │   │    (PaddleOCR)                      │
+│    ↓                        │   │    ↓                                │
+│ 3. Extract Tables           │   │ 3. Extract Tables                   │
+│    ↓                        │   │    ↓                                │
+│ 4. Semantic Chunking        │   │ 4. Semantic Chunking                │
+│    (1000 chars, 200 overlap)│   │    (1000 chars, 200 overlap)        │
+│    ↓                        │   │    ↓                                │
+│ 5. Tag extraction (light)   │   │ 5. ⭐ Page Layout Builder           │
+│    from text                │   │    • Bbox + font + rotation         │
+│    ↓                        │   │    • Vector drawings                │
+│ 6. Dedup (file hash only)   │   │    ↓                                │
+│    ↓                        │   │ 6. ⭐ Tag Extractor                 │
+│ OUTPUT:                     │   │    • CODE-anchored assembly         │
+│ • chunks.jsonl              │   │    • Triplets: UNIT-PREFIX-SUFFIX   │
+│                             │   │    • Bbox + confidence              │
+│                             │   │    ↓                                │
+│                             │   │ 7. ⭐ Crop Generation (lazy)        │
+│                             │   │    • PNG crops of tag bboxes        │
+│                             │   │    ↓                                │
+│                             │   │ 8. Tag extraction (light) from text │
+│                             │   │    ↓                                │
+│                             │   │ 9. Dedup (file hash only)           │
+│                             │   │    ↓                                │
+│                             │   │ OUTPUT:                             │
+│                             │   │ • chunks.jsonl (ALSO!)              │
+│                             │   │ • entities/tags.jsonl ⭐            │
+│                             │   │ • page_layout/*.json ⭐             │
+│                             │   │ • crops/*.png ⭐ (lazy)             │
+└─────────────┬───────────────┘   └──────────────┬──────────────────────┘
+              │                                  │
+              │                                  │
+              └──────────┬───────────────────────┘
+                         │
+                         ↓
+        ┌────────────────────────────────────────┐
+        │        INDEXING (Both Pipelines)       │
+        ├────────────────────────────────────────┤
+        │                                        │
+        │ FROM: chunks.jsonl (Both pipelines)    │
+        │   ↓                                    │
+        │ ┌──────────────┐  ┌──────────────┐     │
+        │ │  Weaviate    │  │  OpenSearch  │     │
+        │ │  Collection  │  │  rag_chunks  │     │
+        │ │  "Chunk"     │  │  (BM25)      │     │
+        │ └──────────────┘  └──────────────┘     │
+        │                                        │
+        │ FROM: entities/tags.jsonl (P&ID only)  │
+        │   ↓                                    │
+        │ ┌──────────────────────────┐           │
+        │ │  OpenSearch              │           │
+        │ │  pvcfc_pid_tags ⭐       │           │
+        │ │  (Sidecar for P&ID tags) │           │
+        │ └──────────────────────────┘           │
+        └────────────────────────────────────────┘
+```
+
+#### ONLINE PIPELINE (Query Time) - 2 Chế Độ Khác Nhau
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         USER QUERY + query_type                          │
+│                    (Manual Selection: pid | technical_doc)               │
+└────────────────────────────────┬─────────────────────────────────────────┘
+                                 │
+                  ┌──────────────┴───────────────┐
+                  │                              │
+        query_type=technical_doc       query_type=pid
+                  │                              │
+                  ↓                              ↓
+    ╔═════════════════════════╗      ╔═════════════════════════════════╗
+    ║ TECHNICAL DOC RETRIEVAL ║      ║     P&ID RETRIEVAL              ║
+    ║ (Single Branch)         ║      ║  (Dual Branch Parallel)         ║
+    ╚═════════════════════════╝      ╚═════════════════════════════════╝
+
+┌─ TECH DOC QUERY ───────────┐   ┌─ P&ID QUERY ────────────────────────┐
+│                             │   │                                     │
+│ 1. Query Transform          │   │ 1. Query Transform                  │
+│    • Normalize              │   │    • Normalize                      │
+│    • Equipment extraction   │   │    • ⭐ Tag detection & parsing     │
+│    ↓                        │   │    • ⭐ Variants generation         │
+│ 2. Single Branch Search:    │   │    ↓                                │
+│    ┌─────────────────────┐  │   │ 2. Dual Branch Search (PARALLEL):  │
+│    │ Weaviate + BM25     │  │   │    ┌──────────┐  ┌──────────────┐  │
+│    │ (rag_chunks only)   │  │   │    │ Branch A │  │  Branch B    │  │
+│    │                     │  │   │    │ Tags     │  │  Chunks      │  │
+│    │ • BM25-heavy (100)  │  │   │    │ Index ⭐ │  │  Index       │  │
+│    │ • Semantic (50)     │  │   │    └────┬─────┘  └──────┬───────┘  │
+│    │ • No tag routing    │  │   │         │               │          │
+│    └─────────┬───────────┘  │   │    OpenSearch      Weaviate+BM25   │
+│              ↓              │   │    pvcfc_pid_tags  rag_chunks       │
+│ 3. RRF Fusion               │   │         │               │          │
+│    (Standard weights)       │   │         └───────┬───────┘          │
+│    ↓                        │   │                 ↓                  │
+│ 4. Equipment Boost (×1.5)   │   │ 3. ⭐ Adaptive RRF Fusion           │
+│    ↓                        │   │    (Query-type weights)             │
+│ 5. Score-based Rerank       │   │    ↓                                │
+│    (No BGE by default)      │   │ 4. ⭐ PID Tag Reranking             │
+│    ↓                        │   │    • Exact: ×10, Fuzzy: ×2-3        │
+│ 6. LLM Rerank (if enabled)  │   │    • Proximity: ×3                  │
+│    ↓                        │   │    ↓                                │
+│ RESULTS:                    │   │ 5. BGE Rerank (if enabled)          │
+│ • 1 source (chunks)         │   │    ↓                                │
+│ • No bbox/crops             │   │ RESULTS:                            │
+│ • Pure text context         │   │ • 2 sources (tags + chunks)         │
+│                             │   │ • ⭐ Bbox + crop_path (from tags)   │
+│                             │   │ • Spatial context                   │
+└─────────────┬───────────────┘   └──────────────┬──────────────────────┘
+              │                                  │
+              └──────────┬───────────────────────┘
+                         │
+                         ↓
+              ┌──────────────────────┐
+              │  GENERATION          │
+              │  (Same for both)     │
+              │  • Text or Vision    │
+              │  • Gemini 2.5        │
+              │  • Citation extract  │
+              └──────────┬───────────┘
+                         │
+                         ↓
+              ┌──────────────────────┐
+              │   JSON RESPONSE      │
+              └──────────────────────┘
 ```
 
 > **P&ID Tag Extraction Note**: The system includes a complete **CAD-like Tag Extraction pipeline** (disabled by default, enable via `ENABLE_PID_TAGS=true`):
-> - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.60) → PageLayoutBuilder (vector-first PyMuPDF + PP-OCRv5 fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → crops/*.png (bbox evidence) → OpenSearch `pvcfc_pid_tags` sidecar index
-> - **Online**: Query tag detection → Parallel retrieval (tags + chunks) → RRF fusion → Rerank → Attach crop_path for vision citations
+> - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.55) → PageLayoutBuilder (vector-first PyMuPDF + PP-OCRv5 fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → crops/*.png (bbox evidence) → OpenSearch `pvcfc_pid_tags` sidecar index
+> - **Online**: Manual `query_type` selection → If `pid`: Parallel retrieval (tags + chunks) → RRF fusion → PID Tag Rerank → Attach crop_path for vision citations
 > - **Configuration**: `config/cadlike_gate.yaml`, `config/tag_grammar.yaml`, `config/page_filters.yaml`, `config/tags_index_mapping.json`
 > - **Artifacts**: `D:\PVCFC_Artifacts\` → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png`, `logs/tag_extraction_telemetry.jsonl`
 > - **Implementation**: `app/ingestion/tags/` (orchestrator, tag_extractor, crops), `app/ingestion/cadlike_gate.py`, `app/ingestion/layout/`, `app/rag/hybrid_with_tags_retriever.py`
@@ -246,8 +296,8 @@ RAW PDF FILES
     • Keep page metadata
     ↓
 [3] DEDUPLICATION
-    • content_hash = SHA1(normalized_text)
-    • Keep 1 representative per hash
+    • Current mode: content-based deduplication is disabled; only exact file duplicates (by file hash) are skipped.
+    • Note: The previous content_hash (SHA1 of normalized content) based dedup logic is retained in code but inactive by default for version coexistence.
     ↓
 [4] INDEXING
     ├── Weaviate: Vector embeddings (768D) → Collection "Chunk"
@@ -266,8 +316,8 @@ RAW PDF FILES
           - Large page size (A1/A0)
           - Rotated text spans
           - Leader patterns
-        • Threshold: S ≥ 0.60 → CAD-like
-        • Gray zone [0.45, 0.60): boost if filename has P&ID/PFD/ISO keywords
+        • Threshold: S ≥ 0.55 → CAD-like (current production setting)
+        • Gray zone [0.45, 0.55): boost if filename has P&ID/PFD/ISO keywords
         • Select "taggy pages" (regex_hits≥3 OR code_tokens≥4)
         ↓ is_cadlike=true
     [5.2] PAGE LAYOUT EXTRACTION (app/ingestion/layout/page_layout_builder.py)
@@ -432,20 +482,115 @@ JSON RESPONSE to Client
 
 ## 3. PHASE 1: DOCUMENT INGESTION
 
+> **⚠️ DUAL PIPELINE**: Ingestion tự động phân loại tài liệu thành P&ID hoặc Technical Doc
+
 ### 3.1 Input
 - **Source**: `D:\Data_Raw` (recursive scan)
 - **Format**: PDF (vector text or scanned images)
 - **Size**: Thousands of files, various sizes
+- **Types**: Mixed (P&ID + Technical Docs)
 
-### 3.2 Processing Steps
+### 3.2 Auto-Detection Flow (CAD-like Gate)
 
-#### Step 1: File Discovery
 ```python
-# Recursive scan
+# File: app/ingestion/tags/orchestrator.py
+
 for pdf_file in scan_directory("D:\\Data_Raw"):
     if is_valid_pdf(pdf_file):
-        process_document(pdf_file)
+
+        # ===== AUTO-DETECT STARTS HERE =====
+        if ENABLE_PID_TAGS:
+            gate_decision = cadlike_gate.evaluate(pdf_file)
+
+            if gate_decision.is_cadlike:
+                # → P&ID PIPELINE
+                process_as_pid(pdf_file)
+            else:
+                # → TECHNICAL DOC PIPELINE
+                process_as_technical_doc(pdf_file)
+        else:
+            # P&ID disabled → all as technical doc
+            process_as_technical_doc(pdf_file)
 ```
+
+**8 Features Scoring:**
+
+| Feature | Weight | Example (P&ID) | Example (Manual) |
+|---------|--------|----------------|------------------|
+| producer_keyword | 0.20 | AutoCAD (1.0) | MS Word (0.0) |
+| geometry_density | 0.15 | High (0.85) | Low (0.05) |
+| short_caps_rate | 0.15 | 25% CAPS (0.83) | 5% CAPS (0.17) |
+| regex_3piece_hits | 0.20 | Many (1.0) | None (0.0) |
+| technical_suffix | 0.10 | A/B/C (0.88) | None (0.0) |
+| non_a4_page | 0.10 | A1 (1.0) | A4 (0.0) |
+| multi_rotation | 0.05 | Rotated (0.65) | Normal (0.0) |
+| leader_pattern | 0.05 | Leaders (1.0) | None (0.0) |
+| **TOTAL** | **1.00** | **0.78** ≥ 0.55 ✅ | **0.12** < 0.55 ❌ |
+
+**Decision:**
+- P&ID score 0.78 → **P&ID PIPELINE** (extended)
+- Manual score 0.12 → **TECH DOC PIPELINE** (standard)
+
+### 3.3 Processing Steps (Dual Branch)
+
+#### **Branch 1: Technical Doc Processing**
+
+```python
+# Standard pipeline (simpler)
+def process_as_technical_doc(pdf_file):
+    # Step 1: File Discovery
+    validate_pdf(pdf_file)
+
+    # Step 2: Text Extraction
+    doc = fitz.open(pdf_file)
+    text = extract_text(doc)
+
+    # Step 3: OCR if needed
+    if len(text) < 100:
+        text = ocr_with_paddleocr(pdf_file)
+
+    # Step 4: Chunking
+    chunks = hierarchical_chunker.chunk(text)
+
+    # Step 5: Save
+    save_chunks(chunks, "chunks.jsonl")
+
+    # DONE - No tags, no layouts, no crops
+```
+
+#### **Branch 2: P&ID Processing**
+
+```python
+# Extended pipeline (complex)
+def process_as_pid(pdf_file):
+    # Step 1-4: Same as Technical Doc
+    chunks = process_text_extraction_and_chunking(pdf_file)
+
+    # Step 5: Page Layout Extraction ⭐
+    for page in taggy_pages:
+        layout = page_layout_builder.build_layout(pdf_file, page)
+        # → Extract bbox, font, rotation, vector drawings
+        save_layout(layout, "page_layout/{doc_id}_{page}.json")
+
+    # Step 6: Tag Extraction ⭐
+    tags = tag_extractor.extract_tags(layout)
+    # → Assemble triplets (UNIT-PREFIX-SUFFIX-VARIANT)
+    save_tags(tags, "entities/tags.jsonl")
+
+    # Step 7: Crop Generation ⭐
+    for tag in tags:
+        crop = generate_crop(pdf_file, tag.bbox)
+        save_crop(crop, f"crops/{doc_id}_p{page}_{tag}.png")
+
+    # Step 8: Save chunks (ALSO) ⭐
+    save_chunks(chunks, "chunks.jsonl")
+
+    # DONE - Has tags + layouts + crops + chunks
+```
+
+**Key Difference:**
+- Technical Doc: **4 steps** (extract → OCR → chunk → save)
+- P&ID: **8 steps** (extract → OCR → chunk → **layout → tags → crops** → save)
 
 #### Step 2: PDF Parsing with PaddleOCR
 ```python
@@ -1023,7 +1168,126 @@ except Exception as e:
 
 ## 7. PHASE 4: HYBRID RETRIEVAL
 
-### 7.1 Parallel Retrieval
+> **⚠️ DUAL PIPELINE**: Retrieval strategy khác nhau cho P&ID vs Technical Doc
+
+### 7.0 Retrieval Strategy Selection
+
+Query routing is manual: API requires `query_type` and routes strictly by this value.
+
+```python
+# File: app/api/routers/ask.py
+
+# Required: user must select query_type ('pid' or 'technical_doc')
+if user_query_type == 'pid':
+    # → P&ID Pipeline
+    retrieval_results = tags_retriever.search(transformed_query) if tags_retriever else retriever.search(transformed_query)
+elif user_query_type == 'technical_doc':
+    # → Technical Doc Pipeline
+    retrieval_results = tech_doc_retriever.search(transformed_query) if tech_doc_retriever else retriever.search(transformed_query)
+else:
+    raise HTTPException(400, "Invalid query_type")
+```
+
+| Query Type | Routed To | Branches |
+|-----------|-----------|----------|
+| `technical_doc` | `TechnicalDocRetriever` | 1 |
+| `pid` | Tags retriever or hybrid with PID enhancements | 2 (tags+chunks) |
+
+### 7.1 Technical Doc Retrieval (Single Branch)
+
+**File:** `app/rag/technical_doc_retriever.py`
+
+```python
+async def search_technical_doc(query: str, k: int = 10):
+    # Step 1: Extract equipment models
+    equipment = extract_equipment_models(query)  # ["HCD025"]
+
+    # Step 2: Boost query
+    enhanced_query = boost_with_variants(query, equipment)
+    # "HCD025" → "HCD025 HCD-025 hcd025 HCD025 ..."
+
+    # Step 3: Single branch hybrid search
+    weaviate_task = asyncio.create_task(weaviate_search(enhanced_query))
+    opensearch_task = asyncio.create_task(opensearch_search(enhanced_query))
+
+    weaviate_results, opensearch_results = await asyncio.gather(
+        weaviate_task, opensearch_task
+    )
+
+    # Step 4: RRF fusion
+    fused = rrf_fusion(weaviate_results, opensearch_results)
+
+    # Step 5: Equipment boost
+    boosted = boost_equipment_matches(fused, equipment)  # ×1.5
+
+    return boosted[:k]
+```
+
+**Characteristics:**
+- ✅ 1 branch (chunks only from `rag_chunks`)
+- ✅ Equipment model boosting
+- ✅ BM25-heavy config (opensearch_limit=100)
+- ❌ No tags index
+- ❌ No bbox/crops
+
+### 7.2 P&ID Retrieval (Dual Branch) ⭐
+
+**File:** `app/rag/hybrid_with_tags_retriever.py`
+
+```python
+async def search_pid(query: str, k: int = 10):
+    # Step 1: Parse tag components
+    analysis = pid_enhancer.enhance(query)
+    # "04 PSAL 2207" → {unit:"04", prefix:"PSAL", suffix:"2207"}
+
+    # Step 2: Context validation (false positive prevention)
+    if not validator.validate(query, analysis.strategy):
+        # Fallback to semantic
+        return standard_hybrid_search(query, k)
+
+    # Step 3: PARALLEL SEARCH (2 branches)
+
+    # Branch A: Tags index ⭐
+    tags_task = asyncio.create_task(
+        tags_retriever.search_by_components(
+            unit="04",
+            prefix="PSAL",
+            suffix="2207"
+        )
+    )
+
+    # Branch B: Chunks index
+    chunks_task = asyncio.create_task(
+        hybrid_search(query, k=50)  # BM25 + Weaviate
+    )
+
+    tags_results, chunks_results = await asyncio.gather(
+        tags_task, chunks_task
+    )
+
+    # Step 4: RRF Fusion (merge 2 branches)
+    fused = rrf_fusion(
+        tags_results=tags_results,    # From pvcfc_pid_tags
+        chunks_results=chunks_results  # From rag_chunks
+    )
+
+    # Step 5: Attach crop paths ⭐
+    for result in fused:
+        if result.source == "tags":
+            result.crop_path = result.metadata["crop_path"]
+            result.bbox = result.metadata["bbox"]
+
+    return fused[:k]
+```
+
+**Characteristics:**
+- ✅ 2 branches parallel (tags + chunks)
+- ✅ Tag parsing and validation
+- ✅ Bbox + crops attached
+- ✅ Adaptive RRF weights
+- ✅ Fallback to semantic if no tags found
+
+### 7.3 Standard Hybrid (Baseline)
 
 ```python
 async def hybrid_search(query: str, k: int = 50):
@@ -1053,6 +1317,16 @@ async def hybrid_search(query: str, k: int = 50):
 
     return weaviate_results, opensearch_results
 ```
+
+**Comparison:**
+
+| Aspect | Technical Doc | P&ID | Standard |
+|--------|--------------|------|----------|
+| **Branches** | 1 (chunks) | 2 (tags+chunks) | 1 (chunks) |
+| **Query Enhancement** | Equipment boost | Tag parsing | None |
+| **Validation** | None | Multi-layer | None |
+| **Sources** | rag_chunks | pvcfc_pid_tags + rag_chunks | rag_chunks |
+| **Bbox/Crops** | ❌ | ✅ | ❌ |
 
 ### 7.2 Weaviate Search
 
@@ -1196,7 +1470,7 @@ def bge_rerank(
     return reranked[:top_k]
 ```
 
-> **BGE Reranking Note**: This is **OPTIONAL** and controlled by `ENABLE_BGE_RERANK` in .env. **Currently ENABLED** in production config (`ENABLE_BGE_RERANK=true`). Uses `BAAI/bge-reranker-base` model. Adds 100-400ms latency but significantly improves semantic ranking accuracy (measured: ~0.96 top scores vs ~0.06 without). Model loads on first query (~3-5s), subsequent queries fast (~0.5s rerank time).
+> **BGE Reranking Note**: This is **OPTIONAL** and controlled by `ENABLE_BGE_RERANK` in .env. Default is OFF in code; enable via `ENABLE_BGE_RERANK=true`. Adds ~100-400ms latency and improves semantic ranking accuracy. Model loads on first query (~3-5s), then ~0.5s per rerank.
 
 ### 8.2 Fallback: Score-based Reranking
 
@@ -1572,9 +1846,348 @@ def build_response(
 
 ---
 
-## 11. COMPONENTS DEEP DIVE
+## 11. PHASE 8: MULTI-TURN CONVERSATION MANAGEMENT (NEW)
 
-### 11.1 LLM Service
+> **Feature Status**: Implemented in v0.9.0
+> **Documentation**: See [docs/MULTI_TURN_CHAT_GUIDE.md](docs/MULTI_TURN_CHAT_GUIDE.md)
+
+### 11.1 Overview
+
+The system supports **multi-turn conversations** where users can ask follow-up questions with context from previous turns. The conversation manager automatically:
+- Tracks conversation history across multiple API calls
+- Resolves pronouns and references ("it", "that equipment", "the same page")
+- Summarizes long conversations to manage token budgets
+- Persists conversations in Redis with configurable TTL
+
+**Use Cases:**
+```
+User: What is the operating pressure of E04217?
+AI: The operating pressure of E04217 is 15 bar...
+
+User: What about its temperature range?  ← "its" resolves to E04217
+AI: The temperature range for E04217 is 80-120°C...
+
+User: Show me the diagram from that document  ← "that document" resolves to previous citation
+```
+
+### 11.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     User Query                          │
+│              + conversation_id (optional)               │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ↓
+            ┌────────────────────────┐
+            │ Conversation Manager   │
+            │ (app.core.conversation)│
+            └────────┬───────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+   New conversation?         Existing?
+        │                         │
+        ↓                         ↓
+   Create conv_id          Load history from Redis
+   Store in Redis          ↓
+        │                  Apply summarization if needed
+        │                  ↓
+        └──────────────────┴───────────────┐
+                                           ↓
+                              ┌────────────────────────┐
+                              │ Context Enrichment     │
+                              │ - Add conversation     │
+                              │   history to prompt    │
+                              │ - Resolve references   │
+                              └────────┬───────────────┘
+                                       ↓
+                              ┌────────────────────────┐
+                              │ Standard RAG Pipeline  │
+                              │ (Transform → Retrieve  │
+                              │  → Generate)           │
+                              └────────┬───────────────┘
+                                       ↓
+                              ┌────────────────────────┐
+                              │ Save Turn to Redis     │
+                              │ - User query           │
+                              │ - AI response          │
+                              │ - Metadata             │
+                              └────────────────────────┘
+```
+
+### 11.3 Implementation
+
+**Conversation Schema:**
+```python
+@dataclass
+class ConversationTurn:
+    """Single turn in a conversation"""
+    role: Literal["user", "assistant"]
+    content: str
+    timestamp: datetime
+    metadata: Optional[Dict[str, Any]] = None
+
+@dataclass
+class Conversation:
+    """Complete conversation with history"""
+    id: str
+    user_id: Optional[str]
+    language: str
+    turns: List[ConversationTurn]
+    created_at: datetime
+    updated_at: datetime
+    summary: Optional[str] = None  # Summarized context for long conversations
+```
+
+**Conversation Manager API:**
+```python
+class ConversationManager:
+    """Manages multi-turn conversations with Redis persistence"""
+
+    def __init__(self, redis_client, summarizer):
+        self.redis = redis_client
+        self.summarizer = summarizer
+        self.ttl_hours = 24  # CONVERSATION_TTL_HOURS
+        self.max_turns = 50  # MAX_TURNS_PER_CONVERSATION
+
+    def create_conversation(self, user_id: Optional[str], language: str) -> str:
+        """Create new conversation and return conversation_id"""
+        conv_id = f"conv_{uuid.uuid4().hex[:16]}"
+        conversation = Conversation(
+            id=conv_id,
+            user_id=user_id,
+            language=language,
+            turns=[],
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        self._save(conversation)
+        return conv_id
+
+    def add_turn(self, conv_id: str, role: str, content: str, metadata: Dict):
+        """Add turn to conversation"""
+        conversation = self._load(conv_id)
+        turn = ConversationTurn(
+            role=role,
+            content=content,
+            timestamp=datetime.now(),
+            metadata=metadata
+        )
+        conversation.turns.append(turn)
+        conversation.updated_at = datetime.now()
+
+        # Summarize if threshold reached
+        if len(conversation.turns) % SUMMARIZE_EVERY_N_TURNS == 0:
+            conversation = self.summarizer.summarize(conversation)
+
+        self._save(conversation)
+
+    def get_history(self, conv_id: str, last_n: int = 10) -> List[ConversationTurn]:
+        """Get recent conversation history"""
+        conversation = self._load(conv_id)
+        return conversation.turns[-last_n:]
+```
+
+### 11.4 Context Enrichment
+
+**Adding conversation history to prompts:**
+```python
+def enrich_prompt_with_conversation(
+    query: str,
+    conversation_history: List[ConversationTurn],
+    retrieved_context: List[Result]
+) -> str:
+    """Build prompt with conversation context"""
+
+    # Build conversation context
+    history_text = ""
+    for turn in conversation_history[-5:]:  # Last 5 turns
+        if turn.role == "user":
+            history_text += f"User: {turn.content}\n"
+        else:
+            history_text += f"Assistant: {turn.content}\n"
+
+    # Build full prompt
+    prompt = f"""
+Previous conversation:
+{history_text}
+
+Current question: {query}
+
+Retrieved context:
+{format_context(retrieved_context)}
+
+Instructions:
+- Use the conversation history to resolve pronouns and references
+- If the user refers to "it", "that", "the same", identify what they mean from previous turns
+- Provide a natural response that acknowledges the conversation flow
+
+Answer:
+"""
+    return prompt
+```
+
+### 11.5 Summarization Strategy
+
+**Automatic summarization** to manage token budgets:
+
+```python
+class ConversationSummarizer:
+    """Summarize long conversations to fit token budgets"""
+
+    def summarize(self, conversation: Conversation) -> Conversation:
+        """Summarize conversation keeping key information"""
+
+        # Extract key entities and topics from turns
+        entities = self._extract_entities(conversation.turns)
+        topics = self._extract_topics(conversation.turns)
+
+        # Build summary prompt
+        prompt = f"""
+Summarize this technical conversation concisely:
+
+Conversation:
+{format_turns(conversation.turns)}
+
+Extract:
+1. Key equipment/documents mentioned: {entities}
+2. Main topics discussed: {topics}
+3. Important conclusions or answers
+
+Summary (max 200 words):
+"""
+
+        summary = llm_client.generate(prompt)
+        conversation.summary = summary
+
+        # Keep only recent turns (e.g., last 10) + summary
+        conversation.turns = conversation.turns[-10:]
+
+        return conversation
+```
+
+### 11.6 Configuration
+
+**Environment Variables** (`.env`):
+```ini
+# Conversation Memory (Multi-turn Chat)
+REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=
+
+# Conversation retention and limits
+CONVERSATION_TTL_HOURS=24
+MAX_TURNS_PER_CONVERSATION=50
+MAX_CONVERSATION_CONTEXT_TOKENS=8000
+
+# Summarization policy (summarize every N turns)
+SUMMARIZE_EVERY_N_TURNS=8
+
+# Optional: Use provider's native chat session
+ENABLE_PROVIDER_SESSION=false
+```
+
+### 11.7 API Integration
+
+**Request with conversation_id:**
+```json
+POST /ask
+{
+  "query": "What about its temperature?",
+  "conversation_id": "conv_abc123def456",
+  "user_id": "user_001",
+  "language": "vi",
+  "query_type": "technical_doc"
+}
+```
+
+**Response includes conversation metadata:**
+```json
+{
+  "answer": "The temperature range for E04217 is 80-120°C...",
+  "citations": [...],
+  "confidence": 0.87,
+  "meta": {
+    "conversation_id": "conv_abc123def456",
+    "turn_number": 3,
+    "context_tokens_used": 1234,
+    "summarized": false
+  }
+}
+```
+
+### 11.8 Implementation Files
+
+**Core Components:**
+- `app/core/conversation/conversation_manager.py` - Main manager
+- `app/core/conversation/conversation_summarizer.py` - Summarization logic
+- `app/core/conversation/schemas.py` - Data models
+- `app/api/routers/ask.py:77-180` - API integration
+
+**Tests:**
+- `tests/test_conversation_manager.py` - Unit tests
+- `tests/test_conversation_summarizer.py` - Summarization tests
+- `tests/test_conversation_integration.py` - E2E tests
+
+### 11.9 Metrics & Monitoring
+
+**Prometheus Metrics:**
+```python
+# Conversation creation
+conversation_created = Counter(
+    'conversation_created_total',
+    'Total conversations created',
+    ['language']
+)
+
+# Turn tracking
+conversation_turns = Counter(
+    'conversation_turns_total',
+    'Total conversation turns',
+    ['conversation_id']
+)
+
+# Summarization tracking
+conversation_summarized = Counter(
+    'conversation_summarized_total',
+    'Conversations summarized'
+)
+```
+
+### 11.10 Performance Impact
+
+**Latency Overhead:**
+```
+Without conversation: Transform(50ms) + Retrieve(500ms) + Generate(1000ms) = 1550ms
+With conversation:    Load history(20ms) + Enrich(10ms) + [same pipeline] = 1580ms
+
+Overhead: ~30ms per query (negligible)
+```
+
+**Storage:**
+- Average conversation: ~5KB (10 turns, no summarization)
+- With summarization: ~2KB (summary + 10 recent turns)
+- Redis memory: 1000 active conversations ≈ 5MB
+
+### 11.11 Limitations & Future Work
+
+**Current Limitations:**
+- No cross-session memory (sessions expire after TTL)
+- Summarization is LLM-based (not extractive)
+- No conversation branching or forking
+- No conversation search/analytics
+
+**Future Enhancements:**
+- Cross-reference detection across conversations
+- Conversation analytics dashboard
+- Export conversation to report
+- Voice input integration
+
+---
+
+## 12. COMPONENTS DEEP DIVE
+
+### 12.1 LLM Service
 
 ```python
 class LLMClient:
@@ -1783,9 +2396,9 @@ def _add_page_watermark(img: Image.Image, page_num: int) -> Image.Image:
 
 ---
 
-## 12. ERROR HANDLING & RESILIENCE
+## 13. ERROR HANDLING & RESILIENCE
 
-### 12.1 Graceful Degradation
+### 13.1 Graceful Degradation
 
 ```python
 # Hybrid retrieval with fallback
@@ -1805,7 +2418,7 @@ if not weaviate_results and not opensearch_results:
     raise RuntimeError("All retrieval backends failed")
 ```
 
-### 12.2 Validation & Logging
+### 13.2 Validation & Logging
 
 ```python
 # Always validate and log invalid states
@@ -1817,7 +2430,7 @@ if confidence is None or not (0 <= confidence <= 1):
     confidence = max(0.0, min(1.0, float(confidence or 0.0)))
 ```
 
-### 12.3 Retry Logic
+### 13.3 Retry Logic
 
 ```python
 @retry(
@@ -1829,7 +2442,7 @@ def embed_with_retry(texts: List[str]) -> List[np.ndarray]:
     return embedding_service.embed_texts(texts)
 ```
 
-### 12.4 Degrade Mode
+### 13.4 Degrade Mode
 
 When one retrieval backend fails, the system operates in **degrade mode** instead of failing completely.
 
@@ -1960,9 +2573,9 @@ def health_check(self) -> Dict[str, Any]:
 
 ---
 
-## 13. PERFORMANCE & OPTIMIZATION
+## 14. PERFORMANCE & OPTIMIZATION
 
-### 13.1 Retrieval Caching
+### 14.1 Retrieval Caching
 
 **Implementation**: `app/core/cache_manager.py` + `app/api/routers/ask.py`
 
@@ -2032,7 +2645,7 @@ def embed_query_cached(query: str) -> np.ndarray:
     return embedding_service.embed_texts([query])[0]
 ```
 
-### 13.2 Batching
+### 14.2 Batching
 
 ```python
 # Batch embedding for efficiency
@@ -2048,7 +2661,7 @@ def embed_documents_batched(
     return embeddings
 ```
 
-### 13.3 Async Processing
+### 14.3 Async Processing
 
 ```python
 # Parallel retrieval
@@ -2065,7 +2678,7 @@ async def parallel_retrieve(query: str):
     return weaviate_results, opensearch_results
 ```
 
-### 13.4 Vision Citation Accuracy Improvements
+### 14.4 Vision Citation Accuracy Improvements
 
 **Problem**: Multimodal LLMs (Gemini 2.5 Pro) returned correct answers but cited wrong page numbers (e.g., answering "MYLP 04504 is STATUS" but citing pages 60-62 instead of page 71).
 
@@ -2109,7 +2722,7 @@ VISION_WATERMARK_SIZE_MULTIPLIER=1.0
 
 ---
 
-### 13.5 Tags Endpoint (Metadata API)
+### 14.5 Tags Endpoint (Metadata API)
 
 **Implementation**: `app/api/routers/tags.py`
 
@@ -2122,23 +2735,18 @@ VISION_WATERMARK_SIZE_MULTIPLIER=1.0
 - Tag validation before queries
 - Corpus overview and statistics
 
-**Response Example**:
+**Response Example** (current implementation):
 ```json
 {
   "tags": [
     "E04217", "E04218", "E04219",
-    "P04201A", "P04201B", "P04202",
-    "K06101", "K06102",
-    "V05301", "V05302",
-    ...
+    "P04201A", "P04201B", "P04202"
   ],
-  "count": 1234,
-  "source": "opensearch",
-  "timestamp": "2025-10-16T10:30:00Z"
+  "count": 1234
 }
 ```
 
-**Implementation** (using OpenSearch aggregation):
+**Implementation** (using OpenSearch aggregation on `rag_chunks.tags.keyword`):
 ```python
 @router.get("/tags")
 async def list_all_tags(

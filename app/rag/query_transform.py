@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
 
+from app.rag.query_classification import get_query_classifier
 from app.services.llm_client import get_llm_client
 
 
@@ -121,7 +122,11 @@ class QueryTransformer:
         }
 
     def transform(
-        self, query: str, filters: Optional[Dict[str, Any]] = None, language: str = "en"
+        self,
+        query: str,
+        filters: Optional[Dict[str, Any]] = None,
+        language: str = "en",
+        query_type_override: Optional[str] = None,  # NEW: manual override
     ) -> TransformedQuery:
         """
         Transform user query through normalization, intent detection, and enhancement
@@ -194,6 +199,39 @@ class QueryTransformer:
                 f"Detected {len(detected_tags)} equipment tag(s): {detected_tags}"
             )
 
+        # NEW Phase 1: Smart query classification (P&ID vs Technical Doc)
+        query_classification = None
+        try:
+            # Check if classifier is enabled
+            import os
+
+            classifier_enabled = os.getenv(
+                "HYBRID_CLASSIFIER_ENABLED", "true"
+            ).lower() in ["true", "1", "yes"]
+
+            if classifier_enabled:
+                classifier = get_query_classifier()
+
+                # Use override if provided, otherwise classify
+                if query_type_override:
+                    logger.info(f"Query type override: {query_type_override}")
+                    query_classification = {
+                        "type": query_type_override,
+                        "confidence": 1.0,
+                        "method": "manual_override",
+                        "reasoning": "User-specified query type",
+                    }
+                else:
+                    query_classification = classifier.classify(query, detected_tags)
+                    logger.info(
+                        f"Query classified as '{query_classification['type']}' "
+                        f"(confidence={query_classification['confidence']}, method={query_classification['method']})"
+                    )
+        except Exception as e:
+            logger.warning(
+                f"Query classification failed: {e}, continuing without classification"
+            )
+
         result = TransformedQuery(
             original=query,
             normalized=normalized,
@@ -207,6 +245,7 @@ class QueryTransformer:
                 "translated_from": translated_from,
                 "has_tags": bool(detected_tags),
                 "tag_count": len(detected_tags) if detected_tags else 0,
+                "query_classification": query_classification,  # NEW: classification result
             },
             detected_tags=detected_tags,
             expanded_query=expanded_query,

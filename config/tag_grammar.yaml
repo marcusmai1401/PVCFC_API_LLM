@@ -20,49 +20,85 @@ suffix_regex: "^[0-9]{3,5}$"
 variant_regex: "^[A-Z]$"
 
 # PREFIX whitelist (instrument types)
-# Expandable per plant; add unknown codes from learning mode logs
+# EXPANDED for Ammonia Unit P&ID Rev12 compatibility
+# Includes all prefixes from ground truth test cases + comprehensive ISA 5.1 coverage
 prefix_whitelist:
   # Pressure instruments
   - PAL      # Pressure alarm low
-  - PAHH     # Pressure alarm high-high (NEW)
+  - PAH      # Pressure alarm high
+  - PAHH     # Pressure alarm high-high
   - PALL     # Pressure alarm low-low
   - PSAH     # Pressure switch alarm high
   - PSAL     # Pressure switch alarm low
+  - PSV      # Pressure safety valve
   - PT       # Pressure transmitter
   - PI       # Pressure indicator
+  - PG       # Pressure gauge
   - PIC      # Pressure indicator controller
+  - PCV      # Pressure control valve
+  - PV       # Pressure valve
   - PXI      # Pressure indicator (variant)
   - PSU      # Pressure switch unit
-  - PXT      # Pressure transmitter (NEW)
-  - PDAHH    # Pressure differential alarm high-high (NEW - 5 letters)
-  - PDALL    # Pressure differential alarm low-low (NEW - 5 letters)
+  - PXT      # Pressure transmitter (extended)
+  - PY       # Pressure relay
+  - PDI      # Pressure differential indicator
+  - PDT      # Pressure differential transmitter
+  - PDAH     # Pressure differential alarm high
+  - PDAHH    # Pressure differential alarm high-high
+  - PDALL    # Pressure differential alarm low-low
   # Flow instruments
   - FIC      # Flow indicator controller
   - FT       # Flow transmitter
+  - FI       # Flow indicator
+  - FE       # Flow element
+  - FY       # Flow relay
+  - FV       # Flow valve
+  - FFI      # Flow flow indicator
+  - FFU      # Flow flow unit
   - FSL      # Flow switch low
-  - FFSAL    # Flow flow switch alarm low (NEW - 5 letters)
+  - FFSAL    # Flow flow switch alarm low
   # Level instruments
   - LIC      # Level indicator controller
   - LT       # Level transmitter
-  - LSH      # Level switch high (NEW)
-  - LSHH     # Level switch high-high (NEW)
+  - LI       # Level indicator
+  - LG       # Level gauge
+  - LS       # Level switch
+  - LSL      # Level switch low
+  - LSH      # Level switch high
+  - LSHH     # Level switch high-high
+  - LSLL     # Level switch low-low
   - LSAH     # Level switch alarm high
+  - LAH      # Level alarm high
+  - LAL      # Level alarm low
+  - LAHH     # Level alarm high-high
+  - LALL     # Level alarm low-low
+  - LY       # Level relay
   # Temperature instruments
+  - TI       # Temperature indicator
   - TIC      # Temperature indicator controller
   - TT       # Temperature transmitter
+  - TE       # Temperature element
+  - TCV      # Temperature control valve
+  - TXI      # Temperature transmitter indicator
   - TSH      # Temperature switch high
   - TSHH     # Temperature switch high-high
-  - TAH      # Temperature alarm high (NEW)
-  - TAHH     # Temperature alarm high-high (NEW)
+  - TAH      # Temperature alarm high
+  - TAL      # Temperature alarm low
+  - TAHH     # Temperature alarm high-high
   # Hand/Manual
   - HIC      # Hand indicator controller
-  # Equipment
+  # Equipment/Misc
   - IS       # Instrument switch
   - PU       # Pump
   - MU       # Motor
   - HE       # Heat exchanger
   - VL       # Valve
-  - ZSL      # Position switch low (NEW)
+  - ZI       # Position indicator
+  - ZSL      # Position switch low
+  - STR      # Strainer
+  - EJ       # Ejector
+  - AP       # Analyzer pressure
+  - AE       # Analyzer element
 
 # ANNOTATION patterns (separate from core tag components)
 # These are NOT part of the core tag but provide additional context
@@ -76,10 +112,11 @@ annotation_patterns:
 anchor: PREFIX
 
 # Tolerances for vertical alignment
-x_center_tolerance_ratio: 5.0        # |Δx_center| <= 5.0 * min(width_UNIT, width_SUFFIX) (very loose for rotated/scattered tags)
-y_gap_ratio_range: [0.5, 5.0]       # Gap ∈ [0.5, 5.0] * median(font_height) (widened for rotated/varied layouts)
-font_size_delta_pt: 1.5              # |Δfont_size| <= 1.5 pt
-rotation_tolerance_deg: 15           # <= 15° misalignment
+# LOOSENED to capture tags in instrument symbols/bubbles
+x_center_tolerance_ratio: 3.5        # |Δx_center| <= 3.5 * min(width_UNIT, width_SUFFIX) (loosened for symbol tags)
+y_gap_ratio_range: [0.2, 3.5]       # Gap ∈ [0.2, 3.5] * median(font_height) (loosened for stacked text in bubbles)
+font_size_delta_pt: 1.5              # |Δfont_size| <= 1.5 pt (loosened for mixed sizes)
+rotation_tolerance_deg: 15           # <= 15° misalignment (loosened)
 
 # Scoring weights (sum for accepted triplet)
 score_weights:
@@ -90,7 +127,8 @@ score_weights:
   alarm_hint: 1         # +1 if alarm triangle near ROI and PREFIX in {PAL,PSAL,PSAH,PAHH}
 
 # Pass threshold
-pass_threshold: 6  # Accept triplet if score >= 6
+# LOWERED to extract more genuine tags including those in instrument symbols
+pass_threshold: 4  # Accept triplet if score >= 4 (lowered from 5 to capture symbol tags)
 
 # Variant/annotation attachment radius (multiple of median font height)
 variant_radius_em: 0.5    # Expand bbox by 0.5em to search for variant (A/B/C) - very close

@@ -51,6 +51,20 @@ async def health_check(request: Request) -> Dict[str, Any]:
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
+    # Check conversation manager (Redis) health
+    conversation_manager = getattr(request.app.state, "conversation_manager", None)
+    if conversation_manager:
+        try:
+            redis_health = conversation_manager.health_check()
+            health_data["conversation_manager"] = redis_health
+        except Exception as e:
+            health_data["conversation_manager"] = {
+                "status": "unhealthy",
+                "error": str(e),
+            }
+    else:
+        health_data["conversation_manager"] = {"status": "not_configured"}
+
     # Log health check (với trace_id nếu có)
     trace_id = getattr(request.state, "trace_id", "unknown")
     logger.debug(f"Health check requested", extra={"trace_id": trace_id})

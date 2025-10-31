@@ -360,7 +360,15 @@ class PageIndexBuilder:
                 )
 
                 for doc_id, doc_info in doc_id_map.items():
-                    pdf_path = doc_info.get("pdf_path")
+                    # Handle both formats: string path or dict with pdf_path
+                    if isinstance(doc_info, str):
+                        pdf_path = doc_info
+                    elif isinstance(doc_info, dict):
+                        pdf_path = doc_info.get("pdf_path")
+                    else:
+                        logger.warning(f"Invalid doc_info type for {doc_id}, skipping")
+                        progress.advance(task)
+                        continue
 
                     if not pdf_path:
                         logger.warning(f"No pdf_path for {doc_id}, skipping")

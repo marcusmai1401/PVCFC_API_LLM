@@ -25,6 +25,7 @@ def inject_m3_styles():
     # Load tokens and base CSS (no global icon fonts)
     tokens_css = load_css_file(styles_dir / "tokens.css")
     m3_css = load_css_file(styles_dir / "m3.css")
+    chat_css = load_css_file(styles_dir / "chat_bubbles.css")
 
     # Inject into Streamlit
     st.markdown(
@@ -32,6 +33,7 @@ def inject_m3_styles():
         <style>
         {tokens_css}
         {m3_css}
+        {chat_css}
         </style>
         """,
         unsafe_allow_html=True,

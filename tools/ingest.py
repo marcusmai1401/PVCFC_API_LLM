@@ -31,6 +31,15 @@ from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 from app.storage.manifest_writer import ManifestWriter
 from app.storage.version_manager import VersionManager
 
+# P&ID tag extraction (optional)
+try:
+    from app.ingestion.tags.orchestrator import TagExtractionOrchestrator
+
+    PID_TAGS_AVAILABLE = True
+except ImportError:
+    PID_TAGS_AVAILABLE = False
+    logger.warning("P&ID tag extraction components not available")
+
 
 class IngestionPipeline:
     """
@@ -59,6 +68,7 @@ class IngestionPipeline:
         version_id: Optional[str] = None,
         version_description: str = "",
         version_tags: Optional[List[str]] = None,
+        enable_pid_tags: bool = False,
     ):
         """
         Initialize ingestion pipeline
@@ -113,8 +123,24 @@ class IngestionPipeline:
         self.version_description = version_description
         self.version_tags = version_tags or []
 
+        # P&ID tag extraction settings
+        self.enable_pid_tags = enable_pid_tags and PID_TAGS_AVAILABLE
+
         # Initialize document classifier
         self.classifier = DocumentClassifier()
+
+        # Initialize P&ID tag extraction orchestrator (if enabled)
+        self.tag_orchestrator = None
+        if self.enable_pid_tags:
+            try:
+                self.tag_orchestrator = TagExtractionOrchestrator(
+                    enable_crops=True,
+                    lazy_crops=True,  # Don't generate crops during ingestion for speed
+                )
+                logger.info("✅ P&ID tag extraction enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize P&ID tag extraction: {e}")
+                self.enable_pid_tags = False
 
         # Thread-safe locks
         self._jsonl_lock = threading.Lock()
@@ -139,6 +165,8 @@ class IngestionPipeline:
             "scanned_pages": 0,
             "vector_pages": 0,
             "total_chunks": 0,
+            "pid_docs_processed": 0,  # P&ID documents processed
+            "pid_tags_extracted": 0,  # Total P&ID tags extracted
             "start_time": None,
             "end_time": None,
         }
@@ -299,6 +327,11 @@ class IngestionPipeline:
         logger.info(f"Quarantined: {self.stats['quarantine_count']}")
         logger.info(f"Used OCR: {self.stats['ocr_count']}")
         logger.info(f"Total chunks: {self.stats['total_chunks']}")
+
+        # P&ID extraction stats
+        if self.enable_pid_tags:
+            logger.info(f"P&ID documents processed: {self.stats['pid_docs_processed']}")
+            logger.info(f"P&ID tags extracted: {self.stats['pid_tags_extracted']}")
 
         # Chunk size analytics
         if "chunk_sizes" in self.stats and self.stats["chunk_sizes"]:
@@ -541,6 +574,41 @@ class IngestionPipeline:
 
             # Save chunks
             self._save_chunks(chunks, doc_id)
+
+            # === P&ID TAG EXTRACTION ===
+            # Extract instrument tags from CAD-like documents (P&ID, PFD, etc.)
+            pid_result = None
+            if self.enable_pid_tags and self.tag_orchestrator:
+                try:
+                    logger.debug(f"Running P&ID tag extraction for {pdf_path.name}")
+                    pid_result = self.tag_orchestrator.process_document(
+                        pdf_path, doc_id
+                    )
+
+                    if pid_result:
+                        # Update stats (thread-safe)
+                        with self._stats_lock:
+                            self.stats["pid_docs_processed"] += 1
+                            self.stats["pid_tags_extracted"] += pid_result.get(
+                                "tags_extracted", 0
+                            )
+
+                        logger.info(
+                            f"P&ID extraction: {pid_result.get('tags_extracted', 0)} tags "
+                            f"from {pid_result.get('pages_processed', 0)} pages"
+                        )
+                    else:
+                        logger.debug(
+                            f"Document not identified as CAD-like: {pdf_path.name}"
+                        )
+
+                except Exception as e:
+                    # Don't crash main pipeline on tag extraction errors
+                    logger.warning(
+                        f"P&ID tag extraction failed for {pdf_path.name}: {e}"
+                    )
+                    logger.debug(f"Tag extraction error details:", exc_info=True)
+            # === END P&ID TAG EXTRACTION ===
 
             # Extract table metadata from chunks
             table_metadata = self._extract_table_metadata_from_chunks(chunks, doc_id)
@@ -1241,6 +1309,12 @@ def main():
         help="Optional tags for version categorization (e.g., production stable)",
     )
 
+    parser.add_argument(
+        "--enable-pid-tags",
+        action="store_true",
+        help="Enable P&ID tag extraction for CAD-like documents (requires ENABLE_PID_TAGS=true in .env)",
+    )
+
     args = parser.parse_args()
 
     # Validate source directory
@@ -1295,6 +1369,7 @@ def main():
         version_id=args.version_id,
         version_description=args.version_description,
         version_tags=args.version_tags,
+        enable_pid_tags=args.enable_pid_tags,
     )
 
     stats = pipeline.run()

@@ -3,9 +3,9 @@ Cấu hình ứng dụng sử dụng pydantic-settings
 Đọc từ biến môi trường và .env file
 """
 import os
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -225,6 +225,107 @@ class Settings(BaseSettings):
         description="Use modern hybrid (Weaviate+OpenSearch) vs legacy (FAISS+BM25 offline). Set to false for legacy fallback.",
     )
 
+    # ========================================
+    # Redis Configuration (HA with Sentinel support)
+    # ========================================
+    redis_mode: Literal["single", "sentinel"] = Field(
+        default="single",
+        description="Redis connection mode: 'single' for standalone, 'sentinel' for HA cluster",
+    )
+
+    # Single mode configuration (fallback)
+    redis_host: str = Field(
+        default="localhost",
+        description="Redis host for single mode",
+    )
+    redis_port: int = Field(
+        default=6379,
+        description="Redis port for single mode",
+    )
+
+    # Sentinel mode configuration
+    redis_sentinels: Optional[str] = Field(
+        default=None,
+        description="Comma-separated list of sentinel host:port pairs (e.g., 'host1:26379,host2:26379')",
+    )
+    redis_sentinel_service: str = Field(
+        default="mymaster",
+        description="Sentinel service name (master set name)",
+    )
+
+    # Common Redis settings
+    redis_password: Optional[str] = Field(
+        default=None, description="Redis authentication password"
+    )
+    redis_db: int = Field(default=0, description="Redis database number")
+
+    # Connection and timeout settings
+    redis_socket_connect_timeout_ms: int = Field(
+        default=200,
+        description="Socket connect timeout in milliseconds",
+    )
+    redis_socket_timeout_ms: int = Field(
+        default=1000,
+        description="Socket timeout in milliseconds",
+    )
+    redis_max_retries: int = Field(
+        default=3,
+        description="Maximum connection retry attempts",
+    )
+    redis_retry_backoff_ms: int = Field(
+        default=100,
+        description="Retry backoff time in milliseconds",
+    )
+
+    # Legacy redis_url for backward compatibility
+    redis_url: Optional[str] = Field(
+        default=None,
+        description="Legacy Redis URL (deprecated, use redis_mode config instead)",
+    )
+
+    # ========================================
+    # Distributed Cache Configuration
+    # ========================================
+    use_distributed_cache: bool = Field(
+        default=False,
+        description="Enable Redis-backed distributed cache (feature flag for gradual rollout)",
+    )
+    cache_namespace: str = Field(
+        default="pvcfc",
+        description="Cache key namespace for isolation",
+    )
+    cache_default_ttl: int = Field(
+        default=3600,
+        description="Default cache TTL in seconds",
+    )
+    cache_enable_compression: bool = Field(
+        default=False,
+        description="Enable cache value compression (may impact performance)",
+    )
+
+    # ========================================
+    # Conversation Memory (Multi-turn Chat)
+    # ========================================
+    conversation_ttl_hours: int = Field(
+        default=24, description="Conversation TTL in hours"
+    )
+    max_turns_per_conversation: int = Field(
+        default=50, description="Maximum turns per conversation before trimming"
+    )
+    max_conversation_context_tokens: int = Field(
+        default=8000, description="Maximum tokens for conversation context"
+    )
+    summarize_every_n_turns: int = Field(
+        default=8, description="Summarize conversation every N turns"
+    )
+    enable_provider_session: bool = Field(
+        default=False,
+        description="Use provider's native chat session (Gemini ChatSession)",
+    )
+    enable_pii_redaction: bool = Field(
+        default=True, description="Enable PII redaction before persistence"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
@@ -256,6 +357,50 @@ class Settings(BaseSettings):
         if embedding_llm == "":
             embedding_llm = None
         return embedding_llm or self.embedding_provider
+
+    @field_validator("redis_sentinels", mode="after")
+    @classmethod
+    def parse_sentinels(cls, v: Optional[str]) -> Optional[List[tuple[str, int]]]:
+        """Parse comma-separated sentinel host:port pairs into list of tuples"""
+        if not v:
+            return None
+
+        sentinels = []
+        for item in v.split(","):
+            item = item.strip()
+            if ":" not in item:
+                raise ValueError(
+                    f"Invalid sentinel format '{item}'. Expected 'host:port'"
+                )
+            host, port_str = item.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                raise ValueError(f"Invalid port '{port_str}' in sentinel '{item}'")
+            sentinels.append((host, port))
+
+        return sentinels if sentinels else None
+
+    @model_validator(mode="after")
+    def validate_redis_config(self):
+        """Validate Redis configuration based on mode"""
+        if self.redis_mode == "sentinel":
+            if not self.redis_sentinels:
+                raise ValueError(
+                    "REDIS_SENTINELS must be provided when REDIS_MODE is 'sentinel'. "
+                    "Expected format: 'host1:port1,host2:port2,host3:port3'"
+                )
+            if not self.redis_sentinel_service:
+                raise ValueError(
+                    "REDIS_SENTINEL_SERVICE must be provided when REDIS_MODE is 'sentinel'"
+                )
+        elif self.redis_mode == "single":
+            if not self.redis_host:
+                raise ValueError(
+                    "REDIS_HOST must be provided when REDIS_MODE is 'single'"
+                )
+
+        return self
 
     @model_validator(mode="after")
     def validate_model_provider_compatibility(self):

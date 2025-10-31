@@ -554,6 +554,12 @@ class ResponseGenerator:
             if self.config.enable_vision_generation:
                 logger.info("Vision gating: ON (config enabled)")
                 try:
+                    # Extract query classification from metadata for vision reordering
+                    query_classification = (
+                        query.metadata.get("query_classification")
+                        if query.metadata
+                        else None
+                    )
                     vision_result = self._try_vision_generation(
                         english_query=generation_query,
                         original_query=original_query,
@@ -561,6 +567,7 @@ class ResponseGenerator:
                         doc_mapping=doc_mapping,
                         retrieved_docs=retrieved_docs,
                         language=response_language,
+                        query_classification=query_classification,
                     )
                     if vision_result:
                         vision_answer, vision_citations, vision_meta = vision_result
@@ -1470,10 +1477,15 @@ Response:"""
         doc_mapping: Dict[int, RetrievalResult],
         retrieved_docs: List[RetrievalResult],
         language: str,
+        query_classification: Optional[Dict[str, Any]] = None,
     ) -> Optional[Tuple[str, List[Citation], Dict[str, Any]]]:
         """
         Attempt multimodal generation with Gemini 2.5 Pro using page images if available.
         Returns (answer, citations, vision_meta) or None if vision cannot run.
+
+        Args:
+            query_classification: Optional dict with 'type' field ("pid", "technical_doc", "auto")
+                                  Used to conditionally apply tag matching bonus in reordering.
         """
         # 0) Smart strategy gate DISABLED - Vision always ON for full multimodal capability
         # User requirement: Always use Vision to combine text + image data for maximum accuracy
@@ -1647,6 +1659,7 @@ Response:"""
                             matched_via = "doc_id"
 
                 # Apply tag matching bonus to best matched doc
+                # NEW: Only apply tag bonus for P&ID queries (not technical_doc)
                 if best_match_doc and best_match_doc.text:
                     doc_text_lower = best_match_doc.text.lower()
 
@@ -1658,16 +1671,31 @@ Response:"""
                         re.IGNORECASE,
                     )
                     if tag_patterns:
+                        # Determine if we should apply tag bonus based on query classification
+                        query_type = (
+                            query_classification.get("type")
+                            if query_classification
+                            else None
+                        )
+                        apply_tag_bonus = (
+                            query_type != "technical_doc"
+                        )  # Disable for technical_doc, enable for pid/auto
+
                         for tag in tag_patterns:
                             if (
                                 tag.lower() in original_query.lower()
                                 or tag.lower() in english_query.lower()
                             ):
-                                score += 50  # Strong boost for matching tags
-                                matched_via = "tag_match"
-                                logger.info(
-                                    f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page}"
-                                )
+                                if apply_tag_bonus:
+                                    score += 50  # Strong boost for matching tags
+                                    matched_via = "tag_match"
+                                    logger.info(
+                                        f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page} (bonus applied, query_type={query_type})"
+                                    )
+                                else:
+                                    logger.info(
+                                        f"[DIAGNOSTIC] Tag match found: {tag} in page {result.page} (bonus SKIPPED, query_type={query_type})"
+                                    )
 
                     # Check for keyword overlap
                     keyword_count = 0

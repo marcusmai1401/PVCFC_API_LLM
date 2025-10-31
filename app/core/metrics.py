@@ -93,6 +93,35 @@ cove_adjustments = Counter(
     ["adjustment_type"],  # warning, correction, rejection
 )
 
+# Conversation metrics (multi-turn chat)
+conversation_created = Counter(
+    "rag_conversations_created_total",
+    "Total conversations created",
+    ["language"],
+)
+
+conversation_turns = Counter(
+    "rag_conversation_turns_total",
+    "Total conversation turns",
+    ["role"],  # user, assistant
+)
+
+conversation_summarizations = Counter(
+    "rag_conversation_summarizations_total",
+    "Total conversation summarizations triggered",
+    ["language"],
+)
+
+conversation_token_trims = Counter(
+    "rag_conversation_token_budget_trims_total",
+    "Total times history was trimmed to fit token budget",
+)
+
+conversation_active = Gauge(
+    "rag_conversations_active",
+    "Number of active conversations (from Redis)",
+)
+
 # Citation metrics
 citation_rate = Gauge(
     "rag_citation_rate", "Rate of responses with valid citations", ["endpoint"]

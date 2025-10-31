@@ -14,7 +14,7 @@
 2. [Yêu cầu môi trường](#2-yêu-cầu-môi-trường)
 3. [Chuẩn bị tài liệu nguồn](#3-chuẩn-bị-tài-liệu-nguồn)
 4. [Bước 1: Ingestion (Xử lý tài liệu)](#4-bước-1-ingestion-xử-lý-tài-liệu)
-5. [Bước 2: Indexing vào Weaviate](#5-bước-2-indexing-vào-weaviate)
+5. [Bước 2: Build Search Indices](#5-bước-2-build-search-indices)
 6. [Kiểm tra kết quả](#6-kiểm-tra-kết-quả)
 7. [Xử lý lỗi thường gặp](#7-xử-lý-lỗi-thường-gặp)
 8. [Các tham số nâng cao](#8-các-tham-số-nâng-cao)
@@ -24,31 +24,96 @@
 
 ## 1. TỔNG QUAN QUY TRÌNH
 
+> **⚠️ QUAN TRỌNG**: Hệ thống có **2 PIPELINE SONG SONG** tự động phân loại tài liệu:
+> - **Technical Doc Pipeline** (Manuals, Datasheets) → Standard processing
+> - **P&ID Pipeline** (P&ID, PFD, ISO drawings) → Extended processing với tags
+
 ```mermaid
-graph LR
-    A[Tài liệu PDF mới] --> B[Phase 0: Ingestion]
-    B --> C[Chunks JSONL]
-    C --> D[Phase 1: Indexing]
-    D --> E[Weaviate Vector DB]
-    E --> F[RAG System]
+graph TD
+    A[PDFs] --> B{CAD-like Gate<br/>Auto-detect}
+    B -->|score ≥ 0.60<br/>P&ID| C[P&ID Pipeline]
+    B -->|score < 0.60<br/>Tech Doc| D[Tech Doc Pipeline]
+
+    C --> C1[Layout + Tags Extraction]
+    C1 --> C2[chunks.jsonl + tags.jsonl]
+    C2 --> C3[2 Indexes:<br/>rag_chunks + pvcfc_pid_tags]
+
+    D --> D1[Text Extraction]
+    D1 --> D2[chunks.jsonl]
+    D2 --> D3[1 Index:<br/>rag_chunks]
+
+    C3 --> E[RAG System]
+    D3 --> E
 ```
 
-### Quy trình 2 bước:
+### Quy trình 2 loại tài liệu:
 
-**Phase 0 - Ingestion:**
-- Parse PDF → Extract text & images
-- Chunking (chia nhỏ văn bản)
-- Extract metadata (vendor, equipment_type, doc_type, etc.)
-- Output: `artifacts/ingestion/chunks/*.jsonl`
+#### **Loại 1: Technical Doc** (Standard - Mặc định)
 
-**Phase 1 - Indexing:**
-- Đọc chunks từ JSONL
-- Generate embeddings (Gemini/OpenAI)
-- Upload vào Weaviate với vector index
+**Áp dụng cho:** Manuals, Datasheets, Specifications, Operating Procedures
+
+**Phase 0 - Ingestion**:
+- Parse PDF → Extract text (OCR nếu cần)
+- Chunking văn bản (semantic)
+- Output: `chunks.jsonl`, `doc_id_map.json`
+
+**Phase 1 - Indexing**:
+- **BM25 Chunk Index**: Keyword search
+- **Weaviate**: Vector search (semantic)
+- **Page BM25 Index**: Citation accuracy
+
+#### **Loại 2: P&ID** (Extended - Khi enable)
+
+> **Enable**: Set `ENABLE_PID_TAGS=true` trong `.env`
+
+**Áp dụng cho:** P&ID, PFD, Instrument Drawings, ISO Diagrams
+
+**Phase 0 - Ingestion (MỞ RỘNG)**:
+- Parse PDF → Extract text (giống tech doc)
+- **+ CAD-like Gate**: Auto-detect P&ID (8 features)
+- **+ Page Layout**: Extract spatial layout (bbox, font, drawings)
+- **+ Tag Extraction**: Extract instrument tags (04 PSAL 2207)
+- **+ Crop Generation**: Generate PNG crops of tags
+- Output: `chunks.jsonl` + **`tags.jsonl`** + **`crops/*.png`**
+
+**Phase 1 - Indexing (DUAL)**:
+- **Index 1**: `rag_chunks` (BM25 + Weaviate) ← *Giống tech doc*
+- **Index 2**: `pvcfc_pid_tags` (OpenSearch sidecar) ← *⭐ UNIQUE*
+- **Page BM25 Index**: Citation accuracy
+
+**Tại sao cần dual pipeline?**
+- **P&ID**: Cần spatial layout + tags để tìm chính xác instrument tags
+- **Tech Doc**: Chỉ cần text semantic search
+- **P&ID vẫn có chunks** → Fallback sang semantic search nếu cần
 
 ---
 
 ## 2. YÊU CẦU MÔI TRƯỜNG
+
+> **⚠️ QUAN TRỌNG: HỆ THỐNG CẦN 2 MÔI TRƯỜNG ẢO RIÊNG BIỆT**
+
+### 2.0 Tại Sao Cần 2 Môi Trường?
+
+**Lý do đơn giản:** PaddleOCR và Weaviate xung đột về protobuf version
+
+```
+PaddleOCR cần:  protobuf 3.20.x (cố định)
+Weaviate cần:   protobuf >=4.21.6 (tối thiểu)
+→ KHÔNG THỂ cài cùng 1 môi trường!
+```
+
+**Giải pháp:** 2 môi trường cho 2 công việc khác nhau
+
+| Môi Trường | Dùng Cho | Có Gì | Không Có |
+|------------|----------|-------|----------|
+| **venv_ingest** | Xử lý PDF (ingestion) | PaddleOCR, OCR | Weaviate |
+| **.venv** | Indexing, API, Query | Weaviate, FastAPI | PaddleOCR |
+
+**Quy tắc vàng:**
+```
+Xử lý PDF    → venv_ingest
+Tất cả khác  → .venv
+```
 
 ### Kiểm tra môi trường hiện tại:
 
@@ -73,17 +138,33 @@ docker start weaviate
 docker-compose up -d
 ```
 
-### Nếu virtual environment chưa active:
+### Activate Đúng Môi Trường:
 
+**CHO INGESTION (Bước 1):**
 ```powershell
-# Di chuyển đến thư mục project
 cd "C:\Users\Admin\Desktop\Code - API_LLM_PVCFC"
-
-# Kích hoạt virtual environment chính
-.\venv\Scripts\Activate.ps1
+venv_ingest\Scripts\Activate.ps1  # ← Dùng venv_ingest!
 ```
 
-**Kiểm tra đã activate thành công:** prompt sẽ có `(venv)` ở đầu dòng.
+**CHO INDEXING/API (Bước 2 trở đi):**
+```powershell
+cd "C:\Users\Admin\Desktop\Code - API_LLM_PVCFC"
+.venv\Scripts\Activate.ps1  # ← Dùng .venv!
+```
+
+**Kiểm tra đã activate đúng:**
+- Prompt có `(venv_ingest)` → Đúng cho ingestion
+- Prompt có `(.venv)` → Đúng cho indexing/API
+
+**Verify PaddleOCR (trong venv_ingest):**
+```powershell
+python -c "from paddleocr import PaddleOCR; print('PaddleOCR OK')"
+```
+
+**Verify Weaviate (trong .venv):**
+```powershell
+python -c "import weaviate; print('Weaviate OK')"
+```
 
 ---
 
@@ -132,6 +213,8 @@ Get-ChildItem -Path "data_2024" -Recurse -Filter "*.pdf" | Select-Object FullNam
 
 ## 4. BƯỚC 1: INGESTION (XỬ LÝ TÀI LIỆU)
 
+> **Lưu ý**: Ingestion **TỰ ĐỘNG PHÂN LOẠI** tài liệu thành P&ID hoặc Technical Doc
+
 ### 4.1. Xác minh môi trường
 
 ```powershell
@@ -142,53 +225,124 @@ cd "C:\Users\Admin\Desktop\Code - API_LLM_PVCFC"
 .\venv\Scripts\Activate.ps1
 
 # Kiểm tra script ingestion tồn tại
-Test-Path "scripts\phase0_ingest.py"
+Test-Path "tools\ingest.py"
+
+# Kiểm tra P&ID tags feature (optional)
+$env:ENABLE_PID_TAGS  # "true" = enable P&ID pipeline
 ```
 
 ### 4.2. Chạy Ingestion đầy đủ (tất cả tài liệu)
 
-**Trường hợp 1: Ingestion lần đầu hoặc xử lý lại toàn bộ**
+**Trường hợp 1: Standard Ingestion (Technical Doc only)**
 
 ```powershell
-python scripts/phase0_ingest.py `
-  --input-dir data_2024 `
+# Không có ENABLE_PID_TAGS → chỉ xử lý như Technical Doc
+python tools/ingest.py `
+  --source-dir data_2024 `
   --output-dir artifacts/ingestion `
-  --clear
+  --enable-ocr `
+  --workers 4
+```
+
+**Trường hợp 2: Full Ingestion (Auto-detect P&ID + Technical Doc)**
+
+```powershell
+# Với ENABLE_PID_TAGS=true → tự động phân loại
+$env:ENABLE_PID_TAGS = "true"
+
+python tools/ingest.py `
+  --source-dir data_2024 `
+  --output-dir artifacts/ingestion `
+  --enable-ocr `
+  --workers 4
 ```
 
 **Giải thích tham số:**
-- `--input-dir data_2024`: Thư mục chứa PDF nguồn
+- `--source-dir data_2024`: Thư mục chứa PDF nguồn (cả Tech Doc và P&ID)
 - `--output-dir artifacts/ingestion`: Thư mục lưu kết quả
-- `--clear`: Xóa artifacts cũ trước khi chạy (bắt buộc cho lần đầu)
+- `--enable-ocr`: Bật OCR cho các trang quét (sử dụng PaddleOCR PP-OCRv5)
+- `--workers 4`: Số luồng xử lý song song (mỗi worker có PaddleOCR instance riêng, an toàn với GPU)
 
-### 4.3. Chạy Ingestion chỉ với tài liệu mới (khuyến nghị)
+**Quá trình auto-detect:**
+```
+Mỗi PDF → CAD-like Gate (8 features scoring)
+         ↓
+    score ≥ 0.60?
+         ↓
+    YES: P&ID Pipeline (layout + tags + crops + chunks)
+    NO:  Tech Doc Pipeline (chunks only)
+```
 
-**Trường hợp 2: Chỉ xử lý tài liệu mới thêm vào**
+### 4.3. Chạy Ingestion với OCR và xử lý song song
+
+**Trường hợp 2: Xử lý với OCR và nhiều workers (khuyến nghị cho hiệu suất cao)**
 
 ```powershell
-python scripts/phase0_ingest.py `
-  --input-dir data_2024 `
+python tools/ingest.py `
+  --source-dir data_2024 `
   --output-dir artifacts/ingestion `
-  --skip-existing
+  --enable-ocr `
+  --workers 4 `
+  --extract-tables
 ```
 
 **Giải thích tham số:**
-- `--skip-existing`: Bỏ qua các file đã được xử lý (dựa vào doc_id_map.json)
-- **KHÔNG dùng --clear**: giữ lại kết quả cũ
+- `--enable-ocr`: Bật PaddleOCR cho các trang scan (hỗ trợ tiếng Việt + Anh)
+- `--workers 4`: Sử dụng 4 worker threads song song. **Lưu ý quan trọng:**
+  - Mỗi worker có PaddleOCR instance riêng (thread-local)
+  - An toàn với GPU, không gây xung đột tensor
+  - Tăng tốc xử lý đáng kể với nhiều file
+- `--extract-tables`: Trích xuất bảng biểu từ PDF (mặc định: bật)
 
-### 4.4. Theo dõi tiến trình
+### 4.4. Ví dụ nâng cao: OCR + Song song + Extract tables
 
-Trong quá trình chạy, bạn sẽ thấy:
+**Trường hợp 3: Xử lý đầy đủ với tất cả tính năng**
+
+```powershell
+python tools/ingest.py `
+  --source-dir "D:\Data_Raw" `
+  --output-dir artifacts/ingestion `
+  --enable-ocr `
+  --ocr-lang "vie+eng" `
+  --workers 4 `
+  --extract-tables `
+  --chunk-size 1000 `
+  --chunk-overlap 200
+```
+
+**Chi tiết các tham số:**
+- `--ocr-lang "vie+eng"`: Ngôn ngữ OCR (tiếng Việt + Anh, mặc định)
+- `--chunk-size 1000`: Kích thước chunk (ký tự)
+- `--chunk-overlap 200`: Độ chồng lấn giữa các chunks
+
+### 4.5. Theo dõi tiến trình
+
+Trong quá trình chạy với OCR và multi-workers, bạn sẽ thấy:
 
 ```
-2025-10-15 07:00:00.123 | INFO | Scanning input directory: data_2024
-2025-10-15 07:00:01.456 | INFO | Found 85 PDF files
-2025-10-15 07:00:02.789 | INFO | Processing: K06101/CO2_COMPRESSOR/HITACHI/Manual/doc1.pdf
+=============================================================
+INITIALIZING PP-OCRv5 (PaddleOCR)
+=============================================================
+Detection Model: ch_PP-OCRv4_det_infer (local)
+Recognition Model: Official EN PP-OCRv4 (auto-download)
+GPU Enabled: True
+=============================================================
+2025-10-15 07:00:00 | INFO | Scanning source directory: D:\Data_Raw
+2025-10-15 07:00:01 | INFO | Found 77 PDF files
+2025-10-15 07:00:02 | INFO | Starting ingestion with 4 workers...
+2025-10-15 07:00:03 | DEBUG | Creating new PaddleOCR instance for thread ThreadPoolExecutor-0_0
+2025-10-15 07:00:04 | DEBUG | Creating new PaddleOCR instance for thread ThreadPoolExecutor-0_1
+2025-10-15 07:00:05 | INFO | Processing: doc1.pdf (worker 0)
+2025-10-15 07:00:06 | INFO | Processing: doc2.pdf (worker 1)
 ...
-2025-10-15 07:05:30.123 | SUCCESS | Ingestion complete: 5130 chunks from 77 documents
+2025-10-15 07:15:30 | SUCCESS | Ingestion complete: 5130 chunks from 77 documents
 ```
 
-### 4.5. Kiểm tra kết quả Ingestion
+**Lưu ý:** Khi khởi động, mỗi worker thread sẽ tạo PaddleOCR instance riêng. Đây là thiết kế thread-safe để tránh lỗi GPU tensor conflicts.
+
+### 4.6. Kiểm tra kết quả Ingestion
+
+#### **Kiểm tra Standard Outputs (Cả 2 loại tài liệu)**
 
 ```powershell
 # Xem số lượng file chunks được tạo
@@ -201,86 +355,261 @@ Get-Content "artifacts\ingestion\metadata\doc_id_map.json" | ConvertFrom-Json | 
 Get-Content "artifacts\ingestion\chunks\chunks_001.jsonl" -First 5
 ```
 
+#### **Kiểm tra P&ID Outputs (Nếu enable P&ID tags)**
+
+```powershell
+# Kiểm tra tags extracted
+if (Test-Path "D:\PVCFC_Artifacts\entities\tags.jsonl") {
+    $tagCount = (Get-Content "D:\PVCFC_Artifacts\entities\tags.jsonl").Count
+    Write-Host "✓ Extracted $tagCount tags from P&ID documents" -ForegroundColor Green
+
+    # Xem mẫu tag
+    Get-Content "D:\PVCFC_Artifacts\entities\tags.jsonl" -First 1 | ConvertFrom-Json
+}
+
+# Kiểm tra page layouts
+if (Test-Path "D:\PVCFC_Artifacts\page_layout") {
+    $layoutCount = (Get-ChildItem "D:\PVCFC_Artifacts\page_layout" -Filter "*.json").Count
+    Write-Host "✓ Extracted $layoutCount page layouts" -ForegroundColor Green
+}
+
+# Kiểm tra crops (nếu không lazy mode)
+if (Test-Path "D:\PVCFC_Artifacts\crops") {
+    $cropCount = (Get-ChildItem "D:\PVCFC_Artifacts\crops" -Filter "*.png").Count
+    Write-Host "✓ Generated $cropCount tag crops" -ForegroundColor Green
+}
+
+# Kiểm tra telemetry logs
+if (Test-Path "D:\PVCFC_Artifacts\logs\tag_extraction_telemetry.jsonl") {
+    Write-Host "✓ Tag extraction telemetry logged" -ForegroundColor Green
+
+    # Xem summary
+    Get-Content "D:\PVCFC_Artifacts\logs\tag_extraction_telemetry.jsonl" |
+        ConvertFrom-Json |
+        Select-Object doc_id, is_cadlike, tags_found_total, cadlike_score
+}
+```
+
 **Kết quả mong đợi:**
-- File `artifacts/ingestion/chunks/chunks_001.jsonl` tồn tại
-- File `artifacts/ingestion/metadata/doc_id_map.json` chứa danh sách tài liệu
-- Số chunks trong log khớp với số dòng trong file JSONL
+
+**Technical Doc:**
+- File `chunks.jsonl` tồn tại
+- File `doc_id_map.json` chứa danh sách tài liệu
+- Số chunks trong log khớp với số dòng trong file
+
+**P&ID (thêm):**
+- File `tags.jsonl` chứa extracted tags với bbox
+- Thư mục `page_layout/` chứa layout data
+- Thư mục `crops/` chứa PNG crops (nếu không lazy)
+- File `tag_extraction_telemetry.jsonl` chứa metrics
+
+**Phân biệt trong log:**
+```
+[INFO] Processing: manual_pump.pdf
+[INFO] CAD-like score: 0.12 → NOT P&ID (Tech Doc pipeline)
+[INFO] Extracted 45 chunks
+
+[INFO] Processing: P&ID_ammonia_unit.pdf
+[INFO] CAD-like score: 0.78 → IS P&ID (Extended pipeline)
+[INFO] Selected 25 taggy pages
+[INFO] Extracted 245 tags with confidence avg 0.87
+[INFO] Generated 245 crops
+[INFO] Also extracted 120 standard chunks
+```
 
 ---
 
-## 5. BƯỚC 2: INDEXING VÀO WEAVIATE
+---
 
-### 5.1. Xác minh Weaviate đang chạy
+## 4.7. Phân tích Auto-Detection Results
 
-```powershell
-# Kiểm tra Weaviate healthy
-$health = Invoke-RestMethod -Uri http://localhost:8080/v1/.well-known/ready
-if ($health) { Write-Host "✓ Weaviate đang chạy và sẵn sàng" -ForegroundColor Green }
-```
-
-### 5.2. Chạy Indexing lần đầu (xóa dữ liệu cũ)
-
-**Trường hợp 1: Indexing lần đầu hoặc muốn xóa toàn bộ và index lại**
+### Xem kết quả phân loại của CAD-like Gate:
 
 ```powershell
-python scripts/phase1_index_to_weaviate.py `
-  --chunks-dir artifacts/ingestion/chunks `
-  --clear-existing
+# Nếu có P&ID tags enabled, xem telemetry
+if (Test-Path "D:\PVCFC_Artifacts\logs\tag_extraction_telemetry.jsonl") {
+    Write-Host "`n=== CAD-LIKE DETECTION SUMMARY ===" -ForegroundColor Cyan
+
+    $telemetry = Get-Content "D:\PVCFC_Artifacts\logs\tag_extraction_telemetry.jsonl" |
+        ConvertFrom-Json
+
+    # Phân loại
+    $cadlike = $telemetry | Where-Object { $_.is_cadlike -eq $true }
+    $notCadlike = $telemetry | Where-Object { $_.is_cadlike -eq $false }
+
+    Write-Host "✓ P&ID Documents: $($cadlike.Count)" -ForegroundColor Green
+    Write-Host "✓ Technical Docs: $($notCadlike.Count)" -ForegroundColor Green
+
+    # Show P&ID examples
+    Write-Host "`nP&ID Documents (CAD-like):" -ForegroundColor Yellow
+    $cadlike | Select-Object doc_id, cadlike_score, tags_found_total |
+        Format-Table -AutoSize
+
+    # Show Tech Doc examples
+    Write-Host "`nTechnical Documents (NOT CAD-like):" -ForegroundColor Yellow
+    $notCadlike | Select-Object doc_id, cadlike_score |
+        Format-Table -AutoSize
+}
 ```
 
-**Giải thích tham số:**
-- `--chunks-dir artifacts/ingestion/chunks`: Thư mục chứa chunks JSONL
-- `--clear-existing`: Xóa collection Chunk cũ trong Weaviate trước khi index
+**Example Output:**
+```
+=== CAD-LIKE DETECTION SUMMARY ===
+✓ P&ID Documents: 15
+✓ Technical Docs: 62
 
-**⚠️ CẢNH BÁO:** `--clear-existing` sẽ xóa TOÀN BỘ dữ liệu trong Weaviate. Chỉ dùng khi:
-- Lần đầu tiên index
-- Muốn rebuild toàn bộ index
-- Có backup dữ liệu
+P&ID Documents (CAD-like):
+doc_id                          cadlike_score  tags_found_total
+------                          -------------  ----------------
+P&ID_Ammonia_Unit.pdf           0.78          245
+ISO_Process_Flow.pdf            0.85          189
+Instrument_Loop_Diagram.pdf     0.72          156
 
-### 5.3. Chạy Indexing bổ sung (thêm chunks mới)
+Technical Documents (NOT CAD-like):
+doc_id                          cadlike_score
+------                          -------------
+HCD025_Gear_Manual.pdf          0.12
+Pump_Operating_Manual.pdf       0.08
+Datasheet_Compressor.pdf        0.15
+```
 
-**Trường hợp 2: Chỉ thêm chunks mới vào Weaviate (không xóa dữ liệu cũ)**
+### Phân tích False Positives/Negatives:
 
 ```powershell
-python scripts/phase1_index_to_weaviate.py `
-  --chunks-dir artifacts/ingestion/chunks `
-  --no-clear
+# Documents với score trong gray zone [0.45-0.60)
+$grayZone = $telemetry | Where-Object {
+    $_.cadlike_score -ge 0.45 -and $_.cadlike_score -lt 0.60
+}
+
+if ($grayZone.Count -gt 0) {
+    Write-Host "`n⚠️ Gray Zone Documents (cần review):" -ForegroundColor Yellow
+    $grayZone | Select-Object doc_id, cadlike_score, is_cadlike |
+        Format-Table -AutoSize
+}
 ```
 
-**Giải thích:**
-- `--no-clear` hoặc không dùng `--clear-existing`: Giữ nguyên dữ liệu cũ, chỉ thêm chunks mới
+---
 
-**Lưu ý:** Script có thể phát hiện duplicate dựa trên chunk_id nếu được cấu hình.
+## 5. BƯỚC 2: BUILD SEARCH INDICES
 
-### 5.4. Theo dõi tiến trình Indexing
+> **Quan trọng:**
+> - **Technical Doc**: Chỉ cần BM25 + Weaviate indices
+> - **P&ID**: Thêm OpenSearch tags sidecar index
 
-Trong quá trình chạy, bạn sẽ thấy:
-
-```
-2025-10-15 07:10:00.123 | INFO | Loaded doc_id_map with 77 entries
-2025-10-15 07:10:00.456 | INFO | Connecting to Weaviate at http://localhost:8080...
-2025-10-15 07:10:01.123 | SUCCESS | Connected to Weaviate
-2025-10-15 07:10:01.456 | INFO | Loading chunks from 1 files...
-2025-10-15 07:10:02.789 | SUCCESS | Loaded 5130 chunks from 1 files
-2025-10-15 07:10:03.123 | INFO | Enriching chunks with metadata...
-2025-10-15 07:10:04.456 | INFO | Generating embeddings...
-...
-2025-10-15 07:15:30.123 | SUCCESS | Successfully indexed 5130 chunks to Weaviate
-```
-
-**Các cảnh báo bình thường:**
-- `Text truncated from 23947 to 10000 chars`: Gemini embedding có giới hạn độ dài, phần dư bị cắt
-- `ALTS creds ignored`: Cảnh báo Google Cloud, không ảnh hưởng khi chạy local
-
-### 5.5. Kiểm tra embedding cache
+### 5.1. Kiểm tra Weaviate (đã có sẵn)
 
 ```powershell
-# Xem cache database
-Get-Item "artifacts\ingestion\cache\embeddings.sqlite" | Select-Object Length, LastWriteTime
-
-# Số lượng embeddings đã cache (optional, cần sqlite3)
-# sqlite3 artifacts\ingestion\cache\embeddings.sqlite "SELECT COUNT(*) FROM embeddings;"
+# Kiểm tra số chunks trong Weaviate
+$body = '{ "query": "{ Aggregate { Chunk { meta { count } } } }" }'
+$result = Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/graphql `
+  -Headers @{ "Content-Type" = "application/json" } -Body $body
+$count = $result.data.Aggregate.Chunk[0].meta.count
+Write-Host "✓ Weaviate có $count chunks" -ForegroundColor Green
 ```
+
+**Kết quả mong đợi:** Số chunks khớp với ingestion output (ví dụ: 4,929)
+
+### 5.2. Build BM25 Chunk Index (Bắt buộc)
+
+**Mục đích:** Keyword search để kết hợp với Weaviate semantic search → Hybrid search
+
+```powershell
+python tools/build_bm25_index.py `
+  --chunks-jsonl "artifacts\ingestion_production\chunks\chunks.jsonl" `
+  --index-dir "artifacts\index\bm25"
+```
+
+**Output:**
+```
+Building BM25 index for 4929 documents
+Saved BM25 index to artifacts\index\bm25
+Test search for 'CO2 compressor': Score 8.67
+```
+
+**Files tạo ra:**
+- `artifacts/index/bm25/bm25_index.pkl`
+- `artifacts/index/bm25/metadata.json`
+
+### 5.3. Build Page BM25 Index (Tùy chọn - cho citation)
+
+**Mục đích:** Tìm exact page number để trả về citation chính xác
+
+```powershell
+python tools/build_page_index.py build `
+  --doc-id-map "artifacts\ingestion_production\doc_id_map.json" `
+  --output-dir "artifacts\index_production"
+```
+
+**Output:**
+```
+Extracting pages from 77 documents...
+✅ Wrote 4023 pages to text_by_page.jsonl
+Building BM25 page index...
+✅ BM25 index saved to page_bm25_index.pkl
+
+Metrics:
+- Total Docs: 77
+- Pages Indexed: 4023
+- OCR Pages: 2455
+- Build Time: ~20 mins
+```
+
+**Files tạo ra:**
+- `artifacts/index_production/text_by_page.jsonl`
+- `artifacts/index_production/page_bm25_index.pkl`
+- `artifacts/index_production/page_metadata.json`
+
+**Lưu ý:** Có thể skip nếu không cần citation chi tiết (page numbers)
+
+### 5.4. Build P&ID Tags Index (Nếu enable P&ID)
+
+> **Chỉ cần nếu:** `ENABLE_PID_TAGS=true` và có tags extracted
+
+```powershell
+# Kiểm tra tags đã extracted
+if (Test-Path "D:\PVCFC_Artifacts\entities\tags.jsonl") {
+    $tagCount = (Get-Content "D:\PVCFC_Artifacts\entities\tags.jsonl").Count
+    Write-Host "✓ Found $tagCount tags to index" -ForegroundColor Green
+
+    # Create OpenSearch tags index
+    python scripts\opensearch\create_tags_index.py
+
+    # Bulk upsert tags
+    python scripts\opensearch\bulk_upsert_tags.py `
+        --tags-jsonl "D:\PVCFC_Artifacts\entities\tags.jsonl"
+
+    # Verify
+    curl -X GET "localhost:9200/pvcfc_pid_tags/_count"
+} else {
+    Write-Host "⚠️ No tags found (P&ID feature disabled or no P&ID documents)" -ForegroundColor Yellow
+}
+```
+
+**Output:**
+```json
+{
+  "count": 2450,
+  "_shards": { "total": 1, "successful": 1, "failed": 0 }
+}
+```
+
+### 5.5. Tóm tắt các indices
+
+#### **Technical Doc chỉ cần:**
+
+| Index | Location | Count | Mục đích |
+|-------|----------|-------|----------|
+| **Weaviate** | http://localhost:8080 | 4,838 chunks | Semantic search |
+| **BM25 Chunk** | `artifacts/index/bm25` | 4,838 chunks | Keyword search |
+| **BM25 Page** | `artifacts/index_production` | ~4,000 pages | Citation (page #) |
+
+#### **P&ID thêm:**
+
+| Index | Location | Count | Mục đích |
+|-------|----------|-------|----------|
+| **Tags Sidecar** | OpenSearch `pvcfc_pid_tags` | 2,450 tags | Tag-based search |
+
+**Lưu ý:** P&ID documents **CŨNG CÓ** trong `rag_chunks` (92 chunks từ 15 P&ID docs)
 
 ---
 
@@ -365,7 +694,130 @@ $shards | ForEach-Object {
 
 ---
 
+---
+
+## 6.7. Test Queries trên 2 Pipelines
+
+### Test Technical Doc Query:
+
+```powershell
+# Query về technical specifications
+$body = @{
+    query = "What are the setpoints for HCD025 gear unit?"
+    language = "en"
+    max_context = 8
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ask" `
+    -Headers @{ "Content-Type" = "application/json" } `
+    -Body $body
+
+# Kiểm tra retriever được sử dụng
+Write-Host "Retriever used: $($response.meta.retriever_type)" -ForegroundColor Cyan
+Write-Host "Answer: $($response.answer)"
+```
+
+**Expected Output:**
+```
+Retriever used: technical_doc
+Answer: The setpoints for HCD025 gear unit are...
+Citations: [Doc 1, p.12] (from manual)
+```
+
+### Test P&ID Query:
+
+```powershell
+# Query về instrument tag
+$body = @{
+    query = "What is 04 PSAL 2207 pressure alarm?"
+    language = "en"
+    max_context = 8
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ask" `
+    -Headers @{ "Content-Type" = "application/json" } `
+    -Body $body
+
+# Kiểm tra retriever và sources
+Write-Host "Retriever used: $($response.meta.retriever_type)" -ForegroundColor Cyan
+Write-Host "Sources: $($response.meta.sources)" -ForegroundColor Yellow
+Write-Host "Answer: $($response.answer)"
+
+# Check if bbox present (P&ID specific)
+if ($response.citations[0].bbox) {
+    Write-Host "✓ Bbox present: $($response.citations[0].bbox)" -ForegroundColor Green
+}
+if ($response.citations[0].crop_path) {
+    Write-Host "✓ Crop available: $($response.citations[0].crop_path)" -ForegroundColor Green
+}
+```
+
+**Expected Output:**
+```
+Retriever used: hybrid_with_tags
+Sources: [tags, chunks]  ← 2 branches!
+Answer: 04 PSAL 2207 is a pressure safety alarm low...
+✓ Bbox present: [100, 200, 150, 250]
+✓ Crop available: D:\PVCFC_Artifacts\crops\...\04_PSAL_2207.png
+```
+
+---
+
 ## 7. XỬ LÝ LỖI THƯỜNG GẶP
+
+### Lỗi 0: "Tại sao P&ID không extract tags?"
+
+**Triệu chứng:**
+```
+[INFO] Processing: P&ID_ammonia.pdf
+[INFO] CAD-like score: 0.78 → IS P&ID
+[WARNING] PID tags extraction is disabled (ENABLE_PID_TAGS=false)
+[INFO] Extracted 45 chunks  ← Chỉ có chunks, không có tags
+```
+
+**Nguyên nhân:** `ENABLE_PID_TAGS=false` hoặc không set
+
+**Giải pháp:**
+```powershell
+# Thêm vào .env
+Add-Content -Path ".env" -Value "ENABLE_PID_TAGS=true"
+
+# Hoặc set trong session
+$env:ENABLE_PID_TAGS = "true"
+
+# Chạy lại ingestion
+python tools/ingest.py --source-dir data_2024 --output-dir artifacts/ingestion
+```
+
+### Lỗi 0.5: "Manual được detect là P&ID (False Positive)"
+
+**Triệu chứng:**
+```
+[INFO] Processing: Pump_Manual.pdf
+[INFO] CAD-like score: 0.62 → IS P&ID  ← SAI!
+[INFO] Extracted 8 tags  ← False positives
+```
+
+**Nguyên nhân:**
+- Manual có nhiều diagrams/tables
+- Có technical codes giống tags format
+
+**Giải pháp:**
+```powershell
+# Option 1: Tăng threshold
+# Edit config/cadlike_gate.yaml
+weights:
+  producer_keyword: 0.25  # Tăng weight metadata
+  geometry_density: 0.20  # Tăng weight drawings
+  regex_3piece_hits: 0.15 # Giảm weight regex
+
+# Option 2: Add exclusion cho filename patterns
+# Thêm vào gray_zone_keywords (negative)
+gray_zone_exclusions:
+  - "manual"
+  - "datasheet"
+  - "specification"
+```
 
 ### Lỗi 1: ModuleNotFoundError: No module named 'weaviate.classes'
 
@@ -458,11 +910,25 @@ Nếu muốn giảm warning:
 **Giải pháp:**
 
 ```powershell
-# Giảm batch size khi ingestion
-python scripts/phase0_ingest.py `
-  --input-dir data_2024 `
+# Giảm số workers khi gặp vấn đề memory
+python tools/ingest.py `
+  --source-dir data_2024 `
   --output-dir artifacts/ingestion `
-  --batch-size 10
+  --enable-ocr `
+  --workers 2
+```
+
+### Lỗi 7: GPU tensor conflicts với OCR
+
+**Nguyên nhân:** (Đã được fix) - Trước đây nhiều threads dùng chung PaddleOCR instance
+
+**Giải pháp hiện tại:** Hệ thống đã được fix với thread-local PaddleOCR instances. Bạn có thể an tâm dùng `--workers >1` với `--enable-ocr`.
+
+**Nếu vẫn gặp lỗi:**
+```powershell
+# Force CPU mode nếu GPU gặp vấn đề
+$env:CUDA_VISIBLE_DEVICES = "-1"
+python tools/ingest.py --source-dir data_2024 --enable-ocr --workers 4
 ```
 
 ---
@@ -472,34 +938,41 @@ python scripts/phase0_ingest.py `
 ### 8.1. Phase 0: Ingestion
 
 ```powershell
-python scripts/phase0_ingest.py --help
+python tools/ingest.py --help
 ```
 
 **Các tham số hay dùng:**
 
 | Tham số | Mô tả | Giá trị mặc định | Ví dụ |
 |---------|-------|------------------|-------|
-| `--input-dir` | Thư mục chứa PDF nguồn | `data_2024` | `--input-dir data_2024` |
+| `--source-dir` | Thư mục chứa PDF nguồn | (bắt buộc) | `--source-dir data_2024` |
 | `--output-dir` | Thư mục lưu kết quả | `artifacts/ingestion` | `--output-dir artifacts/ingestion` |
-| `--clear` | Xóa artifacts cũ | `False` | `--clear` |
-| `--skip-existing` | Bỏ qua file đã xử lý | `False` | `--skip-existing` |
+| `--enable-ocr` | Bật OCR (PaddleOCR) | `False` | `--enable-ocr` |
+| `--ocr-lang` | Ngôn ngữ OCR | `vie+eng` | `--ocr-lang "eng"` |
+| `--workers` | Số worker threads | auto (max 4) | `--workers 4` |
 | `--chunk-size` | Kích thước chunk (chars) | `1000` | `--chunk-size 1500` |
 | `--chunk-overlap` | Độ overlap giữa chunks | `200` | `--chunk-overlap 300` |
-| `--extract-images` | Trích xuất hình ảnh | `True` | `--no-extract-images` |
-| `--max-workers` | Số worker song song | `4` | `--max-workers 8` |
-| `--log-level` | Mức độ log | `INFO` | `--log-level DEBUG` |
+| `--extract-tables` | Trích xuất bảng biểu | `True` | `--no-extract-tables` |
+| `--parser` | PDF parser engine | `auto` | `--parser pymupdf` |
+
+**⚡ Lưu ý quan trọng về multi-threading với OCR:**
+- Hệ thống sử dụng **thread-local PaddleOCR instances**
+- Mỗi worker thread có PaddleOCR instance riêng
+- **An toàn 100% với GPU** - không gây xung đột tensor
+- Có thể dùng `--workers 4` hoặc nhiều hơn với `--enable-ocr` mà không lo lỗi
 
 **Ví dụ nâng cao:**
 
 ```powershell
-# Ingestion với chunk size lớn hơn và nhiều worker
-python scripts/phase0_ingest.py `
-  --input-dir data_2024 `
+# Ingestion với OCR, nhiều workers, và chunking tùy chỉnh
+python tools/ingest.py `
+  --source-dir "D:\Data_Raw" `
   --output-dir artifacts/ingestion `
+  --enable-ocr `
+  --workers 4 `
   --chunk-size 2000 `
   --chunk-overlap 400 `
-  --max-workers 8 `
-  --skip-existing
+  --extract-tables
 ```
 
 ### 8.2. Phase 1: Indexing
@@ -616,20 +1089,20 @@ docker start weaviate
 - [ ] Đặt tên thư mục theo quy ước: `{EQUIPMENT_ID}/{EQUIPMENT_TYPE}/{VENDOR}/{DOC_TYPE}/`
 
 **Bước 2: Ingestion**
-- [ ] Chạy `python scripts/phase0_ingest.py` với tham số phù hợp
+- [ ] Chạy `python tools/ingest.py --source-dir ... --enable-ocr --workers 4`
 - [ ] Kiểm tra log không có ERROR
-- [ ] Xác nhận file chunks JSONL được tạo trong `artifacts/ingestion/chunks/`
+- [ ] Xác nhận `chunks.jsonl` và `doc_id_map.json` được tạo
 
-**Bước 3: Indexing**
-- [ ] Chạy `python scripts/phase1_index_to_weaviate.py` với tham số phù hợp
-- [ ] Kiểm tra log: "Successfully indexed X chunks to Weaviate"
-- [ ] Không có ERROR trong quá trình embedding/indexing
+**Bước 3: Build Indices**
+- [ ] Build BM25 chunk index: `python tools/build_bm25_index.py ...`
+- [ ] Build page index (optional): `python tools/build_page_index.py build ...`
+- [ ] Kiểm tra Weaviate đã có chunks (đã được index từ trước)
 
 **Bước 4: Kiểm tra**
-- [ ] Query số lượng chunks trong Weaviate khớp với log
-- [ ] Test tìm kiếm BM25 trả về kết quả hợp lý
-- [ ] Shard status = READY
-- [ ] Node status = HEALTHY
+- [ ] Weaviate có đúng số chunks (4,929)
+- [ ] BM25 index files tồn tại: `artifacts/index/bm25/bm25_index.pkl`
+- [ ] Page index tồn tại: `artifacts/index_production/page_bm25_index.pkl`
+- [ ] Test search hoạt động (xem section 6)
 
 **Sau khi hoàn thành:**
 - [ ] Backup artifacts nếu cần
@@ -703,13 +1176,13 @@ try {
 Write-Step "Bước 1: Ingestion (Xử lý tài liệu PDF)"
 
 $ingestArgs = @(
-    "scripts/phase0_ingest.py",
-    "--input-dir", $InputDir,
-    "--output-dir", $OutputDir
+    "tools/ingest.py",
+    "--source-dir", $InputDir,
+    "--output-dir", $OutputDir,
+    "--enable-ocr",
+    "--workers", "4",
+    "--extract-tables"
 )
-
-if ($ClearArtifacts) { $ingestArgs += "--clear" }
-if ($SkipExisting) { $ingestArgs += "--skip-existing" }
 
 Write-Host "Đang chạy: python $($ingestArgs -join ' ')"
 & python $ingestArgs
@@ -720,21 +1193,34 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "Ingestion hoàn thành"
 
-# Step 2: Indexing
-Write-Step "Bước 2: Indexing vào Weaviate"
+# Step 2: Build BM25 Indices
+Write-Step "Bước 2: Build BM25 Indices"
 
-$indexArgs = @(
-    "scripts/phase1_index_to_weaviate.py",
-    "--chunks-dir", "$OutputDir/chunks"
+# Build BM25 chunk index
+Write-Host "Building BM25 chunk index..."
+$bm25Args = @(
+    "tools/build_bm25_index.py",
+    "--chunks-jsonl", "$OutputDir/chunks/chunks.jsonl",
+    "--index-dir", "artifacts/index/bm25"
 )
-
-if ($ClearWeaviate) { $indexArgs += "--clear-existing" }
-
-Write-Host "Đang chạy: python $($indexArgs -join ' ')"
-& python $indexArgs
+& python $bm25Args
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Indexing thất bại!"
+    Write-Error "BM25 indexing thất bại!"
+    exit 1
+}
+
+# Build page index
+Write-Host "Building page index..."
+$pageArgs = @(
+    "tools/build_page_index.py", "build",
+    "--doc-id-map", "$OutputDir/doc_id_map.json",
+    "--output-dir", "artifacts/index_production"
+)
+& python $pageArgs
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Page indexing thất bại!"
     exit 1
 }
 Write-Success "Indexing hoàn thành"
@@ -757,13 +1243,13 @@ Write-Step "Hoàn thành toàn bộ quy trình!"
 
 ```powershell
 # Chạy full ingestion lần đầu (xóa dữ liệu cũ)
-.\run_full_ingestion.ps1 -ClearArtifacts -ClearWeaviate
-
-# Chạy incremental ingestion (chỉ thêm tài liệu mới)
-.\run_full_ingestion.ps1 -SkipExisting
+.\run_full_ingestion.ps1 -ClearWeaviate
 
 # Chạy với thư mục khác
-.\run_full_ingestion.ps1 -InputDir "data_2025" -SkipExisting
+.\run_full_ingestion.ps1 -InputDir "D:\Data_Raw"
+
+# Chạy với custom workers
+# (Edit script to add --workers parameter if needed)
 ```
 
 ---
@@ -786,8 +1272,10 @@ Code - API_LLM_PVCFC/
 │       ├── chunks/         # Chunks JSONL output
 │       ├── metadata/       # doc_id_map.json
 │       └── cache/          # Embedding cache
+├── tools/
+│   ├── ingest.py           # Script ingestion chính
+│   └── ingest_single_pdf.py # Ingestion đơn lẻ
 ├── scripts/
-│   ├── phase0_ingest.py    # Script ingestion
 │   └── phase1_index_to_weaviate.py  # Script indexing
 ├── venv/                   # Virtual environment
 ├── docker-compose.yml      # Weaviate config
@@ -806,6 +1294,74 @@ Nếu gặp vấn đề không được mô tả trong tài liệu này:
 
 ---
 
-**Cập nhật lần cuối:** 2025-10-15
-**Phiên bản:** 1.0
+---
+
+## 12. QUY TRÌNH ĐÃ VERIFIED (Thực Tế 2025-10-22)
+
+> **Workflow này đã được test và chạy thành công với 77 PDFs**
+
+### Kết Quả Actual:
+
+```
+✓ Files processed: 77/77 (100%)
+✓ Chunks created: 5,012
+✓ P&ID tags extracted: 213
+✓ OpenSearch indexed: 10,357 docs
+✓ Weaviate indexed: 10,357 objects
+✓ P&ID tags indexed: 207
+✓ Duration: ~45 minutes total
+```
+
+### Workflow Đã Verified:
+
+**1. Ingestion với venv_ingest (2-3 phút):**
+```powershell
+venv_ingest\Scripts\Activate.ps1
+python tools/ingest.py --source-dir "D:\Data_Raw" --output-dir "artifacts\ingestion_production" --enable-ocr --workers 2 --enable-pid-tags
+```
+
+**2. Switch sang .venv:**
+```powershell
+deactivate
+.venv\Scripts\Activate.ps1
+```
+
+**3. Indexing với .venv (35-40 phút):**
+```powershell
+python scripts\opensearch\create_rag_chunks_index.py --delete-if-exists
+python scripts\opensearch\create_tags_index.py --delete-if-exists
+python scripts\utilities\index_production_chunks.py
+python scripts\opensearch\bulk_upsert_tags.py --tags-file "artifacts\ingestion_production\entities\tags.jsonl"
+```
+
+**4. Start API:**
+```powershell
+.\launchers\start_api.ps1
+```
+
+### Key Learnings:
+
+**Threshold Adjustment:**
+- Original: 0.60
+- Adjusted: 0.55 (file P&ID chính có score 0.559)
+- Location: `config/cadlike_gate.yaml`
+
+**Tags Location:**
+- Output: `artifacts/ingestion_production/entities/tags.jsonl`
+- (Không phải D:\PVCFC_Artifacts như documentation cũ)
+
+**Workers:**
+- Recommendation: 2 workers (GPU-safe, đủ nhanh)
+
+---
+
+**Cập nhật lần cuối:** 2025-10-22
+**Phiên bản:** 2.0 (Verified với actual execution)
 **Tác giả:** Team RAG System
+
+**Changelog v2.0:**
+- ✅ Thêm giải thích dual venv architecture (Section 2.0)
+- ✅ Verified workflow với 77 files actual (Section 12)
+- ✅ Threshold adjustment documented (0.55)
+- ✅ Actual locations và counts
+- ✅ Step-by-step đã test thành công

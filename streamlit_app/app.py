@@ -140,6 +140,27 @@ def show_home():
                 )
 
 
+def show_chat_interface():
+    """Show ChatGPT-style chat interface"""
+    try:
+        from streamlit_app.components.chat_interface import render as chat_render
+
+        # Get API base URL from session state
+        api_base_url = st.session_state.get("api_base_url", "http://127.0.0.1:8000")
+
+        # Render chat interface
+        chat_render(api_base_url=api_base_url)
+    except ImportError:
+        try:
+            from components.chat_interface import render as chat_render
+
+            api_base_url = st.session_state.get("api_base_url", "http://127.0.0.1:8000")
+            chat_render(api_base_url=api_base_url)
+        except Exception as e:
+            st.error(f"❌ Error loading Chat Interface: {str(e)}")
+            st.info("Chat interface component is not available.")
+
+
 def show_query_lab():
     """Show the Query Lab (RAG QA) interface."""
     # Priority 1: Full-featured PDF Citation Viewer (ENABLED)
@@ -230,10 +251,27 @@ def main():
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
-        # Simple navigation - only 2 pages (no emojis for cleaner look)
-        pages = ["Home", "RAG Query"]
+        # Initialize sidebar collapsed state
+        if "sidebar_collapsed" not in st.session_state:
+            st.session_state.sidebar_collapsed = False
+
+        # ISSUE 4 FIX: Simplified navigation - 2 pages (removed Advanced)
+        pages = ["Home", "Chat"]
+        page_icons = ["🏠", "💬"]
+
+        # Show full labels if expanded, icons only if collapsed
+        if not st.session_state.sidebar_collapsed:
+            page_labels = [f"{icon} {name}" for icon, name in zip(page_icons, pages)]
+        else:
+            page_labels = page_icons
+
         page = st.radio(
-            "Navigate", pages, index=0, key="navigation", label_visibility="collapsed"
+            "Navigate",
+            pages,
+            format_func=lambda x: page_labels[pages.index(x)],
+            index=1,  # Default to Chat
+            key="navigation",
+            label_visibility="collapsed",
         )
 
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -264,6 +302,18 @@ def main():
                     "/"
                 )  # Remove trailing slash
                 st.success("API URL updated")
+                st.rerun()
+
+        # New Chat button in sidebar
+        if page == "Chat":
+            st.markdown("<hr>", unsafe_allow_html=True)
+            if st.button(
+                "🔄 New Conversation", use_container_width=True, type="primary"
+            ):
+                st.session_state.conversation_id = None
+                st.session_state.conversation_history = []
+                st.session_state.message_offset = 0
+                st.success("✓ New conversation started")
                 st.rerun()
 
         # Minimal backend status indicator
@@ -312,8 +362,9 @@ def main():
     # Route to selected page
     if page == "Home":
         show_home()
-    elif page == "RAG Query":
-        show_query_lab()
+    elif page == "Chat":
+        show_chat_interface()
+    # ISSUE 4: Advanced tab removed - PDF viewer now integrated in Chat
 
 
 if __name__ == "__main__":
