@@ -8,8 +8,10 @@ from typing import Any, Dict, List, Optional
 
 import weaviate
 from loguru import logger
+from pybreaker import CircuitBreakerError
 from weaviate.classes.query import Filter, MetadataQuery
 
+from app.core.circuit_breaker import get_weaviate_breaker
 from app.core.config import settings
 from app.rag.query_transform import TransformedQuery
 from app.rag.retriever import RetrievalResult
@@ -421,7 +423,10 @@ class WeaviateRetriever:
         limit: int,
     ) -> List[Dict[str, Any]]:
         """
-        Perform Weaviate near_vector search
+        Perform Weaviate near_vector search with circuit breaker protection.
+
+        Circuit breaker prevents cascading failures when Weaviate is slow/down.
+        If breaker is OPEN, returns empty list for graceful degradation.
 
         KNOWN LIMITATION: Some Weaviate SDK versions may not support passing
         'where' filter to near_vector() method, causing:
@@ -437,39 +442,83 @@ class WeaviateRetriever:
             limit: Number of results to retrieve
 
         Returns:
-            List of raw Weaviate results
+            List of raw Weaviate results (empty if circuit breaker is open)
         """
-        try:
-            # Query Weaviate with near_vector
-            # Use Weaviate v4 API with proper method chaining
-            query_builder = self._collection.query.near_vector(
-                near_vector=query_vector,
-                limit=limit,
-                return_metadata=MetadataQuery(distance=True, certainty=True),
+        # Check if circuit breaker is enabled
+        circuit_breaker_enabled = getattr(settings, "circuit_breaker_enabled", True)
+
+        if not circuit_breaker_enabled:
+            # Circuit breaker disabled, use direct call
+            return self._execute_weaviate_query(
+                query_vector, where_filter, limit
             )
 
-            # Apply filters if any using method chaining
-            if where_filter is not None:
-                query_builder = query_builder.with_where(where_filter)
-
-            # Execute query
-            response = query_builder
-
-            # Convert to list of dicts
-            results = []
-            for obj in response.objects:
-                result = {
-                    "uuid": str(obj.uuid),
-                    "properties": obj.properties,
-                    "metadata": obj.metadata,
-                }
-                results.append(result)
-
+        # Use circuit breaker
+        try:
+            breaker = get_weaviate_breaker()
+            results = breaker.call(
+                self._execute_weaviate_query,
+                query_vector=query_vector,
+                where_filter=where_filter,
+                limit=limit,
+            )
             return results
 
+        except CircuitBreakerError:
+            logger.warning(
+                "Weaviate circuit breaker OPEN - graceful degradation to empty results. "
+                "Hybrid retriever will rely on OpenSearch/BM25 only."
+            )
+            return []  # Graceful degradation
+
         except Exception as e:
+            # Circuit breaker will track this failure
             logger.error(f"Weaviate query failed: {e}")
             raise
+
+    def _execute_weaviate_query(
+        self,
+        query_vector: List[float],
+        where_filter: Optional[Filter],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute Weaviate query (internal method called by circuit breaker).
+
+        Args:
+            query_vector: Query embedding vector
+            where_filter: Metadata filters
+            limit: Number of results to retrieve
+
+        Returns:
+            List of raw Weaviate results
+        """
+        # Query Weaviate with near_vector
+        # Use Weaviate v4 API with proper method chaining
+        query_builder = self._collection.query.near_vector(
+            near_vector=query_vector,
+            limit=limit,
+            return_metadata=MetadataQuery(distance=True, certainty=True),
+        )
+
+        # Apply filters if any using method chaining
+        if where_filter is not None:
+            query_builder = query_builder.with_where(where_filter)
+
+        # Execute query
+        response = query_builder
+
+        # Convert to list of dicts
+        results = []
+        for obj in response.objects:
+            result = {
+                "uuid": str(obj.uuid),
+                "properties": obj.properties,
+                "metadata": obj.metadata,
+            }
+            results.append(result)
+
+        return results
 
     def _convert_to_retrieval_results(
         self, weaviate_results: List[Dict[str, Any]]

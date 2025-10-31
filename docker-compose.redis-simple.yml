@@ -1,0 +1,53 @@
+version: '3.8'
+
+# Simplified Redis Stack for Local Testing
+# Architecture: 1 master only (no sentinel, no replica)
+# Use this for Week 1 distributed cache testing
+
+networks:
+  redis-simple:
+    driver: bridge
+    name: redis-simple-network
+
+volumes:
+  redis-data:
+    driver: local
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: pvcfc_redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --requirepass ${REDIS_PASSWORD:-pvcfc_redis_2025_secure}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - redis-simple
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-pvcfc_redis_2025_secure}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+
+# Usage:
+# 1. Start: docker compose -f docker-compose.redis-simple.yml up -d
+# 2. Test: docker exec pvcfc_redis redis-cli -a pvcfc_redis_2025_secure ping
+# 3. Stop: docker compose -f docker-compose.redis-simple.yml down
+#
+# For .env configuration, use:
+#   REDIS_MODE=single
+#   REDIS_HOST=localhost
+#   REDIS_PORT=6379
+#   REDIS_PASSWORD=pvcfc_redis_2025_secure

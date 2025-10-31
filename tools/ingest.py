@@ -182,10 +182,39 @@ class IngestionPipeline:
             self.output_dir / "markdown",
             self.output_dir / "chunks",
             self.output_dir / "manifests",
+            self.output_dir / "entities",  # NEW: For tags.jsonl
         ]
 
         for dir_path in dirs:
             dir_path.mkdir(parents=True, exist_ok=True)
+
+    def _cleanup_jsonl_files(self):
+        """
+        Clean up JSONL files from previous runs to prevent duplicates.
+        Called at the start of each ingestion run.
+
+        This method backs up and clears chunks.jsonl and tags.jsonl to ensure
+        that each run starts with a clean slate and doesn't accumulate duplicates
+        from previous runs.
+        """
+        jsonl_files_to_clean = [
+            self.output_dir / "chunks" / "chunks.jsonl",
+            self.output_dir / "entities" / "tags.jsonl",
+        ]
+
+        for jsonl_file in jsonl_files_to_clean:
+            if jsonl_file.exists():
+                # Create backup before deletion
+                backup_file = jsonl_file.with_suffix(".jsonl.backup")
+                if backup_file.exists():
+                    backup_file.unlink()  # Remove old backup
+
+                shutil.copy2(jsonl_file, backup_file)
+                logger.info(f"✅ Backed up {jsonl_file.name} to {backup_file.name}")
+
+                # Clear the file
+                jsonl_file.unlink()
+                logger.info(f"🧹 Cleaned up {jsonl_file.name} from previous run")
 
     def run(self) -> Dict[str, Any]:
         """
@@ -212,6 +241,9 @@ class IngestionPipeline:
 
         # Ensure output directories exist
         self._setup_output_dirs()
+
+        # NEW: Clean up JSONL files from previous runs to prevent duplicates
+        self._cleanup_jsonl_files()
 
         # Find all PDFs recursively
         pdf_files = list(self.source_dir.rglob("*.pdf"))

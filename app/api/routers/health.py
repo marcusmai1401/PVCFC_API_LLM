@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from loguru import logger
 
 from app.core.config import settings
+from app.core.health_checker import HealthChecker
 
 router = APIRouter()
 
@@ -20,19 +21,11 @@ _start_time = time.time()
 @router.get("/healthz")
 async def health_check(request: Request) -> Dict[str, Any]:
     """
-    Endpoint kiểm tra sức khỏe ứng dụng
+    Legacy health check endpoint - simple liveness probe.
 
-    Returns:
-        - status: "healthy"
-        - app_env: môi trường hiện tại
-        - version: phiên bản ứng dụng
-        - commit_sha: git commit hash
-        - uptime_seconds: thời gian chạy tính bằng giây
-        - uptime_human: thời gian chạy dạng human-readable
-        - llm_provider_ready: có sẵn sàng kết nối LLM không
-        - timestamp: thời gian hiện tại ISO
+    Returns basic app info and uptime. For detailed readiness checks,
+    use the /readyz endpoint.
     """
-
     # Tính uptime
     current_time = time.time()
     uptime_seconds = int(current_time - _start_time)
@@ -51,25 +44,53 @@ async def health_check(request: Request) -> Dict[str, Any]:
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
-    # Check conversation manager (Redis) health
-    conversation_manager = getattr(request.app.state, "conversation_manager", None)
-    if conversation_manager:
-        try:
-            redis_health = conversation_manager.health_check()
-            health_data["conversation_manager"] = redis_health
-        except Exception as e:
-            health_data["conversation_manager"] = {
-                "status": "unhealthy",
-                "error": str(e),
-            }
-    else:
-        health_data["conversation_manager"] = {"status": "not_configured"}
-
     # Log health check (với trace_id nếu có)
     trace_id = getattr(request.state, "trace_id", "unknown")
     logger.debug(f"Health check requested", extra={"trace_id": trace_id})
 
     return health_data
+
+
+@router.get("/livez")
+async def liveness_check(request: Request) -> Dict[str, Any]:
+    """
+    Kubernetes liveness probe - is the app alive?
+
+    Quick check to see if the process is responsive.
+    Should always return 200 unless the process is dead.
+    """
+    health_checker = HealthChecker(request.app.state)
+    return await health_checker.check_all(check_type="liveness")
+
+
+@router.get("/readyz")
+async def readiness_check(request: Request) -> Dict[str, Any]:
+    """
+    Kubernetes readiness probe - can the app serve traffic?
+
+    Deep checks of all dependencies:
+    - Weaviate (vector database)
+    - OpenSearch (BM25 search)
+    - Redis (cache/conversation state)
+    - File system (index directories)
+
+    Returns:
+        - status: "healthy", "degraded", or "unhealthy"
+        - components: individual component health statuses
+        - check_duration_ms: time taken to perform all checks
+    """
+    health_checker = HealthChecker(request.app.state)
+    result = await health_checker.check_all(check_type="readiness")
+
+    # Log degraded or unhealthy states
+    trace_id = getattr(request.state, "trace_id", "unknown")
+    if result["status"] != "healthy":
+        logger.warning(
+            f"Readiness check: {result['status']}",
+            extra={"trace_id": trace_id, "components": result.get("components", [])},
+        )
+
+    return result
 
 
 def _format_uptime(seconds: int) -> str:

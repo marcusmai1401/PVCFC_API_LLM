@@ -12,6 +12,10 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from opensearchpy import OpenSearch
+from pybreaker import CircuitBreakerError
+
+from app.core.circuit_breaker import get_opensearch_breaker
+from app.core.config import settings
 
 
 class OpenSearchBM25Retriever:
@@ -90,7 +94,10 @@ class OpenSearchBM25Retriever:
         self, query: str, top_k: int = 5, min_score: float = 0.0
     ) -> List[Dict[str, Any]]:
         """
-        Search documents using BM25 (compatible with BM25Indexer.search interface)
+        Search documents using BM25 with circuit breaker protection.
+
+        Circuit breaker prevents cascading failures when OpenSearch is slow/down.
+        If breaker is OPEN, returns empty list for graceful degradation.
 
         Args:
             query: Search query
@@ -98,8 +105,30 @@ class OpenSearchBM25Retriever:
             min_score: Minimum score threshold
 
         Returns:
-            List of search results with scores (compatible format)
+            List of search results with scores (empty if circuit breaker is open)
         """
+        circuit_breaker_enabled = getattr(settings, "circuit_breaker_enabled", True)
+
+        if not circuit_breaker_enabled:
+            return self._execute_search(query, top_k, min_score)
+
+        try:
+            breaker = get_opensearch_breaker()
+            return breaker.call(self._execute_search, query=query, top_k=top_k, min_score=min_score)
+        except CircuitBreakerError:
+            logger.warning(
+                "OpenSearch circuit breaker OPEN - returning empty results. "
+                "System will use fallback retrieval if available."
+            )
+            return []  # Graceful degradation
+        except Exception as e:
+            logger.error(f"OpenSearch search failed: {e}")
+            raise
+
+    def _execute_search(
+        self, query: str, top_k: int = 5, min_score: float = 0.0
+    ) -> List[Dict[str, Any]]:
+        """Execute OpenSearch query (internal method called by circuit breaker)"""
         try:
             # Build OpenSearch query with tag entity boosting
             # Strategy: Boost is_tag_entity=True docs by 10x
@@ -450,12 +479,12 @@ class OpenSearchBM25Retriever:
         )
         return []
 
-    def health_check(self) -> bool:
+    def health_check(self) -> Dict[str, Any]:
         """
         Check if OpenSearch connection is healthy
 
         Returns:
-            True if healthy, False otherwise
+            Dict with status and details
         """
         try:
             # Test connection
@@ -465,25 +494,37 @@ class OpenSearchBM25Retriever:
             exists = self.client.indices.exists(index=self.index_name)
             if not exists:
                 logger.error(f"Index '{self.index_name}' does not exist")
-                return False
+                return {
+                    "status": "unhealthy",
+                    "error": f"Index '{self.index_name}' does not exist",
+                }
 
             # Check index health
             health = self.client.cluster.health(index=self.index_name)
-            status = health["status"]
+            cluster_status = health["status"]
 
-            if status == "red":
+            if cluster_status == "red":
                 logger.error(f"Index '{self.index_name}' health is RED")
-                return False
+                return {
+                    "status": "unhealthy",
+                    "error": f"Index '{self.index_name}' health is RED",
+                    "cluster_health": cluster_status,
+                }
 
             logger.info(
                 f"OpenSearch health check OK: version={info['version']['number']}, "
-                f"index={self.index_name}, status={status}"
+                f"index={self.index_name}, status={cluster_status}"
             )
-            return True
+            return {
+                "status": "healthy",
+                "index": self.index_name,
+                "cluster_health": cluster_status,
+                "version": info["version"]["number"],
+            }
 
         except Exception as e:
             logger.error(f"Health check failed: {e}")
-            return False
+            return {"status": "unhealthy", "error": str(e)}
 
 
 # Factory function for easy instantiation from config

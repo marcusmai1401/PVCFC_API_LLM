@@ -24,6 +24,7 @@ services:
   redis-master:
     image: redis:7-alpine
     container_name: redis-master
+    hostname: redis-master
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -37,7 +38,9 @@ services:
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
     networks:
-      - redis-ha
+      redis-ha:
+        aliases:
+          - redis-master
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
       interval: 5s
@@ -90,21 +93,15 @@ services:
     restart: unless-stopped
     ports:
       - "26379:26379"
-    command: >
-      sh -c "
-      cat > /tmp/sentinel.conf <<EOF
-      sentinel monitor mymaster redis-master 6379 2
-      sentinel auth-pass mymaster ${REDIS_PASSWORD:-changeme}
-      sentinel down-after-milliseconds mymaster 5000
-      sentinel parallel-syncs mymaster 1
-      sentinel failover-timeout mymaster 10000
-      sentinel deny-scripts-reconfig yes
-      EOF
-      redis-sentinel /tmp/sentinel.conf
-      "
+    entrypoint: ["/bin/sh", "/sentinel-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel.conf:/etc/redis/sentinel.conf:ro
+      - ./config/sentinel-entrypoint.sh:/sentinel-entrypoint.sh:ro
     depends_on:
       redis-master:
         condition: service_healthy
+      redis-replica-1:
+        condition: service_started
     networks:
       - redis-ha
     healthcheck:
@@ -112,9 +109,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 15s
+      start_period: 20s
     environment:
       - TZ=Asia/Ho_Chi_Minh
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
 
   # ==========================================
   # Redis Sentinel 2
@@ -125,21 +123,15 @@ services:
     restart: unless-stopped
     ports:
       - "26380:26379"
-    command: >
-      sh -c "
-      cat > /tmp/sentinel.conf <<EOF
-      sentinel monitor mymaster redis-master 6379 2
-      sentinel auth-pass mymaster ${REDIS_PASSWORD:-changeme}
-      sentinel down-after-milliseconds mymaster 5000
-      sentinel parallel-syncs mymaster 1
-      sentinel failover-timeout mymaster 10000
-      sentinel deny-scripts-reconfig yes
-      EOF
-      redis-sentinel /tmp/sentinel.conf
-      "
+    entrypoint: ["/bin/sh", "/sentinel-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel.conf:/etc/redis/sentinel.conf:ro
+      - ./config/sentinel-entrypoint.sh:/sentinel-entrypoint.sh:ro
     depends_on:
       redis-master:
         condition: service_healthy
+      redis-replica-1:
+        condition: service_started
     networks:
       - redis-ha
     healthcheck:
@@ -147,9 +139,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 15s
+      start_period: 20s
     environment:
       - TZ=Asia/Ho_Chi_Minh
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
 
   # ==========================================
   # Redis Sentinel 3
@@ -160,21 +153,15 @@ services:
     restart: unless-stopped
     ports:
       - "26381:26379"
-    command: >
-      sh -c "
-      cat > /tmp/sentinel.conf <<EOF
-      sentinel monitor mymaster redis-master 6379 2
-      sentinel auth-pass mymaster ${REDIS_PASSWORD:-changeme}
-      sentinel down-after-milliseconds mymaster 5000
-      sentinel parallel-syncs mymaster 1
-      sentinel failover-timeout mymaster 10000
-      sentinel deny-scripts-reconfig yes
-      EOF
-      redis-sentinel /tmp/sentinel.conf
-      "
+    entrypoint: ["/bin/sh", "/sentinel-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel.conf:/etc/redis/sentinel.conf:ro
+      - ./config/sentinel-entrypoint.sh:/sentinel-entrypoint.sh:ro
     depends_on:
       redis-master:
         condition: service_healthy
+      redis-replica-1:
+        condition: service_started
     networks:
       - redis-ha
     healthcheck:
@@ -182,9 +169,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 15s
+      start_period: 20s
     environment:
       - TZ=Asia/Ho_Chi_Minh
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
 
 # ==========================================
 # Usage:

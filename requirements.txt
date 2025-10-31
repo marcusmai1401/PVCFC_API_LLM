@@ -57,6 +57,9 @@ opentelemetry-api==1.21.0  # Tracing
 opentelemetry-sdk==1.21.0  # Tracing SDK
 opentelemetry-instrumentation-fastapi==0.42b0  # FastAPI instrumentation
 
+# Week 2 - Resilience patterns
+pybreaker==1.0.1  # Circuit breaker pattern for service resilience
+
 # HTTP client used by evaluation runners
 requests>=2.31.0
 

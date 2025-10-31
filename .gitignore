@@ -180,6 +180,10 @@ celerybeat.pid
 .spyproject
 site/
 
+# Redis dump files
+*.rdb
+dump.rdb
+
 # =====================================
 # HARDENED DATA & ARTIFACT EXCLUSIONS
 # =====================================
