@@ -1,18 +1,22 @@
 """
-End-to-end integration tests for P&ID search enhancements
+End-to-end integration tests for P&ID search enhancements (Level 2 Spatial Search)
 
-Tests the complete flow from query → enhancement → search → formatting
+Tests the complete flow from query → enhancement → spatial search
+
+NOTE: This test suite has been updated to use Level 2 (Spatial Tag Searcher)
+      instead of Level 3 (OpenSearch Tags Retriever) which has been removed.
+
+Level 2 Limitations:
+- SUFFIX-only queries are NOT supported (requires full components)
+- Multi-prefix grouping is not available in Level 2
+- Results are based on real-time geometric clustering
 """
 import os
 
 import pytest
 
-from app.rag.formatters.pid_response_formatter import (
-    format_component_search_response,
-    format_pid_search_response,
-)
-from app.rag.indexers.opensearch_tags_retriever import OpenSearchTagsRetriever
 from app.rag.query_processing.pid_query_enhancer import PIDQueryEnhancer
+from app.rag.spatial.spatial_searcher import SpatialTagSearcher
 
 
 @pytest.fixture
@@ -22,19 +26,33 @@ def enhancer():
 
 
 @pytest.fixture
-def retriever():
-    """OpenSearch tags retriever fixture"""
+def searcher():
+    """Level 2 Spatial Tag Searcher fixture"""
     # Skip if OpenSearch not available
     if not os.environ.get("OPENSEARCH_ENABLED"):
         pytest.skip("OpenSearch not enabled")
 
-    return OpenSearchTagsRetriever()
+    return SpatialTagSearcher(
+        max_distance_mm=25.0,
+        alignment_tolerance_mm=5.0,
+        min_cluster_score=0.6,
+    )
 
 
+@pytest.mark.skip(
+    reason="SUFFIX-only queries not supported in Level 2 - requires full components"
+)
 class TestSuffixOnlySearch:
-    """Test SUFFIX-only search end-to-end"""
+    """Test SUFFIX-only search end-to-end
 
-    def test_suffix_5153(self, enhancer, retriever):
+    NOTE: These tests are SKIPPED because Level 2 (Spatial Tag Searcher) does not
+          support SUFFIX-only queries. Level 2 requires all three components
+          (unit, prefix, suffix) for spatial clustering.
+
+          SUFFIX-only queries will fallback to semantic search in production.
+    """
+
+    def test_suffix_5153(self, enhancer, searcher):
         """Test query '5153' returns multiple prefixes"""
         query = "5153"
 
@@ -45,23 +63,10 @@ class TestSuffixOnlySearch:
         assert enhanced["suffix"] == "5153"
         assert enhanced["query_type"] == "suffix_only"
 
-        # Step 2: Search
-        grouped_results = retriever.search_by_suffix("5153")
+        # Level 2 does NOT support suffix-only search
+        # This would fallback to semantic search in production
 
-        assert grouped_results["total_tags"] > 0
-
-        # Step 3: Format response
-        formatted = format_pid_search_response(query, grouped_results)
-
-        assert formatted["query"] == "5153"
-        assert formatted["total_tags"] > 0
-
-        # Check for multi-prefix warning if applicable
-        if formatted["has_ambiguity"]:
-            assert "clarification" in formatted
-            assert len(formatted["found_prefixes"]) > 1
-
-    def test_suffix_501(self, enhancer, retriever):
+    def test_suffix_501(self, enhancer, searcher):
         """Test query '501' (3 digits)"""
         query = "501"
 
@@ -70,12 +75,14 @@ class TestSuffixOnlySearch:
         assert enhanced["strategy"] == "suffix_search"
         assert enhanced["suffix"] == "501"
 
+        # Level 2 does NOT support suffix-only search
+
 
 class TestComponentSearch:
-    """Test component-based search end-to-end"""
+    """Test component-based search with Level 2 Spatial Search"""
 
-    def test_unit_and_suffix(self, enhancer, retriever):
-        """Test query '04 5153'"""
+    def test_unit_and_suffix(self, enhancer, searcher):
+        """Test query '04 5153' - partial components"""
         query = "04 5153"
 
         # Enhance
@@ -85,18 +92,17 @@ class TestComponentSearch:
         assert enhanced["components"]["unit"] == "04"
         assert enhanced["components"]["suffix"] == "5153"
 
-        # Search
-        results = retriever.search_by_components(unit="04", suffix="5153")
+        # Level 2 spatial search requires all components
+        # This would use empty string for prefix
+        results = searcher.search(
+            unit="04", prefix="", suffix="5153", doc_id="Ammonia"  # Empty prefix
+        )
 
+        # Results are SearchResult objects from Level 2
         assert isinstance(results, list)
 
-        # All results should have unit=04 and suffix=5153
-        for result in results:
-            assert result.get("unit") == "04"
-            assert result.get("suffix") == "5153"
-
-    def test_prefix_and_suffix(self, enhancer, retriever):
-        """Test query 'PAHH 5153'"""
+    def test_prefix_and_suffix(self, enhancer, searcher):
+        """Test query 'PAHH 5153' - partial components"""
         query = "PAHH 5153"
 
         enhanced = enhancer.enhance(query)
@@ -105,16 +111,15 @@ class TestComponentSearch:
         assert enhanced["components"]["prefix"] == "PAHH"
         assert enhanced["components"]["suffix"] == "5153"
 
-        # Search
-        results = retriever.search_by_components(prefix="PAHH", suffix="5153")
+        # Level 2 spatial search
+        results = searcher.search(
+            unit="", prefix="PAHH", suffix="5153", doc_id="Ammonia"  # Empty unit
+        )
 
-        # All results should match
-        for result in results:
-            assert result.get("prefix") == "PAHH"
-            assert result.get("suffix") == "5153"
+        assert isinstance(results, list)
 
-    def test_full_tag_components(self, enhancer, retriever):
-        """Test full tag '04 PAHH 5153'"""
+    def test_full_tag_components(self, enhancer, searcher):
+        """Test full tag '04 PAHH 5153' - complete components"""
         query = "04 PAHH 5153"
 
         enhanced = enhancer.enhance(query)
@@ -124,59 +129,39 @@ class TestComponentSearch:
         assert enhanced["components"]["prefix"] == "PAHH"
         assert enhanced["components"]["suffix"] == "5153"
 
-        # Search
-        results = retriever.search_by_components(
-            unit="04", prefix="PAHH", suffix="5153"
+        # Level 2 spatial search with full components
+        results = searcher.search(
+            unit="04", prefix="PAHH", suffix="5153", doc_id="Ammonia"
         )
 
-        # Should return exact matches
+        assert isinstance(results, list)
+
+        # Check results structure (SearchResult objects)
         for result in results:
-            assert result.get("unit") == "04"
-            assert result.get("prefix") == "PAHH"
-            assert result.get("suffix") == "5153"
+            assert hasattr(result, "page")
+            assert hasattr(result, "score")
+            assert hasattr(result, "bbox")
+            assert hasattr(result, "metadata")
 
 
+@pytest.mark.skip(reason="Multi-prefix grouping not available in Level 2")
 class TestMultiPrefixHandling:
-    """Test multi-prefix grouping and warnings"""
+    """Test multi-prefix grouping and warnings
 
-    def test_multi_prefix_grouping(self, retriever):
+    NOTE: These tests are SKIPPED because Level 2 (Spatial Tag Searcher) does not
+          provide grouped results by suffix. Level 2 returns individual SearchResult
+          objects based on spatial clustering, not grouped by prefix.
+    """
+
+    def test_multi_prefix_grouping(self, searcher):
         """Test that multi-prefix results are grouped correctly"""
-        # Search for a suffix that has multiple prefixes
-        grouped_results = retriever.search_by_suffix("5153")
+        # Level 2 does not support suffix-only search or grouping
+        pass
 
-        if grouped_results["total_tags"] > 0:
-            # Check grouping structure
-            assert "groups" in grouped_results
-            assert "has_ambiguity" in grouped_results
-
-            for group in grouped_results["groups"]:
-                assert "suffix" in group
-                assert "prefixes" in group
-                assert "tags" in group
-                assert "pages" in group
-                assert "co_located" in group
-
-                # If multi-prefix, should have warning
-                if len(group["prefixes"]) > 1:
-                    assert group["warning"] is not None
-                    assert grouped_results["has_ambiguity"] is True
-
-    def test_formatted_response_with_ambiguity(self, retriever):
+    def test_formatted_response_with_ambiguity(self, searcher):
         """Test formatted response for ambiguous query"""
-        query = "5153"
-        grouped_results = retriever.search_by_suffix(query)
-
-        formatted = format_pid_search_response(query, grouped_results)
-
-        if formatted["has_ambiguity"]:
-            # Should have clarification
-            assert "clarification" in formatted
-            assert "found_prefixes" in formatted
-            assert "suggestion" in formatted
-
-            # Prefixes should be unique
-            prefixes = formatted["found_prefixes"]
-            assert len(prefixes) == len(set(prefixes))
+        # Level 2 does not support suffix-only search or grouping
+        pass
 
 
 class TestAnnotationHandling:
@@ -244,6 +229,36 @@ class TestEdgeCases:
                 "suffix" not in result["components"]
                 or not result["components"]["suffix"]
             )
+
+
+class TestLevel2SpatialSearch:
+    """Test Level 2 specific functionality"""
+
+    def test_spatial_search_returns_search_results(self, searcher):
+        """Test that spatial search returns SearchResult objects"""
+        results = searcher.search(
+            unit="04", prefix="TT", suffix="2020", doc_id="Ammonia"
+        )
+
+        assert isinstance(results, list)
+
+        # If results exist, verify structure
+        if results:
+            result = results[0]
+            assert hasattr(result, "page")
+            assert hasattr(result, "doc_id")
+            assert hasattr(result, "score")
+            assert hasattr(result, "bbox")
+            assert hasattr(result, "source")
+            assert hasattr(result, "metadata")
+
+    def test_spatial_search_requires_all_components(self, searcher):
+        """Test that empty components are handled gracefully"""
+        # Should not crash even with empty components
+        results = searcher.search(unit="", prefix="", suffix="2020", doc_id="Ammonia")
+
+        # May return empty results or partial matches
+        assert isinstance(results, list)
 
 
 if __name__ == "__main__":

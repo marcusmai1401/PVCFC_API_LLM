@@ -25,12 +25,19 @@ class RetrievalCache:
         self.ttl = ttl
         logger.info(f"RetrievalCache initialized: maxsize={maxsize}, ttl={ttl}s")
 
-    def _make_key(self, query: str, filters: Optional[dict] = None, k: int = 8) -> str:
+    def _make_key(
+        self,
+        query: str,
+        query_type: Optional[str] = None,
+        filters: Optional[dict] = None,
+        k: int = 8,
+    ) -> str:
         """
-        Generate cache key from query + filters + k
+        Generate cache key from query + query_type + filters + k
 
         Args:
             query: Query string (normalized)
+            query_type: Query type (pid, technical_doc, etc.) for cache separation
             filters: Optional filters dict
             k: Number of results
 
@@ -43,6 +50,7 @@ class RetrievalCache:
         # Build cache key dict
         key_dict = {
             "query": normalized_query,
+            "query_type": query_type or "default",  # Include query_type in cache key
             "filters": filters or {},
             "k": k,
         }
@@ -54,20 +62,25 @@ class RetrievalCache:
         return key_hash
 
     def get(
-        self, query: str, filters: Optional[dict] = None, k: int = 8
+        self,
+        query: str,
+        query_type: Optional[str] = None,
+        filters: Optional[dict] = None,
+        k: int = 8,
     ) -> Optional[Any]:
         """
         Get cached results
 
         Args:
             query: Query string
+            query_type: Query type for cache separation
             filters: Optional filters
             k: Number of results
 
         Returns:
             Cached results or None if not found/expired
         """
-        key = self._make_key(query, filters, k)
+        key = self._make_key(query, query_type, filters, k)
         result = self.cache.get(key)
 
         if result is not None:
@@ -81,6 +94,7 @@ class RetrievalCache:
         self,
         query: str,
         results: Any,
+        query_type: Optional[str] = None,
         filters: Optional[dict] = None,
         k: int = 8,
     ):
@@ -90,10 +104,11 @@ class RetrievalCache:
         Args:
             query: Query string
             results: Results to cache (typically List[RetrievalResult])
+            query_type: Query type for cache separation
             filters: Optional filters
             k: Number of results
         """
-        key = self._make_key(query, filters, k)
+        key = self._make_key(query, query_type, filters, k)
         self.cache[key] = results
         logger.debug(
             f"Cache SET for key={key}, size={len(self.cache)}/{self.cache.maxsize}"
@@ -152,24 +167,38 @@ def clear_cache():
 # Week 1: Distributed Cache Factory
 # ==========================================
 
-from typing import Protocol, Dict, Any
+from typing import Any, Dict, Protocol
+
 from app.core.config import settings
 
 
 class CacheBackend(Protocol):
     """
     Protocol for unified cache interface.
-    
+
     Both DistributedCache (Redis) and TTLCache wrappers implement this.
     """
-    
-    def get(self, key: str, default: Any = None) -> Any: ...
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool: ...
-    def delete(self, key: str) -> bool: ...
-    def exists(self, key: str) -> bool: ...
-    def get_many(self, keys: List[str]) -> Dict[str, Any]: ...
-    def set_many(self, mapping: Dict[str, Any], ttl: Optional[int] = None) -> int: ...
-    def get_stats(self) -> Dict[str, Any]: ...
+
+    def get(self, key: str, default: Any = None) -> Any:
+        ...
+
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+        ...
+
+    def delete(self, key: str) -> bool:
+        ...
+
+    def exists(self, key: str) -> bool:
+        ...
+
+    def get_many(self, keys: List[str]) -> Dict[str, Any]:
+        ...
+
+    def set_many(self, mapping: Dict[str, Any], ttl: Optional[int] = None) -> int:
+        ...
+
+    def get_stats(self) -> Dict[str, Any]:
+        ...
 
 
 class TTLCacheWrapper:
@@ -177,7 +206,7 @@ class TTLCacheWrapper:
     Wrapper for legacy TTLCache to match CacheBackend protocol.
     Provides backward compatibility with existing in-memory cache.
     """
-    
+
     def __init__(self, namespace: Optional[str] = None, default_ttl: int = 3600):
         self.namespace = namespace or "default"
         self.default_ttl = default_ttl
@@ -185,10 +214,10 @@ class TTLCacheWrapper:
         self._hits = 0
         self._misses = 0
         logger.info(f"TTLCacheWrapper: namespace={self.namespace}, ttl={default_ttl}s")
-    
+
     def _build_key(self, key: str) -> str:
         return f"{self.namespace}:{key}"
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         full_key = self._build_key(key)
         value = self._cache.get(full_key, default)
@@ -197,7 +226,7 @@ class TTLCacheWrapper:
         else:
             self._misses += 1
         return value
-    
+
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         full_key = self._build_key(key)
         try:
@@ -205,17 +234,17 @@ class TTLCacheWrapper:
             return True
         except Exception:
             return False
-    
+
     def delete(self, key: str) -> bool:
         full_key = self._build_key(key)
         if full_key in self._cache:
             del self._cache[full_key]
             return True
         return False
-    
+
     def exists(self, key: str) -> bool:
         return self._build_key(key) in self._cache
-    
+
     def get_many(self, keys: List[str]) -> Dict[str, Any]:
         result = {}
         for key in keys:
@@ -223,14 +252,14 @@ class TTLCacheWrapper:
             if value is not None:
                 result[key] = value
         return result
-    
+
     def set_many(self, mapping: Dict[str, Any], ttl: Optional[int] = None) -> int:
         count = 0
         for key, value in mapping.items():
             if self.set(key, value, ttl):
                 count += 1
         return count
-    
+
     def get_stats(self) -> Dict[str, Any]:
         total = self._hits + self._misses
         hit_rate = (self._hits / total * 100) if total > 0 else 0.0
@@ -247,14 +276,14 @@ class TTLCacheWrapper:
 class CacheFactory:
     """
     Cache factory with feature flag support.
-    
+
     Returns:
     - DistributedCache (Redis) if USE_DISTRIBUTED_CACHE=true
     - TTLCacheWrapper (memory) if USE_DISTRIBUTED_CACHE=false
     """
-    
+
     _instances: Dict[str, CacheBackend] = {}
-    
+
     @classmethod
     def get_cache(
         cls,
@@ -263,23 +292,24 @@ class CacheFactory:
     ) -> CacheBackend:
         """
         Get cache backend for namespace.
-        
+
         Args:
             namespace: Cache namespace (e.g., "retrieval", "rerank")
             default_ttl: Default TTL (None = use config)
-        
+
         Returns:
             CacheBackend (DistributedCache or TTLCacheWrapper)
         """
         namespace = namespace or "default"
-        
+
         if namespace in cls._instances:
             return cls._instances[namespace]
-        
+
         use_distributed = settings.use_distributed_cache
-        
+
         if use_distributed:
             from app.core.distributed_cache import DistributedCache
+
             cache = DistributedCache(
                 namespace=namespace,
                 default_ttl=default_ttl or settings.cache_default_ttl,
@@ -292,10 +322,10 @@ class CacheFactory:
                 default_ttl=default_ttl or settings.cache_default_ttl,
             )
             logger.info(f"Using TTLCache (memory): {namespace}")
-        
+
         cls._instances[namespace] = cache
         return cache
-    
+
     @classmethod
     def clear_all(cls):
         """Clear all cached instances."""
@@ -308,7 +338,7 @@ def get_cache(
 ) -> CacheBackend:
     """
     Convenience function to get cache backend.
-    
+
     Example:
         >>> cache = get_cache(namespace="retrieval")
         >>> cache.set("query:123", results, ttl=600)

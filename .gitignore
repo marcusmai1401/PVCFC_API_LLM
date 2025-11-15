@@ -16,6 +16,7 @@ config/secrets.*
 config/local.*
 secrets/
 credentials/
+credentials.json
 *.key
 *.pem
 *.cert

@@ -121,7 +121,6 @@ class TextChunker:
         text: str,
         doc_id: str,
         metadata: Optional[Dict] = None,
-        page_nums: Optional[List[int]] = None,
     ) -> List[TextChunk]:
         """
         Chunk text using the configured strategy
@@ -129,8 +128,7 @@ class TextChunker:
         Args:
             text: Text to chunk
             doc_id: Document identifier
-            metadata: Optional metadata to attach to chunks
-            page_nums: Optional page numbers for the text
+            metadata: Optional metadata to attach to chunks (must include 'page' field)
 
         Returns:
             List of TextChunk objects
@@ -140,7 +138,6 @@ class TextChunker:
             return []
 
         metadata = metadata or {}
-        page_nums = page_nums or []
 
         # Choose chunking strategy
         if self.chunking_strategy == "semantic":
@@ -158,15 +155,21 @@ class TextChunker:
             # Ensure metadata has page field
             chunk_metadata = metadata.copy()
 
-            # CRITICAL FIX: Extract page number from chunk content first
-            # This fixes the bug where metadata.page is wrong but content has <!-- Page X -->
-            content_page = extract_page_from_content(chunk_text)
-            if content_page is not None:
-                chunk_metadata["page"] = content_page
-                logger.debug(f"Extracted page {content_page} from chunk content")
-            # Fallback: If page_nums provided and page not in metadata, add it
-            elif page_nums and "page" not in chunk_metadata:
-                chunk_metadata["page"] = page_nums[0]
+            # If page not already in metadata, try to extract from content markers
+            if "page" not in chunk_metadata:
+                content_page = extract_page_from_content(chunk_text)
+                if content_page is not None:
+                    chunk_metadata["page"] = content_page
+                    logger.debug(
+                        f"Extracted page {content_page} from chunk content markers"
+                    )
+                else:
+                    # Final fallback: page 1 with warning
+                    chunk_metadata["page"] = 1
+                    logger.warning(
+                        f"No page metadata found for chunk '{chunk_text[:50]}...', defaulting to page 1"
+                    )
+            # Page already in metadata, trust it
 
             # NEW: Extract equipment tags from chunk text and add to metadata
             try:
@@ -232,7 +235,9 @@ class TextChunker:
                 word_count=len(chunk_text.split()),
                 start_char=start_char,
                 end_char=end_char,
-                page_nums=page_nums,
+                page_nums=[
+                    chunk_metadata.get("page", 1)
+                ],  # Legacy field, use metadata['page'] instead
                 metadata=chunk_metadata,
             )
 
@@ -501,10 +506,10 @@ class TextChunker:
                     doc_id=doc_id,
                     metadata={
                         **doc_metadata,
-                        "page": page_num,
+                        "page": page_num,  # Pass page directly in metadata
                         "has_tables": bool(page_tables),
                     },
-                    page_nums=[page_num],
+                    # page_nums removed - metadata['page'] is source of truth
                 )
 
                 all_chunks.extend(page_chunks)

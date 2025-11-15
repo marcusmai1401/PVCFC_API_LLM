@@ -1,5 +1,5 @@
 
-# PVCFC RAG — README - LAST UPDATE: 16/10/2025
+# PVCFC RAG — README - LAST UPDATE: 07/01/2025
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
@@ -48,10 +48,10 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
                     PDF INPUT
                         │
                         ↓
-                ┌───────────────┐
-                │ CAD-like Gate │ ← AUTO-DETECT
-                │  (8 features) │
-                └───────┬───────┘
+                ┌───────────────┌
+                │ CAD-like Gate │ ← BINARY (v1.5.0)
+                │ Threshold=0.55│
+                └───────┬───────┐
                         │
             ┌───────────┴────────────┐
             │                        │
@@ -59,23 +59,26 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
             │                        │
             ↓                        ↓
     ╔═══════════════╗        ╔═══════════════╗
-    ║ P&ID PIPELINE ║        ║ TECH DOC      ║
-    ║ (Extended)    ║        ║ PIPELINE      ║
-    ╚═══════════════╝        ║ (Standard)    ║
-         │                   ╚═══════════════╝
-         ├─ Layout + Tags            │
-         ├─ Bbox + Crops      ✅     ├─ Text + Chunks
-         ├─ 2 Indexes         ✅     └─ 1 Index
+    ║ CAD-LIKE      ║        ║ NON-CAD-LIKE  ║
+    ║ PIPELINE      ║        ║ PIPELINE      ║
+    ║ (Extended)    ║        ║ (Standard)    ║
+    ╚═══════════════╝        ╚═══════════════╝
+         │                          │
+         ├─ Layout + Tags               ├─ Text + Chunks
+         ├─ Spatial (ALL 100%)✅       ├─ OCR (no ESRGAN)
+         ├─ Bbox + Crops      ✅       └─ 1 Index
+         ├─ 2 Indexes         ✅
+         ├─ OCR + Real-ESRGAN ✅
          └─ Parallel Search   ✅
 ```
 
-### 3.1 **Technical Doc Pipeline** (Standard - Mặc định)
+### 3.1 **Non-CAD-like Pipeline** (Standard - Mặc định)
 
 **Áp dụng cho:** Manuals, Datasheets, Specifications, Operating Procedures
 
 **Offline (Build):**
 
-1. **Ingest**: đọc PDF (vector/scan), OCR khi cần → chuẩn hoá văn bản → **chunk** + metadata.
+1. **Ingest**: đọc PDF (vector/scan), **OCR LUÔN ENABLED** (< 40 chars/page, không có Real-ESRGAN) → chuẩn hoá văn bản → **chunk** + metadata.
 2. **Dedup**: `content_hash` để gộp **trùng nội dung** (đại diện: *vector > scan > size > mtime > path ngắn*).
 3. **Index**:
    * **BM25**: chỉ mục từ khóa (nhẹ, dễ bảo trì).
@@ -88,7 +91,7 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 3. **Generation**: Text-only hoặc Multimodal (Vision) khi cần.
 4. **Trả về**: **answer**, **citations (doc_id + page)**, **metadata**.
 
-### 3.2 **P&ID Pipeline** (Extended - Khi enable)
+### 3.2 **CAD-like Pipeline** (Extended - Khi enable)
 
 **Áp dụng cho:** P&ID, PFD, Instrument Drawings, ISO Diagrams
 
@@ -96,20 +99,22 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 **Offline (Build) - MỞ RỘNG:**
 
-1. **CAD-like Gate**: Tự động phát hiện P&ID (8 features scoring).
+1. **CAD-like Gate**: **Binary classification** (CAD-like vs non-CAD-like, threshold=0.55).
 2. **Page Layout Extraction**: Trích xuất **spatial layout** (bbox, font, rotation, vector drawings).
 3. **Tag Extraction**: Trích xuất instrument tags (PREFIX-anchored triplet: UNIT-PREFIX-SUFFIX-VARIANT).
-4. **Crop Generation**: Tạo PNG crops của tag bounding boxes.
-5. **Dual Indexing**:
-   * **Index 1**: `rag_chunks` (BM25 + Weaviate) ← *Giống Technical Doc*
-   * **Index 2**: `pvcfc_pid_tags` (OpenSearch sidecar) ← *⭐ UNIQUE cho P&ID*
+4. **Spatial Component Extraction**: Trích từ **ALL 100% pages** (không chỉ taggy pages), smart layout reuse.
+5. **Crop Generation**: Tạo PNG crops của tag bounding boxes.
+6. **Dual Indexing**:
+   * **Index 1**: `rag_chunks` (BM25 + Weaviate) ← *Giống Non-CAD-like*
+   * **Index 2**: `pvcfc_pid_spatial_components` (OpenSearch) ← *⭐ ALL 100% pages coverage*
+7. **OCR**: Per-page threshold (< 1700 chars) + **Real-ESRGAN 2x enhancement**
 
 **Online (Serve) - KHÁC HOÀN TOÀN:**
 
 1. **Query Enhancement**: Phát hiện tags (04 PSAL 2207), parse components, tạo variants.
 2. **Context Validation**: Multi-layer false positive prevention.
 3. **Parallel Retrieval** (2 branches):
-   * **Branch A**: Search `pvcfc_pid_tags` index → tags với bbox + crops
+   * **Branch A**: Level 2 Spatial Search (`pvcfc_pid_spatial_components`) → Component-based clustering tìm tags với bbox
    * **Branch B**: Search `rag_chunks` index → standard chunks
 4. **RRF Fusion**: Kết hợp 2 branches với adaptive weights.
 5. **Tag Reranking**: Boost exact tag matches (×10.0), fuzzy matches (×2.0-3.0).
@@ -122,20 +127,20 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 |--------|--------------|------|
 | **Auto-detect** | score < 0.55 | score ≥ 0.55 (CAD-like Gate) |
 | **Ingestion** | Text + Chunks | Text + Chunks + **Layout + Tags + Crops** |
-| **Số indexes** | 1 (`rag_chunks`) | 2 (`rag_chunks` + `pvcfc_pid_tags`) |
+| **Số indexes** | 1 (`rag_chunks`) | 2 (`rag_chunks` + `pvcfc_pid_spatial_components`) |
 | **Retrieval** | 1 branch (chunks) | 2 branches parallel (tags + chunks) |
 | **Bbox tracking** | ❌ No | ✅ **Yes** (stored in tags) |
 | **Crops** | ❌ No | ✅ **Yes** (PNG images) |
 | **Query routing** | Equipment boosting | Tag parsing + validation |
 
-> **Lưu ý**: P&ID documents **VẪN CÓ** standard chunks index → cho phép fallback sang semantic search nếu tag search không tìm thấy kết quả.
+> **Lưu ý**: CAD-like documents **VẪN CÓ** standard chunks index → cho phép fallback sang semantic search nếu spatial search không tìm thấy kết quả.
 
 ---
 
 ## 4) Dữ liệu, OCR, Dedup & Quarantine
 
 * **Root dữ liệu**: `D:\Data_Raw` (cố định).
-* **OCR**: chỉ bật khi không có text vector; `vie+eng`; DPI 300 (tự tăng 400–600 với trang nhỏ/mờ).
+* **OCR LUÔN ENABLED**: Google Cloud Vision API. Per-page thresholds: CAD-like < 1700 chars (+ Real-ESRGAN 2x), non-CAD-like < 40 chars (không ESRGAN). Hỗ trợ `vie+eng`; Adaptive DPI (144-216).
 * **Dedup**:
 
   * `file_hash = SHA256(file_bytes)` → trùng **file y hệt**.
@@ -340,15 +345,22 @@ VISION_PAGE_SELECTOR_ENABLED=true
 TEXT_RANGE_SCAN_ENABLED=false
 
 # P&ID Tags Extraction (Dual Pipeline - Optional)
-# Default: false (disabled to avoid indexing overhead if not needed)
-# Set to true to enable P&ID auto-detect & tag extraction
-ENABLE_PID_TAGS=false
+# Note: Currently ENABLED in production (.env has ENABLE_PID_TAGS=true)
+# Set to false to disable P&ID auto-detect & tag extraction
+ENABLE_PID_TAGS=true   # Enable P&ID pipeline (auto-detect CAD-like documents)
 GATE_MODE=auto         # auto|always|never
 GATE_THRESHOLD=0.55    # CAD-like score threshold (adjusted from 0.60)
 GRAY_ZONE_LOW=0.45     # Gray zone lower bound
 LAZY_CROP_GENERATION=true  # true: generate crops on-demand, false: at ingestion
-ARTIFACTS_DIR=artifacts/ingestion_production  # Artifacts location (venv context dependent)
-TAGS_INDEX_NAME=pvcfc_pid_tags    # OpenSearch tags sidecar index
+
+# Artifacts directory: tags, layouts, crops, telemetry
+# Note: Actual save location is artifacts/ingestion_production/ regardless of this setting
+# This ENV is used for legacy compatibility but ingestion code uses output_dir parameter
+ARTIFACTS_DIR=D:\PVCFC_Artifacts  # Legacy config path (not actively used)
+# Actual location: artifacts/ingestion_production/entities/tags.jsonl
+
+# P&ID Spatial Components (Level 2)
+SPATIAL_COMPONENTS_INDEX_NAME=pvcfc_pid_spatial_components  # OpenSearch spatial components index for Level 2 search
 
 # API keys
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -357,60 +369,61 @@ OPENAI_API_KEY=your_openai_api_key_here  # nếu dùng OpenAI
 
 **Cài đặt (Windows PowerShell)**
 
-> **⚠️ LƯU Ý:** Hệ thống cần **2 môi trường ảo riêng** do protobuf conflict
-
 ```powershell
-# Môi trường 1: Cho ingestion (có PaddleOCR)
-py -3.11 -m venv venv_ingest
-venv_ingest\Scripts\Activate.ps1
-pip install -r requirements_ingest.txt
-
-# Môi trường 2: Cho API/indexing (có Weaviate)
+# Tạo môi trường ảo (single environment - PaddleOCR removed Nov 11)
 py -3.11 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+# Note: Protobuf 5.29.5 compatible with all services (Weaviate, Google Vision, gRPC)
+
+# Cấu hình Google Cloud Vision API
+# Đặt biến môi trường GOOGLE_APPLICATION_CREDENTIALS trỏ đến service account key
+$env:GOOGLE_APPLICATION_CREDENTIALS = "path\to\your\service-account-key.json"
 ```
 
-**Ingest** (Dùng venv_ingest)
+**Ingest**
 
 ```powershell
-# Activate venv_ingest (có PaddleOCR)
-venv_ingest\Scripts\Activate.ps1
-
-# Chạy ingestion
+# .venv đang active
 python tools\ingest.py `
   --source-dir "D:\\Data_Raw" `
   --output-dir "artifacts\\ingestion_production" `
-  --enable-ocr --ocr-lang "vie+eng" `
+  --enable-ocr `
   --workers 2 `
   --enable-pid-tags
 
-# Output: chunks.jsonl (5,000+) + tags.jsonl (200+)
+# Output:
+# - chunks.jsonl (5,000+)
+# - entities/tags.jsonl (200+) - Geometric Assembly tags
+# - page_layout/*.json - Spatial layout data
+# - Spatial components extracted và sẵn sàng cho indexing
 ```
 
-**Build Production Indices** (Dùng .venv)
+**Build Production Indices**
 
 ```powershell
-# Switch sang .venv (có Weaviate)
-deactivate
-.venv\Scripts\Activate.ps1
+# .venv đang active
 
 # 1. Create OpenSearch indexes
 python scripts\\opensearch\\create_rag_chunks_index.py --delete-if-exists
-python scripts\\opensearch\\create_tags_index.py --delete-if-exists
+python scripts\\opensearch\\create_spatial_components_index.py --delete-if-exists
 
 # 2. Index chunks to OpenSearch + Weaviate (35-40 phút)
 python scripts\\utilities\\index_production_chunks.py
 
-# 3. Index P&ID tags to OpenSearch
-python scripts\\opensearch\\bulk_upsert_tags.py `
-  --tags-file "artifacts\\ingestion_production\\entities\\tags.jsonl"
+# 3. Index P&ID spatial components (Level 2)
+# Components được tự động extract và index trong ingestion, nhưng có thể re-index:
+python tools\\ingest.py `
+  --source-dir "D:\\Data_Raw" `
+  --output-dir "artifacts\\ingestion_production" `
+  --enable-pid-tags `
+  --skip-chunking  # Chỉ extract components (nếu cần)
 ```
 
 **Kết quả:**
 - OpenSearch rag_chunks: ~10,000 documents
 - Weaviate Chunk: ~10,000 objects
-- OpenSearch pvcfc_pid_tags: ~200 tags
+- OpenSearch pvcfc_pid_spatial_components: ~thousands of components (unit/prefix/suffix) for Level 2 spatial search
 
 **Chạy API** (Cùng .venv)
 

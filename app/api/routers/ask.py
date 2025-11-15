@@ -315,8 +315,9 @@ async def ask_question(
                 cache.set(
                     cache_key_data[0],  # query (normalized)
                     reranked_results,  # results to cache
-                    cache_key_data[1],  # filters (dict or None)
-                    cache_key_data[2],  # k (max_context)
+                    cache_key_data[1],  # query_type
+                    cache_key_data[2],  # filters (dict or None)
+                    cache_key_data[3],  # k (max_context)
                 )
                 logger.info(
                     f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results (BGE rerank)"
@@ -382,8 +383,9 @@ async def ask_question(
                 cache.set(
                     cache_key_data[0],  # query (normalized)
                     reranked_results,  # results to cache
-                    cache_key_data[1],  # filters (dict or None)
-                    cache_key_data[2],  # k (max_context)
+                    cache_key_data[1],  # query_type
+                    cache_key_data[2],  # filters (dict or None)
+                    cache_key_data[3],  # k (max_context)
                 )
                 logger.info(
                     f"[{trace_id}] Cache MISS - cached {len(reranked_results)} results"

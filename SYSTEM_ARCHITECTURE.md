@@ -1,8 +1,8 @@
 ﻿# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 0.9.0
-**Last Updated**: 2025-10-17
-**Document**: Complete Pipeline & Architecture Description (Production-Ready with CAD-like Tag Extraction)
+**Version**: 1.5.0
+**Last Updated**: 2025-11-11
+**Document**: Complete Pipeline & Architecture Description (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix Support + Protobuf Resolution)
 
 ---
 
@@ -44,31 +44,33 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
                          PDF INPUT
                              │
                              ↓
-                    ┌────────────────┐
-                    │ CAD-like Gate  │ ← AUTO-DETECT (8 features)
-                    │ Score = Σw×f   │
-                    └────────┬───────┘
+                    ┌────────────────┌
+                    │ CAD-like Gate  │ ← BINARY CLASSIFICATION
+                    │ Threshold=0.55 │
+                    └────────┬───────┐
                              │
-                ┌────────────┴─────────────┐
+                ┌────────────┴───────────────
                 │                          │
           score ≥ 0.55               score < 0.55
                 │                          │
                 ↓                          ↓
     ╔═══════════════════════╗    ╔═══════════════════════╗
-    ║  P&ID PIPELINE        ║    ║  TECH DOC PIPELINE    ║
-    ║  (Extended)           ║    ║  (Standard)           ║
+    ║  CAD-LIKE PIPELINE    ║    ║  NON-CAD-LIKE         ║
+    ║  (Extended)           ║    ║  PIPELINE (Standard)  ║
     ╚═══════════════════════╝    ╚═══════════════════════╝
 
     INGESTION:                    INGESTION:
     ├─ Text extraction            ├─ Text extraction
+    ├─ OCR (Real-ESRGAN)⭐        ├─ OCR (no enhancement)⭐
     ├─ PageLayout (bbox+font)⭐   └─ Chunking
     ├─ TagExtractor (triplets)⭐
+    ├─ Spatial (ALL 100% pages)⭐
     ├─ Crop generation (PNG) ⭐
     └─ Standard chunking
 
     INDEXING:                     INDEXING:
     ├─ rag_chunks (shared)        └─ rag_chunks
-    └─ pvcfc_pid_tags ⭐
+    └─ pvcfc_pid_spatial_components ⭐ (ALL pages)
 
     RETRIEVAL:                    RETRIEVAL:
     ├─ Branch A: Tags index ⭐    └─ Single branch
@@ -82,7 +84,7 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 |--------|--------------|------------------------|
 | **Auto-detect** | CAD-like Gate score ≥ 0.55 | score < 0.55 |
 | **Ingestion** | Text + **Layout + Tags + Crops** | Text + Chunks only |
-| **Indexes** | **2**: rag_chunks + pvcfc_pid_tags | **1**: rag_chunks |
+| **Indexes** | **2**: rag_chunks + pvcfc_pid_spatial_components (Level 2) | **1**: rag_chunks |
 | **Retrieval** | **2 branches** parallel | **1 branch** |
 | **Bbox** | ✅ Stored in tags | ❌ Not tracked |
 | **Crops** | ✅ PNG crops generated | ❌ Not generated |
@@ -104,13 +106,15 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 | **LLM** | Gemini 2.5 Pro/Flash | Generation |
 | **Embedding** | Gemini Embedding 001 (768D) | Text vectorization |
 || **Reranker** | BGE CrossEncoder (optional, configurable) | Result reranking |
-| **OCR** | PaddleOCR v2.7.3 (vie+eng, GPU-accelerated) | Scanned PDF processing |
+| **OCR** | Google Cloud Vision API + Real-ESRGAN (2x upscaling) | Scanned PDF processing with enhanced image quality |
 | **UI** | Streamlit | Testing & debugging |
 | **Monitoring** | Loguru + Metrics | Logging & observability |
 
 > **Note**: BGE reranking is **OPTIONAL** and can be enabled via `ENABLE_BGE_RERANK=true` in .env. Currently **ENABLED** in production config. Adds ~100-400ms latency but improves semantic ranking accuracy.
 
 > **Note**: Hybrid Modern mode (`USE_HYBRID_MODERN=true`) is the **default production mode**, combining Weaviate + OpenSearch for best performance.
+
+> ✅ **Note (Nov 11)**: OCR protobuf conflicts resolved. Upgraded to protobuf 5.29.5 (compatible with Weaviate ≥4.21.6, Google Vision, gRPC ≥5.26.1). PaddlePaddle removed as no longer needed. System now uses Google Cloud Vision API + Real-ESRGAN exclusively.
 
 ### 1.3 Architecture Diagram - Dual Pipeline
 
@@ -143,7 +147,7 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │ 1. PDF Parse (PyMuPDF)      │   │ 1. PDF Parse (PyMuPDF)              │
 │    ↓                        │   │    ↓                                │
 │ 2. OCR if needed            │   │ 2. OCR if needed                    │
-│    (PaddleOCR)              │   │    (PaddleOCR)                      │
+│    (Google Vision+ESRGAN)   │   │    (Google Vision+ESRGAN)           │
 │    ↓                        │   │    ↓                                │
 │ 3. Extract Tables           │   │ 3. Extract Tables                   │
 │    ↓                        │   │    ↓                                │
@@ -189,12 +193,13 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
         │ │  "Chunk"     │  │  (BM25)      │     │
         │ └──────────────┘  └──────────────┘     │
         │                                        │
-        │ FROM: entities/tags.jsonl (P&ID only)  │
+        │ FROM: Spatial components (P&ID only)  │
         │   ↓                                    │
         │ ┌──────────────────────────┐           │
         │ │  OpenSearch              │           │
-        │ │  pvcfc_pid_tags ⭐       │           │
-        │ │  (Sidecar for P&ID tags) │           │
+        │ │  pvcfc_pid_spatial_      │           │
+        │ │  components ⭐            │           │
+        │ │  (Level 2 spatial)       │           │
         │ └──────────────────────────┘           │
         └────────────────────────────────────────┘
 ```
@@ -231,8 +236,9 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │    │ • BM25-heavy (100)  │  │   │    │ Index ⭐ │  │  Index       │  │
 │    │ • Semantic (50)     │  │   │    └────┬─────┘  └──────┬───────┘  │
 │    │ • No tag routing    │  │   │         │               │          │
-│    └─────────┬───────────┘  │   │    OpenSearch      Weaviate+BM25   │
-│              ↓              │   │    pvcfc_pid_tags  rag_chunks       │
+│    └─────────┬───────────┘  │   │    OpenSearch                Weaviate+BM25   │
+│              ↓              │   │    pvcfc_pid_spatial_        rag_chunks       │
+│                            │   │    components (Level 2)                       │
 │ 3. RRF Fusion               │   │         │               │          │
 │    (Standard weights)       │   │         └───────┬───────┘          │
 │    ↓                        │   │                 ↓                  │
@@ -268,12 +274,12 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
               └──────────────────────┘
 ```
 
-> **P&ID Tag Extraction Note**: The system includes a complete **CAD-like Tag Extraction pipeline** (disabled by default, enable via `ENABLE_PID_TAGS=true`):
-> - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.55) → PageLayoutBuilder (vector-first PyMuPDF + PP-OCRv5 fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → crops/*.png (bbox evidence) → OpenSearch `pvcfc_pid_tags` sidecar index
-> - **Online**: Manual `query_type` selection → If `pid`: Parallel retrieval (tags + chunks) → RRF fusion → PID Tag Rerank → Attach crop_path for vision citations
-> - **Configuration**: `config/cadlike_gate.yaml`, `config/tag_grammar.yaml`, `config/page_filters.yaml`, `config/tags_index_mapping.json`
-> - **Artifacts**: `D:\PVCFC_Artifacts\` → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png`, `logs/tag_extraction_telemetry.jsonl`
-> - **Implementation**: `app/ingestion/tags/` (orchestrator, tag_extractor, crops), `app/ingestion/cadlike_gate.py`, `app/ingestion/layout/`, `app/rag/hybrid_with_tags_retriever.py`
+> **P&ID Tag Extraction Note**: The system includes a complete **CAD-like Tag Extraction pipeline** (enabled by default via `ENABLE_PID_TAGS=true`):
+> - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.55) → PageLayoutBuilder (vector-first PyMuPDF + Google Cloud Vision OCR fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → Geometric Assembly for auto-discovery → Spatial Component Extractor → Index components to `pvcfc_pid_spatial_components` (Level 2)
+> - **Online**: Manual `query_type` selection → If `pid`: Level 2 Spatial Search (component-based clustering) → RRF fusion with chunks → PID Tag Rerank → Attach bbox for vision citations
+> - **Configuration**: `config/cadlike_gate.yaml`, `config/tag_grammar.yaml`, `config/page_filters.yaml`
+> - **Artifacts**: `artifacts/ingestion_production/` → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png` (optional), `logs/tag_extraction_telemetry.jsonl`
+> - **Implementation**: `app/ingestion/tags/` (orchestrator, tag_extractor), `app/ingestion/cadlike_gate.py`, `app/ingestion/layout/`, `app/rag/spatial/` (Level 2), `app/rag/hybrid_with_tags_retriever.py`
 > - **Quick Start**: See `START_HERE_CAD_TAGS.md`, `CAD_TAG_EXTRACTION_QUICKSTART.md`
 
 ---
@@ -287,7 +293,7 @@ RAW PDF FILES
     ↓
 [1] INGESTION
     • Parse PDF (PyMuPDF)
-    • OCR if needed (PaddleOCR v2.7.3 GPU)
+    • OCR if needed (Google Cloud Vision API + Real-ESRGAN)
     • Extract text + metadata
     ↓
 [2] CHUNKING (SEMANTIC STRATEGY)
@@ -305,32 +311,59 @@ RAW PDF FILES
     ↓
 [5] P&ID TAG EXTRACTION (PARALLEL, IF ENABLE_PID_TAGS=true)
     ↓
-    [5.1] CAD-LIKE GATE (app/ingestion/cadlike_gate.py)
+    [5.1] CAD-LIKE GATE (app/ingestion/cadlike_gate.py) - HYBRID DETECTION (v1.4.0)
         • Sample pages: [1,2,3,mid,last] (5 pages default)
-        • Compute score S = Σ(weight_i × feature_i):
-          - Producer/Creator keywords (AutoCAD, Bentley, etc.)
-          - Geometry density (vector paths/lines per area)
-          - Short CAPS rate (2-4 letter tokens)
-          - 3-piece tag regex hits (dd CC-CC ddddd)
-          - Technical suffixes (A/B/C, 2oo3, -201B)
-          - Large page size (A1/A0)
-          - Rotated text spans
-          - Leader patterns
-        • Threshold: S ≥ 0.55 → CAD-like (current production setting)
-        • Gray zone [0.45, 0.55): boost if filename has P&ID/PFD/ISO keywords
+
+        **PHASE 1: Vector Features (8 features - ALWAYS computed):**
+        • Compute vector_score = Σ(weight_i × feature_i):
+          - Producer/Creator keywords (AutoCAD, Bentley, etc.) - 0.20
+          - Geometry density (vector paths/lines per area) - 0.15
+          - Short CAPS rate (2-4 letter tokens) - 0.15
+          - 3-piece tag regex hits (dd CC-CC ddddd) - 0.20
+          - Technical suffixes (A/B/C, 2oo3, -201B) - 0.10
+          - Large page size (A1/A0) - 0.05
+          - Rotated text spans - 0.05
+          - Leader patterns - 0.10
+
+        **PHASE 2: Image Features (3 features - CONDITIONAL, only if vector_score < 0.55):**
+        • If vector_score < 0.55: Compute image_score via:
+          - Shape detection (circles + rectangles via HoughCircles/contours) - 0.40 weight
+          - Line detection (long lines >100px via HoughLinesP) - 0.30 weight
+          - Edge density (Canny edge detection, capped at 25%) - 0.30 weight
+        • Render pages at 300 DPI for accurate analysis
+        • image_score = 0.40×shapes + 0.30×lines + 0.30×edges
+
+        **PHASE 3: Hybrid Classification (4 decision paths):**
+        • Path 1 (VECTOR): vector_score ≥ 0.55 → CAD-like (HIGH confidence, skip image)
+        • Path 2 (FALLBACK): No image data available → Use vector_score only
+        • Path 3 (IMAGE): vector_score < 0.20 → Rely on image_score:
+          - image_score ≥ 0.80 → CAD-like (HIGH confidence)
+          - 0.55 ≤ image_score < 0.80 → CAD-like (MEDIUM confidence, filename boost optional)
+          - image_score < 0.55 → Not CAD-like (HIGH confidence)
+        • Path 4 (HYBRID): 0.20 ≤ vector_score < 0.55 → Combined:
+          - combined_score = 0.60×vector_score + 0.40×image_score
+          - combined_score ≥ 0.55 → CAD-like (MEDIUM confidence)
+
+        **Result Fields:**
+        • is_cadlike: boolean
+        • score: final score (vector, image, or combined)
+        • confidence: HIGH / MEDIUM / UNKNOWN
+        • detection_method: VECTOR / IMAGE / HYBRID / ERROR
+        • image_features: dict with shape/line/edge scores (if computed)
+
         • Select "taggy pages" (regex_hits≥3 OR code_tokens≥4)
         ↓ is_cadlike=true
     [5.2] PAGE LAYOUT EXTRACTION (app/ingestion/layout/page_layout_builder.py)
         • Vector-first: PyMuPDF text spans (bbox, font_size, rotation)
         • Vector drawings: lines, circles, rectangles, paths
-        • OCR fallback: PP-OCRv5 if vector text < 100 chars
+        • OCR fallback: Google Cloud Vision API if vector text < threshold
         • Normalize engineering spacing ("3.9  MPag" → "3.9 MPag")
         • Save to page_layout/page_{doc_id}_{page}.json
         ↓
     [5.3] TAG EXTRACTION (app/ingestion/tags/tag_extractor.py)
         • Token role classification:
           - AREA: ^\d{2}$
-          - CODE: ^[A-Z]{2,4}$ (whitelist: PAL, PSAL, PT, PI, FIC, etc.)
+          - CODE: ^[A-Z]{1,6}$ (whitelist: I, P, T, PAL, PSAL, PT, PI, FIC, etc.) ✅ Nov 11: Single-letter support
           - NUM: ^\d{3,5}[A-Z]?$
           - SUFFIX: A/B(/C)?, [1-3]oo[2-4], -?\d{3,5}[A-Z]?
         • CODE-anchored vertical triplet assembly:
@@ -348,7 +381,7 @@ RAW PDF FILES
         • Save to crops/ (only if LAZY_CROP_GENERATION=false)
         ↓
     [5.5] INDEXING & TELEMETRY
-        • Bulk upsert: entities/tags.jsonl → OpenSearch "pvcfc_pid_tags"
+        • Bulk index: Spatial components → OpenSearch "pvcfc_pid_spatial_components" (Level 2)
         • Deterministic _id: {doc_id}#{page}#{tag}
         • Log telemetry: logs/tag_extraction_telemetry.jsonl
           - cadlike_score, tags_found_total, p50/p90, ocr_ratio, warnings
@@ -364,16 +397,17 @@ OUTPUT:
     • page_layout/*.json (text spans + vector drawings per page)
     • crops/*.png (bbox PNG crops - if not lazy)
     • logs/tag_extraction_telemetry.jsonl (runtime metrics + warnings)
-    • OpenSearch index "pvcfc_pid_tags" (tag sidecar index)
+    • OpenSearch index "pvcfc_pid_spatial_components" (Level 2 spatial components index)
 ```
 
 > **Index Directory Note**: Default config uses artifacts/index_production, but current .env overrides to data/indexes. Check your environment.
 
-> **P&ID Artifacts Location**: P&ID tag extraction artifacts are stored in `D:\PVCFC_Artifacts\` (configured via .env `ARTIFACTS_DIR=D:\PVCFC_Artifacts`):
+> **P&ID Artifacts Location**: P&ID tag extraction artifacts are stored in `artifacts/ingestion_production/` (specified via --output-dir parameter):
 > - `entities/tags.jsonl`: Extracted instrument tags (1 JSON object per tag, e.g., {"doc_id": "...", "page": 5, "tag": "04 PSAL 2207", "parts": {...}, "bbox": [...], "confidence": 0.96})
 > - `page_layout/*.json`: Page-level layout data (text spans with bbox/font/rotation + vector drawings)
 > - `crops/*.png`: PNG crops of tag bboxes for vision citations (lazy mode: generated on-demand)
 > - `logs/tag_extraction_telemetry.jsonl`: Extraction metrics per document (cadlike_score, tags_found, warnings, elapsed_sec)
+> - **Note**: The ARTIFACTS_DIR environment variable in .env is for legacy compatibility; actual location is determined by ingestion --output-dir parameter
 
 ### 2.2 Query Time (Online)
 
@@ -547,7 +581,8 @@ def process_as_technical_doc(pdf_file):
 
     # Step 3: OCR if needed
     if len(text) < 100:
-        text = ocr_with_paddleocr(pdf_file)
+        # OCR with Google Cloud Vision API + Real-ESRGAN enhancement
+        text = perform_ocr_with_vision_api(pdf_file)
 
     # Step 4: Chunking
     chunks = hierarchical_chunker.chunk(text)
@@ -592,24 +627,28 @@ def process_as_pid(pdf_file):
 - Technical Doc: **4 steps** (extract → OCR → chunk → save)
 - P&ID: **8 steps** (extract → OCR → chunk → **layout → tags → crops** → save)
 
-#### Step 2: PDF Parsing with PaddleOCR
+#### Step 2: PDF Parsing with OCR (Google Cloud Vision + Real-ESRGAN)
 ```python
 # Try vector text first
 doc = fitz.open(pdf_path)
 text = extract_text(doc)
 
-if not has_text(text):
-    # Fallback to PaddleOCR (GPU-accelerated)
-    text = ocr_with_paddleocr(
-        pdf_path,
-        lang="vie+eng",
-        use_gpu=True,  # GPU support via paddlepaddle-gpu
-        det_algorithm="DB",
-        rec_algorithm="SVTR_LCNet"
+if not has_text(text) or char_count < OCR_THRESHOLD:
+    # Render page to image with adaptive DPI
+    page_image = render_page_to_image(pdf_path, page_num, dpi=144-216)
+
+    # Enhance with Real-ESRGAN (2x upscaling)
+    enhanced_image = enhance_with_realesrgan(page_image, scale=2)
+
+    # OCR with Google Cloud Vision API
+    ocr_response = vision_client.text_detection(
+        image=vision.Image(content=enhanced_image),
+        image_context=vision.ImageContext(language_hints=["en", "vi"])
     )
+    text = extract_text_from_vision_response(ocr_response)
 ```
 
-> **OCR Note**: System uses **PP-OCRv5 models** (detection + classification) with PaddleOCR 2.7.3 library, GPU-accelerated via paddlepaddle-gpu 2.6.2. NOT Tesseract. See `app/ingestion/paddle_ocr_config.py` for configuration.
+> **OCR Note**: System uses **Google Cloud Vision API** with **Real-ESRGAN image enhancement** (2x upscaling) for improved OCR accuracy, especially for P&ID drawings. Real-ESRGAN runs on GPU (CUDA) when available. ✅ **Nov 11 fix**: Protobuf upgraded to 5.29.5 (compatible with Weaviate, Google Vision, gRPC), PaddlePaddle removed. See `app/ingestion/pdf_processor.py` for implementation.
 
 #### Step 3: Metadata Extraction
 ```python
@@ -1267,7 +1306,7 @@ async def search_pid(query: str, k: int = 10):
 
     # Step 4: RRF Fusion (merge 2 branches)
     fused = rrf_fusion(
-        tags_results=tags_results,    # From pvcfc_pid_tags
+        tags_results=tags_results,    # From Level 2 spatial search (pvcfc_pid_spatial_components)
         chunks_results=chunks_results  # From rag_chunks
     )
 
@@ -1325,7 +1364,7 @@ async def hybrid_search(query: str, k: int = 50):
 | **Branches** | 1 (chunks) | 2 (tags+chunks) | 1 (chunks) |
 | **Query Enhancement** | Equipment boost | Tag parsing | None |
 | **Validation** | None | Multi-layer | None |
-| **Sources** | rag_chunks | pvcfc_pid_tags + rag_chunks | rag_chunks |
+| **Sources** | rag_chunks | pvcfc_pid_spatial_components (Level 2) + rag_chunks | rag_chunks |
 | **Bbox/Crops** | ❌ | ✅ | ❌ |
 
 ### 7.2 Weaviate Search
@@ -2834,7 +2873,7 @@ async def list_all_tags(
 
 | Metric            | Value             | Notes                 |
 |-------------------|-------------------|-----------------------|
-| **Ingestion**     | ~5 docs/sec       | With PaddleOCR GPU    |
+| **Ingestion**     | ~3-5 docs/sec     | With Google Cloud Vision API + Real-ESRGAN (GPU when available) |
 | **Indexing**      | ~1000 docs/min    | Weaviate + OpenSearch |
 | **Query Latency** | 500-2000ms        | Depends on reranking  |
 || ** - Transform**  | 50-150ms          | Query processing      |
@@ -2909,8 +2948,8 @@ async def list_all_tags(
 - [scripts/README_PID_ENHANCEMENT.md](scripts/README_PID_ENHANCEMENT.md) - P&ID scripts guide
 - [scripts/pid_enhancement_setup.ps1](scripts/pid_enhancement_setup.ps1) - Automated setup
 - [scripts/pid_enhancement_test.ps1](scripts/pid_enhancement_test.ps1) - Quick testing
-- **[scripts/opensearch/create_tags_index.py](scripts/opensearch/create_tags_index.py)** - Create pvcfc_pid_tags index
-- **[scripts/opensearch/bulk_upsert_tags.py](scripts/opensearch/bulk_upsert_tags.py)** - Bulk load tags to index
+- **[scripts/opensearch/create_spatial_components_index.py](scripts/opensearch/create_spatial_components_index.py)** - Create pvcfc_pid_spatial_components index (Level 2)
+- **Note**: Level 3 scripts (`create_tags_index.py`, `bulk_upsert_tags.py`) have been removed. Components are automatically indexed during ingestion.
 - **[tools/test_tag_extraction.py](tools/test_tag_extraction.py)** - Test single PDF extraction
 
 ### Storage & Migration

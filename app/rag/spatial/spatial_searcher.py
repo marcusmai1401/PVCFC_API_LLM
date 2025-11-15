@@ -16,7 +16,7 @@ class SpatialTagSearcher:
 
     def __init__(
         self,
-        max_distance_mm: float = 25.0,
+        max_distance_mm: float = 100.0,  # Increased from 25mm to handle larger tag layouts
         alignment_tolerance_mm: float = 5.0,
         min_cluster_score: float = 0.6,
     ):
@@ -110,15 +110,46 @@ class SpatialTagSearcher:
     def _get_pages_with_component(
         self, component_text: str, component_type: str, doc_id: str
     ) -> Set[int]:
-        """Get set of pages containing a specific component"""
-        components = self.indexer.search_components(
-            component_text=component_text,
-            component_type=component_type,
-            doc_id=doc_id,
-            size=1000,  # Get all occurrences
+        """Get set of pages containing a specific component using aggregation"""
+        # Use aggregation to get unique pages - no 10k limit!
+        from opensearchpy import OpenSearch
+
+        client = OpenSearch(
+            hosts=[{"host": "localhost", "port": 9200}],
+            http_compress=True,
+            use_ssl=False,
         )
 
-        pages = {comp["page"] for comp in components}
+        # Aggregation query to get unique pages
+        query = {
+            "size": 0,  # Don't return documents
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"doc_id": doc_id}},
+                        {"term": {"component_type": component_type}},
+                        {"term": {"component": component_text}},
+                    ]
+                }
+            },
+            "aggs": {
+                "unique_pages": {
+                    "terms": {
+                        "field": "page",
+                        "size": 10000,  # Max unique pages to retrieve
+                    }
+                }
+            },
+        }
+
+        response = client.search(index="pvcfc_pid_spatial_components", body=query)
+
+        # Extract unique pages from aggregation buckets
+        buckets = (
+            response.get("aggregations", {}).get("unique_pages", {}).get("buckets", [])
+        )
+        pages = {bucket["key"] for bucket in buckets}
+
         return pages
 
     def _get_components_on_page(

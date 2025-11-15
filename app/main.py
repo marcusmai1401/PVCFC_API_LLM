@@ -89,17 +89,19 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"Failed to init technical doc retriever: {e}")
                 app.state.tech_doc_retriever = None
 
-            # Attach OpenSearch client to app state for routers needing direct access (e.g., /tags)
+            # Attach retrievers/clients to app state for health checks and routers
             try:
                 retriever = app.state.retriever
-                # Modern hybrid retriever exposes opensearch_retriever
+                # Expose underlying OpenSearch retriever
                 if (
                     hasattr(retriever, "opensearch_retriever")
                     and retriever.opensearch_retriever
                 ):
+                    # Attach retriever for HealthChecker
+                    app.state.opensearch_retriever = retriever.opensearch_retriever
                     app.state.opensearch_client = retriever.opensearch_retriever.client
                     logger.info(
-                        "Attached OpenSearch client from Hybrid Modern retriever"
+                        "Attached OpenSearch retriever/client from Hybrid Modern retriever"
                     )
                 # Legacy hybrid may expose bm25_indexer as OpenSearch retriever when enabled
                 elif hasattr(retriever, "bm25_indexer") and retriever.bm25_indexer:
@@ -108,10 +110,24 @@ async def lifespan(app: FastAPI):
                     )
 
                     if isinstance(retriever.bm25_indexer, OpenSearchBM25Retriever):
+                        app.state.opensearch_retriever = retriever.bm25_indexer
                         app.state.opensearch_client = retriever.bm25_indexer.client
                         logger.info(
                             "Attached OpenSearch client from Legacy Hybrid retriever"
                         )
+
+                # Expose underlying Weaviate retriever when using hybrid modern
+                try:
+                    # HybridWithTagsRetriever -> hybrid_retriever -> weaviate_retriever
+                    if hasattr(retriever, "hybrid_retriever") and hasattr(
+                        retriever.hybrid_retriever, "weaviate_retriever"
+                    ):
+                        app.state.weaviate_retriever = (
+                            retriever.hybrid_retriever.weaviate_retriever
+                        )
+                        logger.info("Attached Weaviate retriever for health checks")
+                except Exception as _inner_e:
+                    logger.debug(f"Weaviate retriever attach skipped: {_inner_e}")
             except Exception as e:
                 logger.warning(f"Could not attach OpenSearch client to app state: {e}")
 

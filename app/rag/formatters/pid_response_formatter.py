@@ -16,7 +16,7 @@ def format_pid_search_response(
 
     Args:
         query: Original query string
-        grouped_results: Grouped results from OpenSearchTagsRetriever
+        grouped_results: Grouped results from spatial search
         answer: Optional LLM-generated answer
 
     Returns:

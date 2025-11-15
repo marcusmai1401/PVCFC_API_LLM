@@ -44,6 +44,11 @@ class AskRequest(BaseModel):
         ...,
         description="Query type: 'pid' for P&ID diagrams, 'technical_doc' for manuals/datasheets/specs",
     )
+    # OPTIONAL: Document ID for P&ID spatial search (Level 2)
+    doc_id: Optional[str] = Field(
+        default=None,
+        description="Document ID to search in (optional, for P&ID Level 2 spatial search)",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

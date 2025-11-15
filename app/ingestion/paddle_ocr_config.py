@@ -2,6 +2,11 @@
 PaddleOCR Configuration Module
 Provides PaddleOCR PP-OCRv5 initialization with GPU/CPU auto-detection
 Replaces Tesseract OCR with PaddleOCR for higher accuracy
+
+⚠️ DEPRECATED: This module is deprecated as of 2025-11-01
+   OCR functionality has been migrated to Google Cloud Vision API
+   This file is kept for rollback purposes only
+   DO NOT USE for new implementations
 """
 import os
 import threading

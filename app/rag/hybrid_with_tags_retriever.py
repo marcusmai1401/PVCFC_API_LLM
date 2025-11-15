@@ -21,10 +21,6 @@ from app.rag.hybrid_weaviate_opensearch_retriever import (
     HybridModernConfig,
     HybridWeaviateOpenSearchRetriever,
 )
-from app.rag.query_processing.pid_context_validator import (
-    PIDContextValidator,
-    should_fallback_on_empty,
-)
 from app.rag.query_transform import TransformedQuery
 from app.rag.retriever import RetrievalResult
 
@@ -32,9 +28,6 @@ from app.rag.retriever import RetrievalResult
 # Previously, instance variables were shared across concurrent requests, causing
 # Request A to get Request B's cached analysis, leading to wrong retrieval results.
 # ContextVar provides thread-safe, request-scoped storage in async contexts.
-_request_validation: ContextVar[Optional[Dict]] = ContextVar(
-    "request_validation", default=None
-)
 _request_analysis: ContextVar[Optional[Dict]] = ContextVar(
     "request_analysis", default=None
 )
@@ -66,22 +59,25 @@ class HybridWithTagsRetriever:
 
         # PID tags components (lazy init)
         self.tags_enabled = self.config.ENABLE_PID_TAGS
-        self.tags_retriever = None
+        self.spatial_searcher = None
         self.pid_enhancer = None
 
         if self.tags_enabled:
             try:
                 # Lazy import to avoid circular dependencies
-                from app.rag.indexers.opensearch_tags_retriever import (
-                    OpenSearchTagsRetriever,
-                )
                 from app.rag.query_processing.pid_query_enhancer import PIDQueryEnhancer
+                from app.rag.spatial.spatial_searcher import SpatialTagSearcher
 
-                self.tags_retriever = OpenSearchTagsRetriever()
+                # Level 2: Spatial clustering for absolute accuracy
+                self.spatial_searcher = SpatialTagSearcher(
+                    max_distance_mm=100.0,  # Increased to handle larger tag layouts
+                    alignment_tolerance_mm=5.0,
+                    min_cluster_score=0.6,
+                )
                 self.pid_enhancer = PIDQueryEnhancer()
-                logger.info("✓ PID tags retrieval enabled")
+                logger.info("✓ PID spatial search (Level 2) enabled")
             except Exception as e:
-                logger.warning(f"Failed to initialize tags components: {e}")
+                logger.warning(f"Failed to initialize spatial search components: {e}")
                 logger.warning("Falling back to standard hybrid retrieval")
                 self.tags_enabled = False
 
@@ -113,126 +109,132 @@ class HybridWithTagsRetriever:
             logger.debug("Using standard hybrid retrieval (no tags)")
             return self.hybrid_retriever.search(transformed_query, top_k, **kwargs)
 
+    def _extract_doc_id(
+        self, transformed_query: TransformedQuery, **kwargs
+    ) -> Optional[str]:
+        """
+        Extract doc_id from request context for Level 2 spatial search
+
+        Priority:
+        1. kwargs['request'].doc_id (if provided)
+        2. transformed_query.filters['doc_id'][0] (if present)
+        3. None (triggers all-docs search)
+
+        Args:
+            transformed_query: Query with filters
+            **kwargs: May contain 'request' object
+
+        Returns:
+            doc_id string if specified, None if not (triggers multi-document search)
+        """
+        # Priority 1: From request object
+        request = kwargs.get("request")
+        if request and hasattr(request, "doc_id") and request.doc_id:
+            logger.debug(f"✓ Using doc_id from request: {request.doc_id}")
+            return request.doc_id
+
+        # Priority 2: From filters
+        if (
+            transformed_query.filters
+            and hasattr(transformed_query.filters, "doc_ids")
+            and transformed_query.filters.doc_ids
+        ):
+            doc_ids = transformed_query.filters.doc_ids
+            if doc_ids:
+                logger.debug(f"✓ Using doc_id from filters: {doc_ids[0]}")
+                return doc_ids[0]
+
+        # Priority 3: None (triggers multi-document search)
+        logger.info("⚠️  doc_id not specified, will search all documents")
+        return None
+
+    def _convert_spatial_to_tags(
+        self, spatial_results: List, components: Dict
+    ) -> List[Dict]:
+        """
+        Convert Level 2 SearchResult objects to tags format for RRF fusion
+
+        Args:
+            spatial_results: List of SearchResult from SpatialTagSearcher
+            components: Dict with unit, prefix, suffix
+
+        Returns:
+            List of tag dicts compatible with existing pipeline
+        """
+        tags_results = []
+
+        # Build tag text from components
+        unit = components.get("unit", "")
+        prefix = components.get("prefix", "")
+        suffix = components.get("suffix", "")
+        tag_text = " ".join(filter(None, [unit, prefix, suffix]))
+
+        for sr in spatial_results:
+            tag_result = {
+                "tag": tag_text,
+                "doc_id": sr.doc_id,
+                "page": sr.page,
+                "bbox": sr.bbox,
+                "score": sr.score,
+                "source": "spatial_level2",
+                "metadata": sr.metadata,
+                "text": tag_text,  # For compatibility
+                "chunk_id": f"{sr.doc_id}_p{sr.page}_tag_{tag_text.replace(' ', '_')}",
+            }
+            tags_results.append(tag_result)
+
+        return tags_results
+
     def _should_use_tags(self, transformed_query: TransformedQuery) -> bool:
         """
-        Determine if tags retrieval should be used
-
-        UPDATED: Multi-layer validation with safety checks
-        - Layer 0: QUICK FILTER for technical doc queries (NEW)
-        - Layer 1: Strategy detection
-        - Layer 2: Context validation (false positive prevention)
-        - Layer 3: Confidence threshold check
-        - Layer 4: Exception handling
+        Simplified: User already selected pid mode, just parse tag components
 
         Args:
             transformed_query: Transformed query
 
         Returns:
-            True if tags retrieval applicable
+            True if query has parseable P&ID tag patterns
         """
-
-        # LAYER 0: Quick filter for obvious technical doc queries (NEW)
-        query_lower = transformed_query.original.lower()
-
-        # Strong indicators this is a TECHNICAL DOC query, not P&ID
-        tech_doc_patterns = [
-            "according to",  # "according to the manual"
-            "manual",
-            "datasheet",
-            "specification",
-            "setpoint",  # "what are the setpoints"
-            "alarm",  # "alarm settings"
-            "operating speed",
-            "performance curve",
-            "rpm",
-            "operating condition",
-            "maintenance",
-            "operation and maintenance",
-            "o&m",
-        ]
-
-        # Check and log matched pattern
-        matched_pattern = next((p for p in tech_doc_patterns if p in query_lower), None)
-        if matched_pattern:
-            log_pid_decision(
-                transformed_query.original,
-                "use_semantic",
-                f"Technical doc query detected (has '{matched_pattern}' pattern)",
-            )
-            return False
         if not self.pid_enhancer:
-            log_pid_decision(
-                transformed_query.original,
-                "use_semantic",
-                "PID enhancer not initialized",
-            )
+            logger.debug("PID enhancer not initialized")
             return False
 
         try:
-            # LAYER 1: Analyze query for P&ID patterns
+            # Parse tag components from query
             analysis = self.pid_enhancer.enhance(transformed_query.original)
             strategy = analysis.get("strategy")
 
-            # NEW: Support new strategies (suffix_search, component_search)
-            if strategy not in ["suffix_search", "component_search", "tag_focused"]:
+            # If valid P&ID strategy detected, use tags search
+            if strategy in ["suffix_search", "component_search", "tag_focused"]:
                 log_pid_decision(
                     transformed_query.original,
-                    "use_semantic",
-                    f"Strategy is '{strategy}', not P&ID-related",
+                    "use_pid",
+                    f"P&ID pattern detected: {strategy}",
+                    {
+                        "strategy": strategy,
+                        "components": analysis.get("components")
+                        or analysis.get("suffix"),
+                    },
                 )
-                return False
 
-            # LAYER 2: Context validation (false positive prevention)
-            validator = PIDContextValidator()
-            validation = validator.validate(transformed_query.original, strategy)
+                # Store analysis in request context for _search_with_tags()
+                _request_analysis.set(analysis)
+                return True
 
-            if not validation["is_valid"]:
-                log_pid_decision(
-                    transformed_query.original,
-                    "use_semantic",
-                    f"Context validation failed: {validation['reason']}",
-                    {"confidence": validation["confidence"], "strategy": strategy},
-                )
-                return False
-
-            # LAYER 3: Check validation confidence threshold
-            min_confidence = 0.5  # TODO: Make configurable via settings
-            if validation["confidence"] < min_confidence:
-                log_pid_decision(
-                    transformed_query.original,
-                    "use_semantic",
-                    f"Validation confidence too low: {validation['confidence']:.2f} < {min_confidence}",
-                    {"strategy": strategy},
-                )
-                return False
-
-            # PASSED all validation checks
-            log_pid_decision(
-                transformed_query.original,
-                "use_pid",
-                f"Strategy={strategy}, confidence={validation['confidence']:.2f}",
-                {
-                    "strategy": strategy,
-                    "validation": validation,
-                    "components": analysis.get("components")
-                    or analysis.get("suffix")
-                    or analysis.get("tags"),
-                },
-            )
-
-            # Store validation and analysis in request-scoped context (BUG-021 FIX)
-            _request_validation.set(validation)
-            _request_analysis.set(analysis)
-
-            return True
-
-        except Exception as e:
-            # LAYER 4: Exception handling - always fallback safely
-            logger.error(f"P&ID tag detection failed: {e}")
+            # No P&ID pattern detected - fallback to semantic search
             log_pid_decision(
                 transformed_query.original,
                 "use_semantic",
-                f"Exception during detection: {str(e)}",
+                f"No P&ID tag pattern detected (strategy={strategy})",
+            )
+            return False
+
+        except Exception as e:
+            logger.error(f"P&ID query analysis failed: {e}")
+            log_pid_decision(
+                transformed_query.original,
+                "use_semantic",
+                f"Analysis exception: {str(e)}",
             )
             return False
 
@@ -277,66 +279,184 @@ class HybridWithTagsRetriever:
         tags_results = []
         fallback_reason = None
 
-        logger.info(f"Executing P&ID search with strategy: {strategy}")
+        # Extract doc_id for Level 2 spatial search
+        doc_id = self._extract_doc_id(transformed_query, **kwargs)
 
-        # Branch A: P&ID Tags Retrieval (strategy-aware)
+        logger.info(
+            f"Executing P&ID spatial search (Level 2): strategy={strategy}, doc_id={doc_id}"
+        )
+
+        # Branch A: P&ID Spatial Search (Level 2)
         try:
-            if strategy == "suffix_search":
-                # NEW: SUFFIX-only search
-                suffix = analysis.get("suffix")
-                logger.info(f"SUFFIX search: {suffix}")
+            if strategy == "component_search":
+                # Component-based spatial clustering
+                components = analysis.get("components", {})
+                logger.info(f"Component spatial search: {components}")
 
-                grouped_results = self.tags_retriever.search_by_suffix(suffix, top_k=50)
-                tags_results = self._flatten_grouped_results(grouped_results)
+                # Level 2: Spatial clustering with geometric validation
+                # Handle None doc_id (multi-document search)
+                if doc_id is None:
+                    # Search all documents
+                    logger.info("Performing multi-document spatial search")
+                    all_doc_ids = self.spatial_searcher.indexer.get_all_doc_ids()
 
-                # Store grouped format in request-scoped context (BUG-021 FIX)
-                _request_grouped_results.set(grouped_results)
+                    if not all_doc_ids:
+                        logger.warning("No doc_ids found in spatial index")
+                        spatial_results = []
+                    else:
+                        logger.info(
+                            f"Searching {len(all_doc_ids)} documents: {all_doc_ids}"
+                        )
+                        all_spatial_results = []
+
+                        for search_doc_id in all_doc_ids:
+                            try:
+                                results = self.spatial_searcher.search(
+                                    unit=components.get("unit", ""),
+                                    prefix=components.get("prefix", ""),
+                                    suffix=components.get("suffix", ""),
+                                    doc_id=search_doc_id,
+                                )
+                                all_spatial_results.extend(results)
+                            except Exception as e:
+                                logger.warning(
+                                    f"Search failed for doc_id={search_doc_id}: {e}"
+                                )
+                                continue
+
+                        # Sort by score and take top results
+                        all_spatial_results.sort(key=lambda r: r.score, reverse=True)
+                        spatial_results = all_spatial_results[
+                            :50
+                        ]  # Top 50 from all docs
+
+                        logger.info(
+                            f"Multi-doc spatial search: {len(all_spatial_results)} total results "
+                            f"→ top {len(spatial_results)}"
+                        )
+                else:
+                    # Single document search (existing logic)
+                    spatial_results = self.spatial_searcher.search(
+                        unit=components.get("unit", ""),
+                        prefix=components.get("prefix", ""),
+                        suffix=components.get("suffix", ""),
+                        doc_id=doc_id,
+                    )
+
+                # Convert to tags format for RRF fusion
+                tags_results = self._convert_spatial_to_tags(
+                    spatial_results, components
+                )
 
                 logger.info(
-                    f"SUFFIX search '{suffix}': {len(tags_results)} tags, "
-                    f"ambiguity={grouped_results.get('has_ambiguity')}"
+                    f"Spatial search {components}: {len(tags_results)} spatial clusters found"
                 )
 
-            elif strategy == "component_search":
-                # NEW: Component-based search
-                components = analysis.get("components", {})
-                logger.info(f"Component search: {components}")
-
-                tags_results = self.tags_retriever.search_by_components(**components)
-
-                logger.info(f"Component search {components}: {len(tags_results)} tags")
+            elif strategy == "suffix_search":
+                # SUFFIX-only: NOT supported in Level 2 spatial search
+                # Level 2 requires all three components (unit, prefix, suffix) for geometric clustering.
+                # SUFFIX-only queries will fallback to semantic search.
+                #
+                # Why? Level 2 uses spatial proximity calculations which need complete tag structure.
+                # Without unit and prefix positions, we cannot validate geometric alignment.
+                #
+                # Example: Query "5153" cannot be spatially clustered without knowing where
+                #          the unit and prefix are located on the page.
+                #
+                # Workaround: User should provide full tag (e.g., "04 PAHH 5153") or at least
+                #            partial components (e.g., "PAHH 5153")
+                suffix = analysis.get("suffix")
+                logger.warning(
+                    f"⚠️  SUFFIX-only query '{suffix}' not supported in Level 2 (Spatial Search). "
+                    f"Level 2 requires full tag components for geometric clustering. "
+                    f"Falling back to semantic search. "
+                    f"TIP: Provide full tag (e.g., '04 PAHH {suffix}') for better results."
+                )
+                fallback_reason = "Level 2 requires full components (unit+prefix+suffix), suffix-only not supported"
+                tags_results = []
 
             elif strategy == "tag_focused":
-                # OLD: Existing tag search (backward compatible)
+                # Tag-focused: Parse complete tag and extract components
                 detected_tags = analysis.get("tags", [])
-                parsed_tags = self._parse_detected_tags(detected_tags)
+                if detected_tags:
+                    tag_str = (
+                        detected_tags[0]
+                        if isinstance(detected_tags, list)
+                        else detected_tags
+                    )
 
-                tags_results = self.tags_retriever.search(
-                    query=transformed_query.original,
-                    detected_tags=parsed_tags,
-                    top_k=50,
-                )
+                    # Re-parse to get components
+                    comp_analysis = self.pid_enhancer.enhance(tag_str)
+                    if comp_analysis.get("strategy") == "component_search":
+                        components = comp_analysis.get("components", {})
 
-                logger.info(f"Tag-focused search: {len(tags_results)} tags")
+                        # Handle None doc_id (multi-document search)
+                        if doc_id is None:
+                            logger.info("Multi-doc search in tag_focused mode")
+                            all_doc_ids = (
+                                self.spatial_searcher.indexer.get_all_doc_ids()
+                            )
+                            all_spatial_results = []
+
+                            for search_doc_id in all_doc_ids:
+                                try:
+                                    results = self.spatial_searcher.search(
+                                        unit=components.get("unit", ""),
+                                        prefix=components.get("prefix", ""),
+                                        suffix=components.get("suffix", ""),
+                                        doc_id=search_doc_id,
+                                    )
+                                    all_spatial_results.extend(results)
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Search failed for doc_id={search_doc_id}: {e}"
+                                    )
+
+                            all_spatial_results.sort(
+                                key=lambda r: r.score, reverse=True
+                            )
+                            spatial_results = all_spatial_results[:50]
+                        else:
+                            spatial_results = self.spatial_searcher.search(
+                                unit=components.get("unit", ""),
+                                prefix=components.get("prefix", ""),
+                                suffix=components.get("suffix", ""),
+                                doc_id=doc_id,
+                            )
+
+                        tags_results = self._convert_spatial_to_tags(
+                            spatial_results, components
+                        )
+                        logger.info(
+                            f"Tag-focused spatial search: {len(tags_results)} results"
+                        )
+                    else:
+                        logger.warning(f"Cannot parse tag '{tag_str}' into components")
+                        fallback_reason = "Cannot parse tag into components"
+                        tags_results = []
+                else:
+                    fallback_reason = "No tags detected"
+                    tags_results = []
 
             else:
                 logger.warning(f"Unknown P&ID strategy: {strategy}")
                 fallback_reason = f"Unknown strategy: {strategy}"
+                tags_results = []
 
         except Exception as e:
             logger.error(f"P&ID tags search exception: {e}")
             fallback_reason = f"Search exception: {str(e)}"
             tags_results = []
 
-        # CRITICAL: Empty results fallback check
-        if should_fallback_on_empty(tags_results, min_results=1):
+        # Empty results fallback check (simplified)
+        if not tags_results:
             fallback_reason = (
                 fallback_reason or f"Insufficient results ({len(tags_results)})"
             )
 
             logger.warning(
                 f"P&ID search fallback triggered: {fallback_reason}. "
-                "Using semantic search."
+                "Using P&ID-aware semantic search."
             )
 
             # Log fallback metrics
@@ -345,9 +465,7 @@ class HybridWithTagsRetriever:
                     timestamp=datetime.now().isoformat(),
                     query=transformed_query.original,
                     strategy=strategy,
-                    validation_confidence=(_request_validation.get() or {}).get(
-                        "confidence", 0
-                    ),
+                    validation_confidence=1.0,  # User-selected mode, full confidence
                     tags_found=len(tags_results)
                     if isinstance(tags_results, list)
                     else 0,
@@ -357,8 +475,52 @@ class HybridWithTagsRetriever:
                 )
             )
 
-            # FALLBACK: Standard hybrid retrieval
-            return self.hybrid_retriever.search(transformed_query, top_k, **kwargs)
+            # FALLBACK: P&ID-aware enhanced semantic search
+            # Check if feature is enabled
+            if getattr(self.config, "pid_enable_semantic_fallback", True):
+                try:
+                    from app.rag.pid_fallback_enhancer import PIDFallbackEnhancer
+
+                    enhancer = PIDFallbackEnhancer(
+                        config={
+                            "opensearch_weight": getattr(
+                                self.config, "pid_opensearch_weight", 1.0
+                            ),
+                            "weaviate_weight": getattr(
+                                self.config, "pid_weaviate_weight", 0.3
+                            ),
+                            "enable_tag_rerank": getattr(
+                                self.config, "pid_enable_tag_rerank", True
+                            ),
+                            "enable_safety_check": getattr(
+                                self.config, "pid_enable_safety_check", True
+                            ),
+                            "max_variants": getattr(
+                                self.config, "pid_max_tag_variants", 4
+                            ),
+                        }
+                    )
+
+                    return enhancer.search_with_enhancements(
+                        transformed_query=transformed_query,
+                        analysis=analysis,
+                        opensearch_retriever=self.hybrid_retriever.opensearch_retriever,
+                        weaviate_retriever=self.hybrid_retriever.weaviate_retriever,
+                        top_k=top_k,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"P&ID fallback enhancer failed: {e}, using standard fallback"
+                    )
+                    return self.hybrid_retriever.search(
+                        transformed_query, top_k, **kwargs
+                    )
+            else:
+                # Feature disabled, use standard fallback
+                logger.info(
+                    "P&ID semantic fallback disabled, using standard hybrid search"
+                )
+                return self.hybrid_retriever.search(transformed_query, top_k, **kwargs)
 
         # SUCCESS: Tags found, continue with fusion
         # Branch B: Standard chunks retrieval
@@ -385,9 +547,7 @@ class HybridWithTagsRetriever:
                 timestamp=datetime.now().isoformat(),
                 query=transformed_query.original,
                 strategy=strategy,
-                validation_confidence=(_request_validation.get() or {}).get(
-                    "confidence", 0.5
-                ),
+                validation_confidence=1.0,  # User-selected mode, full confidence
                 tags_found=len(tags_results) if isinstance(tags_results, list) else 0,
                 fallback_triggered=False,
                 fallback_reason=None,
@@ -397,28 +557,6 @@ class HybridWithTagsRetriever:
 
         # Return top-k
         return fused_results[:top_k]
-
-    def _flatten_grouped_results(self, grouped_results: Dict) -> List[Dict]:
-        """
-        Flatten grouped P&ID results into flat list for fusion
-
-        Args:
-            grouped_results: Dict from search_by_suffix() with structure:
-                            {groups: [{tags: [...]}, ...], total_tags: N, ...}
-
-        Returns:
-            Flat list of tag result dicts for RRF fusion
-        """
-        flat_results = []
-
-        for group in grouped_results.get("groups", []):
-            flat_results.extend(group.get("tags", []))
-
-        logger.debug(
-            f"Flattened {len(flat_results)} tags from {len(grouped_results.get('groups', []))} groups"
-        )
-
-        return flat_results
 
     def _parse_detected_tags(self, tag_strings: List[str]) -> List[Dict]:
         """
@@ -543,15 +681,15 @@ class HybridWithTagsRetriever:
         # Check hybrid retriever
         health["components"]["hybrid"] = self.hybrid_retriever.health_check()
 
-        # Check tags retriever
-        if self.tags_enabled and self.tags_retriever:
-            health["components"]["tags"] = self.tags_retriever.health_check()
+        # Check spatial searcher (Level 2)
+        if self.tags_enabled and self.spatial_searcher:
+            health["components"]["spatial_search"] = {"status": "enabled", "level": 2}
         else:
-            health["components"]["tags"] = {"status": "disabled"}
+            health["components"]["spatial_search"] = {"status": "disabled"}
 
         # Determine overall status
         hybrid_ok = health["components"]["hybrid"]["overall_status"] == "healthy"
-        tags_status = health["components"]["tags"]["status"]
+        tags_status = health["components"]["spatial_search"]["status"]
 
         if hybrid_ok:
             if tags_status in ["healthy", "disabled"]:

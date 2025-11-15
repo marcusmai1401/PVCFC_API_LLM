@@ -15,7 +15,7 @@ class ComponentClusterer:
 
     def __init__(
         self,
-        max_distance_mm: float = 25.0,
+        max_distance_mm: float = 100.0,  # Increased from 25mm to handle larger tag layouts
         alignment_tolerance_mm: float = 5.0,
         min_cluster_score: float = 0.6,
     ):

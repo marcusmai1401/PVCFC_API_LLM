@@ -45,6 +45,40 @@ def extract_page_from_content(text: str) -> Optional[int]:
     return None
 
 
+def extract_all_pages_from_content(text: str) -> List[int]:
+    """
+    Extract ALL page numbers from content markers.
+
+    This enables detection of multi-page chunks so we can split them properly.
+
+    Args:
+        text: Content text that may contain multiple page markers
+
+    Returns:
+        Sorted list of unique page numbers found in text
+    """
+    if not text:
+        return []
+
+    pages = set()
+
+    # Find all <!-- Page X --> markers
+    for match in re.finditer(r"<!--\s*Page\s+(\d+)\s*-->", text, re.IGNORECASE):
+        pages.add(int(match.group(1)))
+
+    # Find all [Page X] markers
+    for match in re.finditer(r"\[\s*Page\s+(\d+)\s*\]", text, re.IGNORECASE):
+        pages.add(int(match.group(1)))
+
+    # Find "Page X" at line starts
+    for match in re.finditer(
+        r"^\s*Page\s+(\d+)\s*[:\-]?", text, re.IGNORECASE | re.MULTILINE
+    ):
+        pages.add(int(match.group(1)))
+
+    return sorted(list(pages))
+
+
 @dataclass
 class Chunk:
     """Data class for document chunk"""
@@ -61,10 +95,11 @@ class Chunk:
     heading: Optional[str] = None
     level: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    page_numbers: Optional[List[int]] = None  # List of all pages covered by chunk
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
-        return {
+        result = {
             "chunk_id": self.chunk_id,
             "text": self.text,
             "doc_id": self.doc_id,
@@ -78,6 +113,12 @@ class Chunk:
             "level": self.level,
             "metadata": self.metadata,
         }
+
+        # Add page_numbers if available (for multi-page chunks)
+        if self.page_numbers is not None:
+            result["page_numbers"] = self.page_numbers
+
+        return result
 
 
 class HierarchicalChunker:
@@ -163,6 +204,9 @@ class HierarchicalChunker:
             )
             chunks.extend(section_chunks)
             chunk_index += len(section_chunks)
+
+        # Post-process: merge small chunks with neighbors
+        chunks = self._merge_small_chunks(chunks)
 
         return chunks
 
@@ -368,7 +412,9 @@ class HierarchicalChunker:
         metadata: Dict[str, Any],
     ) -> List[Chunk]:
         """
-        Split content into chunks with overlap
+        Split content into chunks with overlap.
+
+        NEW: Prioritizes single-page chunks by splitting at page boundaries first.
 
         Args:
             content: Text content
@@ -386,6 +432,65 @@ class HierarchicalChunker:
         """
         chunks = []
 
+        # STEP 1: Check if content spans multiple pages
+        all_pages = extract_all_pages_from_content(content)
+
+        # If content spans multiple pages, split by page boundaries FIRST
+        if len(all_pages) > 1:
+            logger.debug(
+                f"Content spans {len(all_pages)} pages, splitting by page boundaries"
+            )
+
+            # Split content by page markers
+            page_pattern = re.compile(r"(<!--\s*Page\s+\d+\s*-->)")
+            parts = page_pattern.split(content)
+
+            # Group parts by page
+            page_contents = {}
+            current_page = page_start
+            current_text = []
+
+            for part in parts:
+                # Check if this part is a page marker
+                page_match = re.match(r"<!--\s*Page\s+(\d+)\s*-->", part)
+                if page_match:
+                    # Save previous page content
+                    if current_text:
+                        page_contents[current_page] = "\n".join(current_text)
+                    # Start new page
+                    current_page = int(page_match.group(1))
+                    current_text = [part]  # Keep the marker
+                else:
+                    current_text.append(part)
+
+            # Save last page
+            if current_text:
+                page_contents[current_page] = "\n".join(current_text)
+
+            # Recursively chunk each page's content separately
+            for page_num in sorted(page_contents.keys()):
+                page_text = page_contents[page_num]
+                if not page_text.strip():
+                    continue
+
+                # Recursively call _split_content for this page's content
+                # This ensures single-page chunks
+                page_chunks = self._split_content(
+                    content=page_text,
+                    doc_id=doc_id,
+                    chunk_index=chunk_index + len(chunks),
+                    page_start=page_num,
+                    page_end=page_num,  # Single page
+                    heading=heading,
+                    level=level,
+                    parent_id=parent_id,
+                    metadata=metadata,
+                )
+                chunks.extend(page_chunks)
+
+            return chunks
+
+        # STEP 2: Content is single-page, proceed with normal paragraph splitting
         # Split by paragraphs first
         paragraphs = content.split("\n\n")
 
@@ -419,6 +524,9 @@ class HierarchicalChunker:
                     actual_page_start = page_start
                     actual_page_end = page_end
 
+                # Extract all pages in this chunk
+                chunk_pages = extract_all_pages_from_content(chunk_text)
+
                 chunk = Chunk(
                     chunk_id=chunk_id,
                     text=chunk_text,
@@ -432,6 +540,7 @@ class HierarchicalChunker:
                     heading=heading,
                     level=level,
                     metadata=chunk_metadata,
+                    page_numbers=chunk_pages if chunk_pages else None,
                 )
                 chunks.append(chunk)
 
@@ -465,6 +574,9 @@ class HierarchicalChunker:
                 actual_page_start = page_start
                 actual_page_end = page_end
 
+            # Extract all pages in final chunk
+            chunk_pages = extract_all_pages_from_content(chunk_text)
+
             chunk = Chunk(
                 chunk_id=chunk_id,
                 text=chunk_text,
@@ -478,6 +590,7 @@ class HierarchicalChunker:
                 heading=heading,
                 level=level,
                 metadata=chunk_metadata,
+                page_numbers=chunk_pages if chunk_pages else None,
             )
             chunks.append(chunk)
 
@@ -867,6 +980,103 @@ class HierarchicalChunker:
                 chunk_index += 1
 
         return chunks
+
+    def _merge_small_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
+        """
+        Merge small chunks with neighbors to improve context quality.
+
+        Strategy:
+        - Identifies chunks smaller than min_chunk_size (default 100 chars)
+        - Merges with next chunk if they share the same page
+        - Preserves page boundaries (never merge across pages)
+        - More aggressive: also merge if BOTH chunks are below min_size
+        - Updates chunk IDs and indices
+
+        Args:
+            chunks: List of chunks to post-process
+
+        Returns:
+            List of chunks with small chunks merged
+        """
+        if not chunks:
+            return chunks
+
+        merged_chunks = []
+        i = 0
+        merge_count = 0
+
+        while i < len(chunks):
+            current = chunks[i]
+
+            # Check if current OR next chunk is too small
+            if i + 1 < len(chunks):
+                next_chunk = chunks[i + 1]
+
+                # Merge conditions:
+                # 1. Current is too small, OR
+                # 2. Both current and next are below min (more aggressive)
+                should_merge = current.char_count < self.min_chunk_size or (
+                    current.char_count < self.min_chunk_size * 1.5
+                    and next_chunk.char_count < self.min_chunk_size * 1.5
+                )
+
+                if should_merge:
+                    # Only merge if they're on the same page
+                    if (
+                        current.page_start
+                        == current.page_end
+                        == next_chunk.page_start
+                        == next_chunk.page_end
+                    ):
+                        # Check if merged size doesn't exceed max (allow more flexibility)
+                        merged_size = current.char_count + next_chunk.char_count
+                        if merged_size <= self.max_chunk_size * 1.5:  # 50% tolerance
+                            # Merge the chunks
+                            merged_text = current.text + "\n\n" + next_chunk.text
+
+                            # Calculate token count
+                            if self.use_token_count and self.tokenizer:
+                                merged_token_count = len(
+                                    self.tokenizer.encode(merged_text)
+                                )
+                            else:
+                                merged_token_count = 0
+
+                            # Extract pages from merged content
+                            merged_pages = extract_all_pages_from_content(merged_text)
+
+                            # Create merged chunk
+                            merged_chunk = Chunk(
+                                chunk_id=current.chunk_id,  # Keep first chunk's ID
+                                text=merged_text,
+                                doc_id=current.doc_id,
+                                page_start=current.page_start,
+                                page_end=next_chunk.page_end,
+                                char_count=len(merged_text),
+                                token_count=merged_token_count,
+                                chunk_index=current.chunk_index,
+                                parent_chunk_id=current.parent_chunk_id,
+                                heading=current.heading or next_chunk.heading,
+                                level=min(current.level, next_chunk.level)
+                                if current.level and next_chunk.level
+                                else current.level or next_chunk.level,
+                                metadata=current.metadata,
+                                page_numbers=merged_pages if merged_pages else None,
+                            )
+
+                            merged_chunks.append(merged_chunk)
+                            merge_count += 1
+                            i += 2  # Skip next chunk since we merged it
+                            continue
+
+            # No merge, keep current chunk
+            merged_chunks.append(current)
+            i += 1
+
+        if merge_count > 0:
+            logger.info(f"Merged {merge_count} small chunks with neighbors")
+
+        return merged_chunks
 
     def get_chunk_statistics(self, chunks: List[Chunk]) -> Dict[str, Any]:
         """

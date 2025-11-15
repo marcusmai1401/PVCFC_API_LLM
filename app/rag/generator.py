@@ -194,16 +194,33 @@ def _compute_calibrated_confidence(
     raw_scores = [s for s in raw_scores if s is not None]
 
     # 2) Rescale and compute base confidence
-    rescaled = _rescale_scores(raw_scores)
-    base_conf = float(mean(rescaled)) if rescaled else 0.3  # Conservative default
+    # HIGH-SCORE BYPASS: If all top scores are already high (≥0.80), skip rescaling
+    # This prevents artificially low confidence for high-quality retrievals
+    if raw_scores and min(raw_scores) >= 0.80:
+        base_conf = float(mean(raw_scores))
+        components = {
+            "raw_top_scores": raw_scores,
+            "base": round(base_conf, 4),
+            "boosts": {},
+            "penalties": {},
+            "note": "High-quality retrieval, no rescaling applied",
+        }
+        logger.debug(
+            f"High scores detected (min={min(raw_scores):.3f}), "
+            f"using raw average: {base_conf:.3f}"
+        )
+    else:
+        # Standard rescaling for lower/mixed scores
+        rescaled = _rescale_scores(raw_scores)
+        base_conf = float(mean(rescaled)) if rescaled else 0.3  # Conservative default
+        components = {
+            "raw_top_scores": raw_scores,
+            "rescaled_top_scores": rescaled,
+            "base": round(base_conf, 4),
+            "boosts": {},
+            "penalties": {},
+        }
 
-    components = {
-        "raw_top_scores": raw_scores,
-        "rescaled_top_scores": rescaled,
-        "base": round(base_conf, 4),
-        "boosts": {},
-        "penalties": {},
-    }
     conf = base_conf
 
     # 3) Boost: full-page evidence

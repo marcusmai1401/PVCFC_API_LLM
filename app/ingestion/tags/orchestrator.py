@@ -187,12 +187,15 @@ class TagExtractionOrchestrator:
             elapsed_sec=elapsed,
         )
 
-        # Return results summary
+        # Return results summary (including taggy_pages for spatial component extraction)
         return {
             "doc_id": doc_id,
             "is_cadlike": True,
             "tags_extracted": len(all_tags),
             "pages_processed": total_pages,
+            "taggy_pages": [
+                p + 1 for p in gate_decision.taggy_pages
+            ],  # 1-based page numbers
             "crops_generated": len(crop_paths),
             "elapsed_sec": elapsed,
         }

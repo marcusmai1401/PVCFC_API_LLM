@@ -277,8 +277,8 @@ class PipelineConfig:
     TAGGY_MIN_REGEX_HITS = int(os.environ.get("TAGGY_MIN_REGEX_HITS", "3"))
     TAGGY_MIN_CODE_TOKENS = int(os.environ.get("TAGGY_MIN_CODE_TOKENS", "4"))
 
-    # OpenSearch tags index name
-    TAGS_INDEX_NAME = os.environ.get("TAGS_INDEX_NAME", "pvcfc_pid_tags")
+    # DEPRECATED: Level 3 tags index (replaced by Level 2 spatial components)
+    # TAGS_INDEX_NAME = os.environ.get("TAGS_INDEX_NAME", "pvcfc_pid_tags")
 
     # Enable shape-aware ROI (requires OpenCV)
     ENABLE_SHAPE_AWARE_ROI = (
@@ -306,12 +306,13 @@ class PipelineConfig:
             "PAGE_FILTERS_CONFIG", str(PROJECT_ROOT / "config" / "page_filters.yaml")
         )
     )
-    TAGS_INDEX_MAPPING_CONFIG = Path(
-        os.environ.get(
-            "TAGS_INDEX_MAPPING_CONFIG",
-            str(PROJECT_ROOT / "config" / "tags_index_mapping.json"),
-        )
-    )
+    # DEPRECATED: Level 3 tags index mapping (replaced by Level 2 spatial components)
+    # TAGS_INDEX_MAPPING_CONFIG = Path(
+    #     os.environ.get(
+    #         "TAGS_INDEX_MAPPING_CONFIG",
+    #         str(PROJECT_ROOT / "config" / "tags_index_mapping.json"),
+    #     )
+    # )
 
     # ============================================================================
     # HELPER METHODS

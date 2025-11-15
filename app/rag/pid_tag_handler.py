@@ -167,7 +167,12 @@ class PIDTagHandler:
                     f"diagrams or complex tables."
                 )
 
-            citations = retrieval_results[:3]
+            # Populate doc_id from metadata for citations
+            citations = []
+            for r in retrieval_results[:3]:
+                if r.doc_id is None and hasattr(r, "metadata") and r.metadata:
+                    r.doc_id = r.metadata.get("doc_id")
+                citations.append(r)
         else:
             # Tag found in text
             # Group by page and get max score per page
@@ -250,7 +255,12 @@ class PIDTagHandler:
                         answer += f" of document **{doc_name}**"
                     answer += "."
 
-            citations = matching_results[:5]  # Return up to 5 citations
+            # Populate doc_id from metadata for citations
+            citations = []
+            for r in matching_results[:5]:
+                if r.doc_id is None and hasattr(r, "metadata") and r.metadata:
+                    r.doc_id = r.metadata.get("doc_id")
+                citations.append(r)
 
         logger.info(
             f"Generated tag location answer for {tag_name}: {len(citations)} citations"

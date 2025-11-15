@@ -22,10 +22,61 @@ from typing import Any, Dict, List, Optional, Tuple
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
+# Fix for "maximum recursion depth exceeded" errors with complex PDFs
+# Some PDFs with deeply nested structures (tables, annotations) require higher limit
+# Increased to 10000 after observing 7 files hitting 5000 limit during ingestion
+sys.setrecursionlimit(10000)  # Default is 1000, previous: 5000
+
 from loguru import logger
 
-from app.ingestion.document_classifier import DocumentClassifier
-from app.ingestion.paddle_ocr_config import get_ocr_status
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+
+    env_path = Path(PROJECT_ROOT) / ".env"
+    if env_path.exists():
+        # Use override=True to ensure .env values override existing env vars
+        load_dotenv(env_path, override=True)
+        logger.info(f"Loaded environment variables from {env_path}")
+
+        # Explicitly set GOOGLE_APPLICATION_CREDENTIALS if in .env
+        import os
+
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
+            # Try to read from .env file directly
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("GOOGLE_APPLICATION_CREDENTIALS="):
+                        creds_path = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+                        logger.info(
+                            f"Set GOOGLE_APPLICATION_CREDENTIALS from .env: {creds_path}"
+                        )
+                        break
+
+        # Verify credentials file exists
+        creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if creds and Path(creds).exists():
+            logger.info(f"Verified Google Cloud credentials: {creds}")
+        elif creds:
+            logger.warning(f"Google Cloud credentials file not found: {creds}")
+
+        # Force reload config singleton to pick up new env vars
+        import app.config.pipeline_config as config_module
+
+        config_module._config_instance = None
+        logger.info("Reset config singleton to reload with new environment variables")
+except ImportError:
+    logger.warning(
+        "python-dotenv not installed, using system environment variables only"
+    )
+
+# NOTE: Using CADLikeGate for CAD-like document classification
+from app.ingestion.cadlike_gate import get_cadlike_gate
+
+# NOTE: PaddleOCR is deprecated in favor of Google Cloud Vision API
+# from app.ingestion.paddle_ocr_config import get_ocr_status
 from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 from app.storage.manifest_writer import ManifestWriter
@@ -34,6 +85,8 @@ from app.storage.version_manager import VersionManager
 # P&ID tag extraction (optional)
 try:
     from app.ingestion.tags.orchestrator import TagExtractionOrchestrator
+    from app.rag.spatial.component_extractor import SpatialComponentExtractor
+    from app.rag.spatial.component_indexer import SpatialComponentIndexer
 
     PID_TAGS_AVAILABLE = True
 except ImportError:
@@ -91,9 +144,11 @@ class IngestionPipeline:
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
 
-        # Default workers for Windows safety
+        # Default workers optimized for single GPU (Real-ESRGAN contention)
+        # With GPU operations (Real-ESRGAN), more workers cause contention
+        # Test results: 2 workers optimal for RTX 4060 (single GPU)
         if workers is None:
-            workers = min(4, os.cpu_count() or 4)
+            workers = 2  # Reduced from 4 to avoid GPU contention
         self.workers = workers
 
         # OCR settings
@@ -126,18 +181,25 @@ class IngestionPipeline:
         # P&ID tag extraction settings
         self.enable_pid_tags = enable_pid_tags and PID_TAGS_AVAILABLE
 
-        # Initialize document classifier
-        self.classifier = DocumentClassifier()
+        # Initialize CADLikeGate for document classification
+        self._cadlike_gate = get_cadlike_gate()
 
         # Initialize P&ID tag extraction orchestrator (if enabled)
         self.tag_orchestrator = None
+        self.component_extractor = None
+        self.component_indexer = None
         if self.enable_pid_tags:
             try:
                 self.tag_orchestrator = TagExtractionOrchestrator(
                     enable_crops=True,
                     lazy_crops=True,  # Don't generate crops during ingestion for speed
                 )
-                logger.info("✅ P&ID tag extraction enabled")
+                # Initialize component extraction for Level 2 spatial search
+                self.component_extractor = SpatialComponentExtractor()
+                self.component_indexer = SpatialComponentIndexer()
+                logger.info(
+                    "✅ P&ID tag extraction enabled (with component extraction for Level 2)"
+                )
             except Exception as e:
                 logger.warning(f"Failed to initialize P&ID tag extraction: {e}")
                 self.enable_pid_tags = False
@@ -196,11 +258,22 @@ class IngestionPipeline:
         This method backs up and clears chunks.jsonl and tags.jsonl to ensure
         that each run starts with a clean slate and doesn't accumulate duplicates
         from previous runs.
+
+        Note: tags.jsonl is only cleaned if P&ID tag extraction is enabled,
+        to preserve existing tags when running ingestion without P&ID processing.
         """
+        # Always cleanup chunks.jsonl
         jsonl_files_to_clean = [
             self.output_dir / "chunks" / "chunks.jsonl",
-            self.output_dir / "entities" / "tags.jsonl",
         ]
+
+        # Only cleanup tags.jsonl if tag extraction is enabled
+        # This prevents losing existing tags when running ingestion without P&ID processing
+        if self.enable_pid_tags:
+            jsonl_files_to_clean.append(self.output_dir / "entities" / "tags.jsonl")
+            logger.info("P&ID tag extraction enabled - will cleanup tags.jsonl")
+        else:
+            logger.info("P&ID tag extraction disabled - preserving existing tags.jsonl")
 
         for jsonl_file in jsonl_files_to_clean:
             if jsonl_file.exists():
@@ -403,6 +476,17 @@ class IngestionPipeline:
         Calculate SHA1 hash of normalized content
         Normalization: Unicode NFKC -> lowercase -> collapse whitespace -> remove line-ending hyphens -> strip
         """
+        normalized = self._normalize_text(text)
+        # Calculate SHA1 hash
+        return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normalize text for comparison
+        Used by both content hashing and similarity calculation
+        """
+        import re
+
         # Unicode normalization
         normalized = unicodedata.normalize("NFKC", text)
 
@@ -413,15 +497,40 @@ class IngestionPipeline:
         normalized = normalized.replace("-\n", "").replace("-\r\n", "")
 
         # Collapse all whitespace (including newlines) to single spaces
-        import re
-
         normalized = re.sub(r"\s+", " ", normalized)
 
         # Strip leading/trailing whitespace
         normalized = normalized.strip()
 
-        # Calculate SHA1 hash
-        return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+        return normalized
+
+    def _calculate_text_similarity(self, text1: str, text2: str) -> float:
+        """
+        Calculate similarity between two texts using character-level comparison
+        Returns value between 0.0 (completely different) and 1.0 (identical)
+
+        Uses simple character overlap ratio for speed:
+        similarity = 2 * len(common_chars) / (len(text1) + len(text2))
+        """
+        if not text1 or not text2:
+            return 0.0
+
+        # Use set intersection for fast approximate similarity
+        # This is faster than difflib but less accurate
+        # Good enough for high-threshold deduplication (≥98%)
+
+        # Split into words for better granularity than characters
+        words1 = set(text1.split())
+        words2 = set(text2.split())
+
+        if not words1 or not words2:
+            return 0.0
+
+        # Jaccard similarity: intersection / union
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+
+        return intersection / union if union > 0 else 0.0
 
     def _select_representative(self, candidates: List[Dict]) -> Dict:
         """
@@ -471,9 +580,99 @@ class IngestionPipeline:
             with open(quarantine_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(quarantine_entry, ensure_ascii=False) + "\n")
 
+    def _rasterize_pdf(
+        self, pdf_path: Path, output_path: Path, dpi: int = 200, jpeg_quality: int = 85
+    ) -> bool:
+        """
+        Rasterize PDF to image-only PDF to eliminate complex vector structures.
+        This removes recursion risks from deeply nested PDF objects.
+
+        Args:
+            pdf_path: Original PDF path
+            output_path: Output path for rasterized PDF
+            dpi: Rendering DPI (180-216 recommended for OCR balance)
+            jpeg_quality: JPEG compression quality (80-85 for size/quality balance)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import fitz  # PyMuPDF
+
+            logger.info(f"🔄 Rasterizing PDF to eliminate recursion: {pdf_path.name}")
+            logger.info(f"   DPI: {dpi}, JPEG quality: {jpeg_quality}")
+
+            # Open original PDF
+            src_doc = fitz.open(str(pdf_path))
+
+            # Create new PDF document for rasterized pages
+            dst_doc = fitz.open()  # New empty PDF
+
+            # Process each page
+            for page_num in range(len(src_doc)):
+                page = src_doc[page_num]
+
+                # Render page to image (pixmap)
+                zoom = dpi / 72.0  # Convert DPI to zoom factor
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+
+                # Convert pixmap to JPEG bytes for compression
+                import io
+
+                from PIL import Image
+
+                # Convert to PIL Image
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+                # Compress as JPEG
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format="JPEG", quality=jpeg_quality, optimize=True)
+                img_data = img_bytes.getvalue()
+
+                # Create new page with image
+                # Use original page size
+                page_rect = page.rect
+                new_page = dst_doc.new_page(
+                    width=page_rect.width, height=page_rect.height
+                )
+
+                # Insert image to fill entire page
+                new_page.insert_image(page_rect, stream=img_data, keep_proportion=True)
+
+                logger.debug(
+                    f"   Rasterized page {page_num + 1}/{len(src_doc)}: "
+                    f"{pix.width}x{pix.height}px, {len(img_data)//1024}KB"
+                )
+
+            # Save rasterized PDF
+            dst_doc.save(str(output_path), garbage=4, deflate=True)
+            dst_doc.close()
+            src_doc.close()
+
+            # Verify output file exists and has reasonable size
+            if output_path.exists():
+                output_size_mb = output_path.stat().st_size / (1024 * 1024)
+                logger.info(
+                    f"✅ Rasterized PDF created: {output_path.name} ({output_size_mb:.2f} MB)"
+                )
+                return True
+            else:
+                logger.error(f"❌ Rasterized PDF not created: {output_path}")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Rasterization failed for {pdf_path.name}: {e}")
+            logger.exception(e)
+            return False
+
     def _process_single_pdf(self, pdf_path: Path) -> Optional[Dict]:
         """
-        Process a single PDF with deduplication check
+        Process a single PDF with deduplication check and auto-fallback for recursion errors.
+
+        Strategy:
+        1. Try normal processing (vector + OCR)
+        2. If RecursionError → Fallback to rasterized PDF (image-only) + OCR
 
         Returns:
             Dict with status and data
@@ -484,125 +683,255 @@ class IngestionPipeline:
             file_size = pdf_path.stat().st_size
             mtime = pdf_path.stat().st_mtime
 
-            # ===== FILE HASH DEDUPLICATION =====
-            # Skip exact file duplicates (100% identical files)
-            with self._dedup_lock:
-                if file_hash in self.file_hash_seen:
-                    # This is an exact duplicate file
-                    self.stats["duplicates_skipped"] += 1
-                    logger.info(
-                        f"Skipping exact duplicate (file_hash): {pdf_path.name}"
-                    )
-                    return {"status": "skipped", "reason": "exact_file_duplicate"}
-
-                # Mark this file_hash as seen
-                self.file_hash_seen.add(file_hash)
+            # ===== FILE HASH DEDUPLICATION - DISABLED =====
+            # DISABLED: Process all files including exact duplicates
+            # Original code commented out to allow duplicate file processing
+            # with self._dedup_lock:
+            #     if file_hash in self.file_hash_seen:
+            #         self.stats["duplicates_skipped"] += 1
+            #         logger.info(
+            #             f"Skipping exact duplicate (file_hash): {pdf_path.name}"
+            #         )
+            #         return {"status": "skipped", "reason": "exact_file_duplicate"}
+            #     self.file_hash_seen.add(file_hash)
             # ===== END FILE HASH DEDUPLICATION =====
 
-            # Try to extract text first
+            # Classify document type BEFORE processing (for OCR threshold determination)
+            gate_decision = self._cadlike_gate.evaluate(pdf_path)
+            is_cad_like = gate_decision.is_cadlike
+
+            # Set document type based on CADLikeGate decision
+            document_type = "CAD-like" if is_cad_like else "non-CAD-like"
+
+            logger.debug(
+                f"CADLikeGate: {pdf_path.name} -> {document_type} "
+                f"(score={gate_decision.score:.3f}, method={gate_decision.detection_method})"
+            )
+
+            # === PHASE 1: Try normal processing ===
+            # Wrap ALL processing in RecursionError handler to catch errors at any stage
             pdf_doc = None
             used_ocr = False
+            processing_mode = "normal"  # Track processing mode for manifest
+            fallback_reason = None
+            actual_pdf_path = pdf_path  # May change if rasterized
+            full_text = None  # Initialize early
+            doc_id = None
+            markdown_text = None
+            chunks = None
 
             try:
-                # Try without OCR first to detect if text is extractable
+                # === Try normal processing (all steps) ===
+                # Single processing with OCR enabled
+                # Per-page OCR decisions controlled by thresholds in PDFProcessor
                 processor = PDFProcessor(
-                    enable_ocr=False,
-                    ocr_language=self.ocr_language,
-                    ocr_min_confidence=30.0,
+                    enable_ocr=True,  # Always enabled
                     extract_tables=self.extract_tables,
                     table_min_rows=self.table_min_rows,
                     table_min_cols=self.table_min_cols,
+                    document_type=document_type,
                 )
                 pdf_doc = processor.process_pdf(pdf_path)
 
-                # Check if we need OCR (no text extracted)
-                total_text = "".join(page.text for page in pdf_doc.pages)
-                if (
-                    self.enable_ocr and len(total_text.strip()) < 100
-                ):  # Less than 100 chars
-                    logger.info(
-                        f"No vector text found, applying OCR to {pdf_path.name}"
+                # Check if OCR was actually used on any page
+                used_ocr = pdf_doc.source_format in {"scan", "mixed"}
+
+                # === CRITICAL: Also process full text extraction inside RecursionError handler ===
+                # RecursionError can occur during text extraction, not just PDF parsing
+                full_text = "\n".join(page.text for page in pdf_doc.pages)
+
+                # Check if text was extracted
+                if not full_text.strip():
+                    # No text could be extracted even with OCR
+                    self._add_to_quarantine(pdf_path, "ocr_failed", "No text extracted")
+                    return {"status": "quarantine", "reason": "ocr_failed"}
+
+                # Calculate content hash
+                content_hash = self._calculate_content_hash(full_text)
+
+                # Generate doc_id
+                doc_id = self._generate_doc_id(pdf_path, pdf_doc)
+
+                # Detect document type and revision
+                doc_type, revision = self._classify_document(pdf_path, pdf_doc)
+
+                # Save processed document
+                self._save_processed_document(pdf_doc, doc_id)
+
+                # Convert to markdown
+                markdown_text = self._convert_to_markdown(pdf_doc, doc_id)
+
+                # Create chunks
+                chunks = self._create_chunks(
+                    pdf_doc,
+                    markdown_text,
+                    doc_id,
+                    doc_type,
+                    revision,
+                    self.chunk_strategy,
+                )
+
+            except RecursionError as e:
+                # === PHASE 2: Fallback to rasterized processing ===
+                logger.warning(
+                    f"⚠️  RecursionError in normal mode for {pdf_path.name}, "
+                    f"attempting fallback to rasterized PDF..."
+                )
+                fallback_reason = f"RecursionError: {str(e)[:100]}"
+
+                # Wrap entire fallback in try-except to catch RecursionError during rasterization too
+                try:
+                    # Create temp rasterized PDF
+                    temp_dir = self.output_dir / "temp_rasterized"
+                    temp_dir.mkdir(parents=True, exist_ok=True)
+
+                    rasterized_path = temp_dir / f"rasterized_{pdf_path.stem}.pdf"
+
+                    # Rasterize PDF
+                    raster_success = self._rasterize_pdf(
+                        pdf_path=pdf_path,
+                        output_path=rasterized_path,
+                        dpi=200,  # Good balance for OCR
+                        jpeg_quality=85,  # High quality but compressed
                     )
-                    processor = PDFProcessor(
+
+                    if not raster_success:
+                        logger.error(f"❌ Rasterization failed for {pdf_path.name}")
+                        self._add_to_quarantine(
+                            pdf_path,
+                            "recursion_error",
+                            f"RecursionError in normal mode, rasterization also failed: {e}",
+                        )
+                        return {
+                            "status": "quarantine",
+                            "reason": "recursion_error_raster_failed",
+                        }
+                    logger.info(f"🔄 Retrying with rasterized PDF (safe mode)...")
+
+                    # Use safe configuration:
+                    # - No table extraction (rasterized PDF has no table structure)
+                    # - Force OCR (rasterized = image-only)
+                    # - Sentence-window chunking (avoid hierarchical recursion)
+                    processor_safe = PDFProcessor(
                         enable_ocr=True,
-                        ocr_language=self.ocr_language,
-                        ocr_min_confidence=30.0,
-                        extract_tables=self.extract_tables,
-                        table_min_rows=self.table_min_rows,
-                        table_min_cols=self.table_min_cols,
+                        extract_tables=False,  # No tables in rasterized PDF
+                        document_type=document_type,
                     )
-                    pdf_doc = processor.process_pdf(pdf_path)
-                    used_ocr = True
+                    pdf_doc = processor_safe.process_pdf(rasterized_path)
+
+                    # Extract full text (may also trigger RecursionError)
+                    full_text = "\n".join(page.text for page in pdf_doc.pages)
+
+                    # Check if text was extracted
+                    if not full_text.strip():
+                        self._add_to_quarantine(
+                            pdf_path,
+                            "ocr_failed",
+                            "No text extracted from rasterized PDF",
+                        )
+                        if rasterized_path.exists():
+                            rasterized_path.unlink()
+                        return {"status": "quarantine", "reason": "ocr_failed"}
+
+                    # Mark as rasterized processing
+                    processing_mode = "rasterized-ocr"
+                    used_ocr = True  # Rasterized always uses OCR
+                    actual_pdf_path = rasterized_path
+
+                    # Calculate content hash
+                    content_hash = self._calculate_content_hash(full_text)
+
+                    # Generate doc_id
+                    doc_id = self._generate_doc_id(pdf_path, pdf_doc)
+
+                    # Detect document type and revision
+                    doc_type, revision = self._classify_document(pdf_path, pdf_doc)
+
+                    # Save processed document
+                    self._save_processed_document(pdf_doc, doc_id)
+
+                    # Convert to markdown
+                    markdown_text = self._convert_to_markdown(pdf_doc, doc_id)
+
+                    # Create chunks (use sentence-window for rasterized mode)
+                    chunks = self._create_chunks(
+                        pdf_doc,
+                        markdown_text,
+                        doc_id,
+                        doc_type,
+                        revision,
+                        "sentence-window",
+                    )
+
+                    logger.success(
+                        f"✅ Fallback successful: {pdf_path.name} processed via rasterization "
+                        f"({len(pdf_doc.pages)} pages)"
+                    )
+
+                except RecursionError as e_raster:
+                    # Still recursion error even after rasterization (or during rasterization)
+                    logger.error(
+                        f"❌ RecursionError in fallback processing: {pdf_path.name}"
+                    )
+                    self._add_to_quarantine(
+                        pdf_path,
+                        "recursion_error",
+                        f"RecursionError in fallback (rasterization or processing): {e_raster}",
+                    )
+                    # Cleanup temp file if it exists
+                    if "rasterized_path" in locals() and rasterized_path.exists():
+                        try:
+                            rasterized_path.unlink()
+                        except:
+                            pass
+                    return {
+                        "status": "quarantine",
+                        "reason": "recursion_error_persistent",
+                    }
+
+                except Exception as e_fallback:
+                    logger.error(
+                        f"❌ Fallback processing failed: {pdf_path.name} - {e_fallback}"
+                    )
+                    self._add_to_quarantine(
+                        pdf_path,
+                        "read_error",
+                        f"Normal mode: RecursionError, Fallback mode: {e_fallback}",
+                    )
+                    # Cleanup temp file if it exists
+                    if "rasterized_path" in locals() and rasterized_path.exists():
+                        try:
+                            rasterized_path.unlink()
+                        except:
+                            pass
+                    return {
+                        "status": "quarantine",
+                        "reason": "rasterized_processing_failed",
+                    }
 
             except Exception as e:
-                # Document is corrupted or unreadable
-                self._add_to_quarantine(pdf_path, "corrupt", str(e))
-                return {"status": "quarantine", "reason": "corrupt"}
+                # CRITICAL: Only catch non-RecursionError exceptions here
+                # RecursionError must be handled by the specific handler above
+                if isinstance(e, RecursionError):
+                    # This should NEVER happen - RecursionError should be caught above
+                    # But if it does, log it as critical error
+                    logger.critical(
+                        f"❌ CRITICAL: RecursionError leaked to general exception handler: {pdf_path.name}"
+                    )
+                    logger.critical(
+                        f"This indicates a bug in exception handling logic!"
+                    )
+                    self._add_to_quarantine(
+                        pdf_path, "recursion_error_bug", f"Leaked RecursionError: {e}"
+                    )
+                    return {"status": "quarantine", "reason": "recursion_error_bug"}
+                # Document is corrupted or unreadable (non-recursion error)
+                logger.error(f"❌ Error processing {pdf_path.name}: {e}")
+                self._add_to_quarantine(pdf_path, "read_error", str(e))
+                return {"status": "quarantine", "reason": "read_error"}
 
-            # Get full text for content hashing
-            full_text = "\n".join(page.text for page in pdf_doc.pages)
-
-            if not full_text.strip():
-                # No text could be extracted even with OCR
-                self._add_to_quarantine(pdf_path, "ocr_failed", "No text extracted")
-                return {"status": "quarantine", "reason": "ocr_failed"}
-
-            # Calculate content hash (for tracking only, not for deduplication)
-            content_hash = self._calculate_content_hash(full_text)
-
-            # ===== CONTENT DEDUPLICATION DISABLED =====
-            # Only file_hash deduplication is active (exact file duplicates)
-            # Files with similar content (95-99% match) will be kept
-            # This allows multiple versions of documents to coexist
-            with self._dedup_lock:
-                # COMMENTED OUT: Content-based deduplication
-                # if content_hash in self.content_hash_map:
-                #     # This is a duplicate
-                #     if content_hash not in self.duplicate_groups:
-                #         self.duplicate_groups[content_hash] = []
-                #
-                #     duplicate_info = {
-                #         "file_path": str(pdf_path),
-                #         "file_hash": file_hash,
-                #         "file_size": file_size,
-                #         "mtime": mtime,
-                #         "source_format": pdf_doc.source_format,
-                #     }
-                #     self.duplicate_groups[content_hash].append(duplicate_info)
-                #
-                #     return {"status": "duplicate"}
-                # else:
-                #     # First occurrence of this content
-
-                # Always process as unique content (only file_hash dedup remains active)
-                representative_info = {
-                    "file_path": str(pdf_path),
-                    "file_hash": file_hash,
-                    "file_size": file_size,
-                    "mtime": mtime,
-                    "source_format": pdf_doc.source_format,
-                    "pdf_doc": pdf_doc,
-                    "content_hash": content_hash,
-                }
-                self.content_hash_map[content_hash] = representative_info
-
-            # Process the representative document
-            # Generate doc_id
-            doc_id = self._generate_doc_id(pdf_path, pdf_doc)
-
-            # Detect document type and revision
-            doc_type, revision = self._classify_document(pdf_path, pdf_doc)
-
-            # Save processed document
-            self._save_processed_document(pdf_doc, doc_id)
-
-            # Convert to markdown
-            markdown_text = self._convert_to_markdown(pdf_doc, doc_id)
-
-            # Create chunks
-            chunks = self._create_chunks(
-                pdf_doc, markdown_text, doc_id, doc_type, revision
-            )
+            # === All processing completed successfully (normal or fallback mode) ===
+            # doc_id, doc_type, revision, markdown_text, chunks, content_hash already set above
 
             # Save chunks
             self._save_chunks(chunks, doc_id)
@@ -642,6 +971,157 @@ class IngestionPipeline:
                     logger.debug(f"Tag extraction error details:", exc_info=True)
             # === END P&ID TAG EXTRACTION ===
 
+            # === SPATIAL COMPONENT EXTRACTION (Level 2) ===
+            # Extract individual components for spatial proximity search
+            # Strategy: Extract for ALL pages if document is CAD-like (not just taggy pages)
+            # This ensures 100% coverage for tags that Tag Extraction might miss
+            # DISABLED for rasterized mode (no vector structure available)
+            if (
+                self.enable_pid_tags
+                and self.component_extractor
+                and self.component_indexer
+                and doc_type == "CAD-like"
+                and processing_mode
+                != "rasterized-ocr"  # Skip spatial extraction for rasterized files
+            ):
+                try:
+                    logger.debug(
+                        f"Extracting spatial components for CAD-like document: {pdf_path.name}"
+                    )
+
+                    # Get config for layout directory
+                    from app.config import get_config
+
+                    config = get_config()
+                    layout_dir = Path(config.LAYOUT_DIR)
+
+                    all_components = []
+
+                    # NEW: Process ALL pages for CAD-like documents (not just taggy pages)
+                    # This ensures we don't miss tags on pages where Tag Extraction failed
+                    all_pages = list(range(1, pdf_doc.num_pages + 1))
+
+                    logger.info(
+                        f"Processing ALL {len(all_pages)} pages for spatial components "
+                        f"(CAD-like document, ensuring 100% coverage)"
+                    )
+
+                    for page_num in all_pages:
+                        # Check if layout file exists (Tag Extraction may have saved it)
+                        layout_file = layout_dir / f"page_{doc_id}_{page_num}.json"
+
+                        if layout_file.exists():
+                            # Layout already exists (from Tag Extraction), load and use it
+                            try:
+                                # Load layout JSON
+                                with open(layout_file, "r", encoding="utf-8") as f:
+                                    layout_data = json.load(f)
+
+                                # Reconstruct PageLayout object
+                                from app.ingestion.layout.page_layout_builder import (
+                                    PageLayout,
+                                    TextSpan,
+                                    VectorDrawing,
+                                )
+
+                                # Reconstruct spans
+                                spans = [
+                                    TextSpan(
+                                        text=s["text"],
+                                        bbox=s["bbox"],
+                                        font_size=s["font_size"],
+                                        rotation_deg=s["rotation_deg"],
+                                        span_id=s["span_id"],
+                                    )
+                                    for s in layout_data.get("spans", [])
+                                ]
+
+                                # Reconstruct drawings
+                                drawings = [
+                                    VectorDrawing(
+                                        type=d["type"],
+                                        coords=d["coords"],
+                                        color=d.get("color"),
+                                        thickness=d.get("thickness"),
+                                    )
+                                    for d in layout_data.get("drawings", [])
+                                ]
+
+                                # Create PageLayout
+                                layout = PageLayout(
+                                    doc_id=layout_data["doc_id"],
+                                    page=layout_data["page"],
+                                    page_width=layout_data["page_width"],
+                                    page_height=layout_data["page_height"],
+                                    spans=spans,
+                                    drawings=drawings,
+                                    is_raster=layout_data.get("is_raster", False),
+                                    ocr_confidence=layout_data.get("ocr_confidence"),
+                                )
+
+                                logger.debug(
+                                    f"Loaded existing layout for page {page_num}"
+                                )
+
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to load existing layout for page {page_num}: {e}, building new layout"
+                                )
+                                # Build layout from scratch if loading fails
+                                layout = self._build_layout_for_page(
+                                    pdf_path, page_num, doc_id
+                                )
+                        else:
+                            # Layout doesn't exist (page not processed by Tag Extraction)
+                            # Build layout from scratch for spatial indexing
+                            logger.debug(
+                                f"Layout not found for page {page_num}, building for spatial indexing"
+                            )
+                            layout = self._build_layout_for_page(
+                                pdf_path, page_num, doc_id
+                            )
+
+                        # Extract components from layout
+                        if layout:
+                            try:
+                                components = (
+                                    self.component_extractor.extract_components(layout)
+                                )
+                                all_components.extend(components)
+                                logger.debug(
+                                    f"Extracted {len(components)} components from page {page_num}"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to extract components from page {page_num}: {e}"
+                                )
+
+                    # Bulk index components
+                    if all_components:
+                        indexed_count = self.component_indexer.index_components(
+                            all_components
+                        )
+                        logger.info(
+                            f"Indexed {indexed_count} spatial components for {doc_id} "
+                            f"({len(taggy_pages)} taggy pages)"
+                        )
+
+                        # Update stats (thread-safe)
+                        with self._stats_lock:
+                            if "spatial_components_indexed" not in self.stats:
+                                self.stats["spatial_components_indexed"] = 0
+                            self.stats["spatial_components_indexed"] += indexed_count
+                    else:
+                        logger.debug(f"No components extracted from {pdf_path.name}")
+
+                except Exception as e:
+                    # Don't crash main pipeline on component extraction errors
+                    logger.warning(
+                        f"Spatial component extraction failed for {pdf_path.name}: {e}"
+                    )
+                    logger.debug(f"Component extraction error:", exc_info=True)
+            # === END SPATIAL COMPONENT EXTRACTION ===
+
             # Extract table metadata from chunks
             table_metadata = self._extract_table_metadata_from_chunks(chunks, doc_id)
 
@@ -660,7 +1140,24 @@ class IngestionPipeline:
                 "revision": revision,
                 "source_format": pdf_doc.source_format,
                 "ingested_at": datetime.now().isoformat(),
+                "processing_mode": processing_mode,  # Track if fallback was used
             }
+
+            # Add fallback metadata if applicable
+            if fallback_reason:
+                corpus_entry["fallback_reason"] = fallback_reason
+                corpus_entry["original_file_path"] = str(pdf_path)
+
+            # Cleanup temp rasterized PDF if exists
+            if processing_mode == "rasterized-ocr" and actual_pdf_path != pdf_path:
+                try:
+                    if actual_pdf_path.exists():
+                        actual_pdf_path.unlink()
+                        logger.debug(
+                            f"Cleaned up temp rasterized PDF: {actual_pdf_path.name}"
+                        )
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to cleanup temp PDF: {cleanup_err}")
 
             checksum_entry = {
                 "file_path": str(pdf_path),
@@ -725,38 +1222,48 @@ class IngestionPipeline:
         self, pdf_path: Path, pdf_doc: PDFDocument
     ) -> Tuple[str, Optional[str]]:
         """
-        Classify document type and extract revision using enhanced classifier
+        Classify document type (simplified to CAD-like vs non-CAD-like)
+
+        NOTE: Previously used DocumentClassifier with 15+ types.
+        Now simplified to binary classification using CADLikeGate results.
 
         Returns:
-            Tuple of (doc_type, revision)
+            Tuple of (doc_type, revision) where doc_type is 'CAD-like' or 'non-CAD-like'
         """
-        # Get first page text if available
-        first_page_text = None
-        if pdf_doc.pages:
-            first_page_text = pdf_doc.pages[0].text
+        # Use CADLikeGate evaluation result (already computed in _process_single_pdf)
+        gate_decision = self._cadlike_gate.evaluate(pdf_path)
+        doc_type = "CAD-like" if gate_decision.is_cadlike else "non-CAD-like"
 
-        # Prepare metadata
-        metadata = {
-            "title": pdf_doc.title,
-            "subject": pdf_doc.subject,
-            "keywords": pdf_doc.keywords,
-        }
-
-        # Use the enhanced classifier
-        if self.use_llm_classifier and self.llm_model:
-            # Use LLM-enhanced classification (will fall back to rules if LLM fails)
-            doc_type, revision = self.classifier.classify_with_llm(
-                file_path=pdf_path,
-                first_page_text=first_page_text,
-                model_name=self.llm_model,
-            )
-        else:
-            # Use rule-based classification only
-            doc_type, revision = self.classifier.classify(
-                file_path=pdf_path, first_page_text=first_page_text, metadata=metadata
-            )
+        # Extract revision from filename (simple pattern matching)
+        revision = self._extract_revision_from_filename(pdf_path.name)
 
         return doc_type, revision
+
+    def _extract_revision_from_filename(self, filename: str) -> Optional[str]:
+        """
+        Extract revision code from filename (e.g., Rev A, Rev.B, R01, etc.)
+
+        Returns:
+            Revision string or None
+        """
+        import re
+
+        # Common revision patterns
+        patterns = [
+            r"Rev[\s._-]*([A-Z0-9]+)",  # Rev A, Rev.B, Rev_C
+            r"R([0-9]{2,3})",  # R01, R02
+            r"V([0-9]+)",  # V1, V2
+            r"_([A-Z])\.",  # _A., _B.
+        ]
+
+        filename_upper = filename.upper()
+
+        for pattern in patterns:
+            match = re.search(pattern, filename_upper, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        return None
 
     def _save_processed_document(self, pdf_doc: PDFDocument, doc_id: str):
         """Save processed document as JSON"""
@@ -853,8 +1360,13 @@ class IngestionPipeline:
         doc_id: str,
         doc_type: str,
         revision: Optional[str],
+        chunk_strategy_override: Optional[str] = None,
     ) -> List[Dict]:
-        """Create chunks from document"""
+        """Create chunks from document
+
+        Args:
+            chunk_strategy_override: Override chunking strategy (for fallback modes)
+        """
         # Prepare metadata
         metadata = {
             "doc_type": doc_type,
@@ -868,12 +1380,15 @@ class IngestionPipeline:
         # Remove None values
         metadata = {k: v for k, v in metadata.items() if v is not None}
 
-        # Choose HierarchicalChunker strategy per CLI
+        # Use override strategy if provided (for safe mode)
+        effective_strategy = chunk_strategy_override or self.chunk_strategy
+
+        # Choose HierarchicalChunker strategy per CLI or override
         chunker = HierarchicalChunker(
             max_chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
             use_token_count=False,  # Use char count for consistency
-            chunking_strategy=self.chunk_strategy,
+            chunking_strategy=effective_strategy,
             sentence_window_size=self.sentence_window_size,
         )
         chunks = chunker.chunk_markdown(markdown_text, doc_id, metadata)
@@ -1057,6 +1572,48 @@ class IngestionPipeline:
         temp_file.replace(index_file)
         logger.info(f"Wrote table index with {len(table_index)} tables")
 
+    def _build_layout_for_page(
+        self, pdf_path: Path, page_num: int, doc_id: str
+    ) -> Optional[object]:
+        """
+        Build PageLayout for a single page (for spatial indexing)
+
+        Args:
+            pdf_path: Path to PDF file
+            page_num: Page number (1-based)
+            doc_id: Document ID
+
+        Returns:
+            PageLayout object or None if failed
+        """
+        try:
+            from app.ingestion.layout.page_layout_builder import PageLayoutBuilder
+
+            # Initialize PageLayoutBuilder (reuse from Tag Extraction)
+            layout_builder = PageLayoutBuilder(
+                enable_ocr=True,
+                enable_drawings=True,
+                enable_shape_aware=self.config.ENABLE_SHAPE_AWARE_ROI
+                if hasattr(self, "config")
+                else False,
+            )
+
+            # Build layout for this page
+            layout = layout_builder.build_layout(pdf_path, page_num, doc_id)
+
+            # Optionally save layout for future reuse
+            from app.config import get_config
+
+            config = get_config()
+            layout_builder.save_layout(layout, config.LAYOUT_DIR)
+
+            logger.debug(f"Built new layout for page {page_num}")
+            return layout
+
+        except Exception as e:
+            logger.error(f"Failed to build layout for page {page_num}: {e}")
+            return None
+
     def _extract_table_metadata_from_chunks(
         self, chunks: List[Dict], doc_id: str
     ) -> List[Dict]:
@@ -1218,7 +1775,17 @@ def main():
     )
 
     parser.add_argument(
-        "--enable-ocr", action="store_true", help="Enable OCR for scanned pages"
+        "--enable-ocr",
+        action="store_true",
+        default=True,
+        help="Enable OCR for scanned pages (default: True, requires Google Cloud Vision credentials)",
+    )
+
+    parser.add_argument(
+        "--no-ocr",
+        action="store_false",
+        dest="enable_ocr",
+        help="Disable OCR (not recommended)",
     )
 
     parser.add_argument(
@@ -1347,27 +1914,78 @@ def main():
         help="Enable P&ID tag extraction for CAD-like documents (requires ENABLE_PID_TAGS=true in .env)",
     )
 
+    parser.add_argument(
+        "--profile",
+        type=str,
+        choices=["full", "fast", "minimal"],
+        default=None,
+        help="Use preset configuration profile (full: OCR+PID+Tables, fast: PID+Tables, minimal: basic only)",
+    )
+
     args = parser.parse_args()
+
+    # Apply profile presets (can be overridden by explicit flags)
+    if args.profile == "full":
+        logger.info("Using 'full' profile: OCR + PID Tags + Table Extraction")
+        if not any(["--enable-ocr" in sys.argv, "--no-ocr" in sys.argv]):
+            args.enable_ocr = True
+        if "--enable-pid-tags" not in sys.argv:
+            args.enable_pid_tags = True
+        if not any(["--extract-tables" in sys.argv, "--no-extract-tables" in sys.argv]):
+            args.extract_tables = True
+    elif args.profile == "fast":
+        logger.info("Using 'fast' profile: PID Tags + Table Extraction (no OCR)")
+        if not any(["--enable-ocr" in sys.argv, "--no-ocr" in sys.argv]):
+            args.enable_ocr = False
+        if "--enable-pid-tags" not in sys.argv:
+            args.enable_pid_tags = True
+        if not any(["--extract-tables" in sys.argv, "--no-extract-tables" in sys.argv]):
+            args.extract_tables = True
+    elif args.profile == "minimal":
+        logger.info("Using 'minimal' profile: Basic text extraction only")
+        if not any(["--enable-ocr" in sys.argv, "--no-ocr" in sys.argv]):
+            args.enable_ocr = False
+        if "--enable-pid-tags" not in sys.argv:
+            args.enable_pid_tags = False
+        if not any(["--extract-tables" in sys.argv, "--no-extract-tables" in sys.argv]):
+            args.extract_tables = False
 
     # Validate source directory
     if not args.source_dir.exists():
         logger.error(f"Source directory does not exist: {args.source_dir}")
         sys.exit(1)
 
-    # Check OCR availability if requested (PaddleOCR)
+    # Check OCR availability if requested (Google Cloud Vision)
     if args.enable_ocr:
-        from app.ingestion.paddle_ocr_config import get_ocr_status as get_paddle_status
+        try:
+            from google.cloud import vision
 
-        ocr_status = get_paddle_status()
-        if not ocr_status["ocr_enabled"]:
+            from app.ingestion.pdf_processor import OCR_AVAILABLE
+
+            # Check if credentials are set
+            creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+            if not creds:
+                logger.warning(
+                    "OCR requested but GOOGLE_APPLICATION_CREDENTIALS not set. Continuing without OCR..."
+                )
+                args.enable_ocr = False
+            elif not Path(creds).exists():
+                logger.warning(
+                    f"OCR requested but credentials file not found: {creds}. Continuing without OCR..."
+                )
+                args.enable_ocr = False
+            elif not OCR_AVAILABLE:
+                logger.warning(
+                    "OCR requested but Google Cloud Vision API not available. Continuing without OCR..."
+                )
+                args.enable_ocr = False
+            else:
+                logger.info(f"OCR enabled using Google Cloud Vision API")
+        except ImportError as e:
             logger.warning(
-                "OCR requested but PaddleOCR is not available. Continuing without OCR..."
+                f"OCR requested but Google Cloud Vision API not available: {e}. Continuing without OCR..."
             )
             args.enable_ocr = False
-        else:
-            engine = ocr_status.get("ocr_engine", "PaddleOCR")
-            gpu = ocr_status.get("gpu_available", False)
-            logger.info(f"OCR enabled using {engine} (GPU: {gpu})")
 
     # Check for unstructured.io if requested
     if args.parser == "unstructured":

@@ -137,7 +137,7 @@ class SpatialComponentIndexer:
         component_type: str = None,
         doc_id: str = None,
         page: int = None,
-        size: int = 100,
+        size: int = 10000,  # Increased from 100 to handle large result sets
     ) -> List[dict]:
         """Search for components"""
         must = []
@@ -158,3 +158,39 @@ class SpatialComponentIndexer:
         )
 
         return [hit["_source"] for hit in response["hits"]["hits"]]
+
+    def get_all_doc_ids(self) -> List[str]:
+        """Get list of all unique doc_ids in the spatial index
+
+        Returns:
+            List of unique doc_id strings
+        """
+        try:
+            # Aggregation query to get unique doc_ids
+            response = self.client.search(
+                index=self.index_name,
+                body={
+                    "size": 0,  # Don't return actual documents
+                    "aggs": {
+                        "unique_docs": {
+                            "terms": {
+                                "field": "doc_id",
+                                "size": 1000,  # Max 1000 unique docs
+                            }
+                        }
+                    },
+                },
+            )
+
+            # Extract doc_ids from aggregation buckets
+            doc_ids = [
+                bucket["key"]
+                for bucket in response["aggregations"]["unique_docs"]["buckets"]
+            ]
+
+            logger.debug(f"Found {len(doc_ids)} unique doc_ids in spatial index")
+            return doc_ids
+
+        except Exception as e:
+            logger.error(f"Failed to get all doc_ids: {e}")
+            return []

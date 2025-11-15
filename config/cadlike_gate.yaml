@@ -40,6 +40,12 @@ thresholds:
   gray_zone_low: 0.45        # Gray zone [0.45, 0.55)
   gray_zone_boost_keywords: true  # Boost gray zone if filename has keywords
 
+  # Hybrid detection thresholds (image-based fallback for scanned CADs)
+  vector_confident: 0.55      # Vector score >= 0.55 → skip image analysis (fast path)
+  vector_low: 0.20            # Vector score < 0.20 → rely heavily on image features
+  image_high_confidence: 0.80 # Image score >= 0.80 → CAD-like with HIGH confidence
+  image_gray_zone: 0.55       # Image score [0.55, 0.80) → gray zone (filename boost applies)
+
 # Gray zone filename boost keywords
 gray_zone_keywords:
   - P&ID
@@ -50,6 +56,41 @@ gray_zone_keywords:
   - Piping
   - Instrument
   - Drawing
+
+# ============================================================================
+# Image-Based Detection (for scanned CAD drawings)
+# ============================================================================
+# Triggered when vector_score < vector_confident threshold (0.55)
+# Used to detect scanned CAD drawings that have no vector data
+
+# Image feature weights (for image_score calculation)
+image_weights:
+  shape_density: 0.40    # Circles + rectangles (strongest indicator)
+  line_density: 0.30     # Long lines via Hough transform
+  edge_density: 0.30     # Canny edge detection (general complexity)
+
+# Image processing configuration
+image_processing:
+  dpi: 300                      # Rendering resolution for image analysis
+  max_pages_to_analyze: 3       # Analyze first 3 pages only (performance)
+
+  # Shape detection parameters
+  shapes:
+    max_circles: 100            # Cap circles to prevent runaway detection
+    max_rectangles: 300         # Cap rectangles to prevent runaway detection
+    circle_min_radius: 5        # Minimum circle radius (pixels)
+    circle_max_radius: 200      # Maximum circle radius (pixels)
+
+  # Line detection parameters
+  lines:
+    min_line_length: 100        # Minimum line length (pixels)
+    max_lines: 500              # Cap lines to prevent runaway detection
+
+  # Edge density parameters
+  edges:
+    canny_low: 50               # Canny low threshold
+    canny_high: 150             # Canny high threshold
+    density_cap: 0.25           # Cap edge density at 25% (normalize outliers)
 
 # Sampling configuration
 sample_pages:

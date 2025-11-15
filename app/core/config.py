@@ -326,6 +326,46 @@ class Settings(BaseSettings):
         default=True, description="Enable PII redaction before persistence"
     )
 
+    # ========================================
+    # P&ID Semantic Fallback Enhancement
+    # ========================================
+    pid_enable_semantic_fallback: bool = Field(
+        default=True,
+        description="Enable enhanced semantic fallback for P&ID queries when spatial search fails",
+    )
+    pid_opensearch_weight: float = Field(
+        default=1.0,
+        description="Weight for OpenSearch results in RRF fusion (higher = more BM25 influence)",
+    )
+    pid_weaviate_weight: float = Field(
+        default=0.3,
+        description="Weight for Weaviate results in RRF fusion (lower = less semantic influence)",
+    )
+    pid_enable_tag_rerank: bool = Field(
+        default=True,
+        description="Enable P&ID tag-based reranking before BGE reranking",
+    )
+    pid_tag_boost_meta_exact: float = Field(
+        default=10.0,
+        description="Boost multiplier for exact tag match in metadata",
+    )
+    pid_tag_boost_text_exact: float = Field(
+        default=5.0,
+        description="Boost multiplier for exact tag match in text content",
+    )
+    pid_tag_boost_proximity: float = Field(
+        default=3.0,
+        description="Boost multiplier for proximity match (fuzzy/partial)",
+    )
+    pid_enable_safety_check: bool = Field(
+        default=True,
+        description="Force exact tag matches to top 3 after BGE reranking",
+    )
+    pid_max_tag_variants: int = Field(
+        default=4,
+        description="Maximum number of tag variants to generate for query expansion",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )

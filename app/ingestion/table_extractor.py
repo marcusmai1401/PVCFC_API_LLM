@@ -317,6 +317,29 @@ class TableExtractor:
             logger.debug("Table rejected: no content")
             return False
 
+        # NEW: Check column consistency (all rows should have same column count)
+        col_counts = [len(row) for row in table_data.cells]
+        if len(set(col_counts)) > 1:
+            logger.debug(
+                f"Table rejected: inconsistent columns {col_counts} "
+                f"(expected all rows to have {table_data.col_count} columns)"
+            )
+            return False
+
+        # NEW: Check if first row looks like headers (at least 50% non-empty)
+        if table_data.cells:
+            first_row = table_data.cells[0]
+            non_empty_headers = sum(1 for cell in first_row if cell.strip())
+            header_fill_ratio = non_empty_headers / len(first_row) if first_row else 0
+
+            if header_fill_ratio < 0.5:
+                logger.debug(
+                    f"Table rejected: weak header row "
+                    f"({non_empty_headers}/{len(first_row)} = {header_fill_ratio:.1%} non-empty, "
+                    f"expected ≥50%)"
+                )
+                return False
+
         return True
 
     def extract_tables_from_document(self, pdf_path: str) -> Dict[int, List[TableData]]:

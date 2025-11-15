@@ -71,15 +71,20 @@ def render_message_bubble(
 
     # Render citations if available (bot messages only)
     if role == "assistant" and citations:
-        render_citations_expander(citations)
+        # Use timestamp as unique message ID, fallback to content hash
+        import hashlib
+
+        message_id = hashlib.md5(f"{timestamp}_{content}".encode()).hexdigest()[:12]
+        render_citations_expander(citations, message_id=message_id)
 
 
-def render_citations_expander(citations: List[Dict]):
+def render_citations_expander(citations: List[Dict], message_id: str = "msg"):
     """
     Render expandable citations section under bot message.
 
     Args:
         citations: List of citation objects
+        message_id: Unique ID for this message (to avoid button key collision)
     """
     if not citations:
         return
@@ -111,9 +116,10 @@ def render_citations_expander(citations: List[Dict]):
             with cit_col2:
                 # ISSUE 5 FIX: Enable "View Page" button with PyMuPDF support
                 if pdf_path:
+                    # Use message_id + citation index for guaranteed uniqueness
                     if st.button(
                         f"🔍 View",
-                        key=f"view_{doc_id}_{page}_{i}",
+                        key=f"view_{message_id}_{i}",
                         use_container_width=True,
                     ):
                         # Open enhanced PDF modal that can show specific pages

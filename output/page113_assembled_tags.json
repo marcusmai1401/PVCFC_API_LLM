@@ -1,0 +1,67 @@
+{
+  "timings": {
+    "assembly_sec": 0.13
+  },
+  "metrics": {
+    "tags_count": 5,
+    "target_tags_found": 1,
+    "target_tags_total": 4
+  },
+  "tags": [
+    {
+      "tag": "29 SG 2202A",
+      "confidence": 0.0,
+      "pattern": "vertical_3part",
+      "bbox": [
+        4383,
+        1049,
+        62,
+        74
+      ]
+    },
+    {
+      "tag": "29 SG 2201A",
+      "confidence": 0.0,
+      "pattern": "vertical_3part",
+      "bbox": [
+        3375,
+        1051,
+        65,
+        72
+      ]
+    },
+    {
+      "tag": "29 KE 2014A",
+      "confidence": 0.0,
+      "pattern": "vertical_3part",
+      "bbox": [
+        2061,
+        1439,
+        66,
+        69
+      ]
+    },
+    {
+      "tag": "29 SG 2202B",
+      "confidence": 0.0,
+      "pattern": "vertical_3part",
+      "bbox": [
+        4364,
+        2693,
+        62,
+        72
+      ]
+    },
+    {
+      "tag": "29 XE 2012B",
+      "confidence": 0.0,
+      "pattern": "vertical_3part",
+      "bbox": [
+        2201,
+        3056,
+        67,
+        68
+      ]
+    }
+  ]
+}
