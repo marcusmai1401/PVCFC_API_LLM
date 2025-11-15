@@ -18,11 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from app.api.middleware.observability import (
-    ObservabilityMiddleware,
-    track_operation,
-)
-
+from app.api.middleware.observability import ObservabilityMiddleware, track_operation
 
 # Create test app
 app = FastAPI()

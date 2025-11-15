@@ -10,8 +10,9 @@ Based on pybreaker library with custom configuration for each service.
 """
 
 from typing import Optional
-from pybreaker import CircuitBreaker, CircuitBreakerListener
+
 from loguru import logger
+from pybreaker import CircuitBreaker, CircuitBreakerListener
 
 from app.core.config import settings
 

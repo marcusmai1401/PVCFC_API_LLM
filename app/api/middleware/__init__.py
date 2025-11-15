@@ -1,8 +1,8 @@
 """API middleware for observability and request processing"""
 
 from app.api.middleware.observability import (
-    ObservabilityMiddleware,
     MetricsMiddleware,
+    ObservabilityMiddleware,
     track_operation,
 )
 

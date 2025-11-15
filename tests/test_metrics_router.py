@@ -15,7 +15,6 @@ from starlette.testclient import TestClient
 
 from app.api.routers.metrics import router
 
-
 # Create test app
 app = FastAPI()
 app.include_router(router)
@@ -43,7 +42,9 @@ class TestMetricsEndpoint:
         """Test metrics endpoint has no-cache headers"""
         response = client.get("/metrics")
 
-        assert response.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
+        assert (
+            response.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
+        )
         assert response.headers["Pragma"] == "no-cache"
         assert response.headers["Expires"] == "0"
 

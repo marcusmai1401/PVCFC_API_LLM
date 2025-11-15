@@ -59,5 +59,5 @@ Các test scripts thủ công đã được di chuyển vào `tests/manual/` tha
 
 ---
 
-**Ngày tạo**: 31/10/2025  
+**Ngày tạo**: 31/10/2025
 **Lý do**: Dọn dẹp và tổ chức lại cấu trúc thư mục gốc

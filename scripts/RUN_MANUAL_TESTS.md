@@ -184,10 +184,10 @@ pytest --cov=app.core.distributed_cache --cov=app.core.logging_filter
 - [ ] **Failover under 10 seconds**
   - Verified in Step 2.2 test output
   - Check sentinel logs: `docker logs redis-sentinel-1`
-  
+
 - [ ] **Data persisted across failover**
   - Verified: test keys present after failover
-  
+
 - [ ] **No app code changes needed**
   - App uses `redis_client.get_redis()` factory
   - Sentinel discovery automatic
@@ -207,10 +207,10 @@ pytest --cov=app.core.distributed_cache --cov=app.core.logging_filter
 
 - [ ] **Cache shared across instances**
   - Verified in Step 3.1 test
-  
+
 - [ ] **TTL expiration works**
   - Verified in Step 3.1 test (3s TTL)
-  
+
 - [ ] **Feature flag toggling**
   - `.env` has `USE_DISTRIBUTED_CACHE=true`
   - Can set to `false` to revert to in-memory cache
@@ -219,10 +219,10 @@ pytest --cov=app.core.distributed_cache --cov=app.core.logging_filter
 
 - [ ] **All unit tests pass**
   - Verified in Step 4.1
-  
+
 - [ ] **No regressions**
   - Existing test suite green
-  
+
 - [ ] **New tests added**
   - `test_distributed_cache.py` ✓
   - `test_logging_filter.py` ✓
@@ -232,11 +232,11 @@ pytest --cov=app.core.distributed_cache --cov=app.core.logging_filter
 - [ ] **Redis HA rollback**
   - Documented in `docs/runbooks/redis_ha_failover.md`
   - Set `REDIS_MODE=single` to revert
-  
+
 - [ ] **Cache rollback**
   - Documented in `docs/runbooks/cache_rollout.md`
   - Set `USE_DISTRIBUTED_CACHE=false` to revert
-  
+
 - [ ] **Clear cache if needed**
   - Command: `docker exec redis-master redis-cli -a pvcfc_redis_2025_secure FLUSHDB`
 

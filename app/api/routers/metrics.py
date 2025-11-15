@@ -10,9 +10,8 @@ Provides:
 """
 
 from fastapi import APIRouter, Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest, REGISTRY
-
 from loguru import logger
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 
 router = APIRouter()
 

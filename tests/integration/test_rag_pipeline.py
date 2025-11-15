@@ -11,14 +11,15 @@ Tests complete end-to-end RAG flow:
 - Metrics collection
 """
 
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.api.routers.ask import router as ask_router
-from app.rag.schemas import AskRequest, AskResponse
 from app.core.config import Settings
+from app.rag.schemas import AskRequest, AskResponse
 
 
 # Mock retriever for testing

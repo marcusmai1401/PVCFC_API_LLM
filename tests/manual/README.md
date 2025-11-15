@@ -57,6 +57,5 @@ Các scripts này đã được di chuyển từ thư mục gốc vào đây đ�
 
 ---
 
-**Ngày di chuyển**: 31/10/2025  
+**Ngày di chuyển**: 31/10/2025
 **Lý do**: Tổ chức lại cấu trúc thư mục dự án
-

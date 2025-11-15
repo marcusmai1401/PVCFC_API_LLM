@@ -128,9 +128,7 @@ async def test_readiness_check_multiple_unhealthy(health_checker):
     assert result["status"] == "degraded"
 
     # Count unhealthy components
-    unhealthy_count = sum(
-        1 for c in result["components"] if c["status"] == "unhealthy"
-    )
+    unhealthy_count = sum(1 for c in result["components"] if c["status"] == "unhealthy")
     assert unhealthy_count == 2
 
 
@@ -275,6 +273,7 @@ async def test_component_health_latency_tracking(health_checker):
 @pytest.mark.asyncio
 async def test_parallel_health_checks(health_checker):
     """Health checks should run in parallel"""
+
     # Add artificial delays to check parallelism
     async def slow_check(*args, **kwargs):
         await asyncio.sleep(0.1)

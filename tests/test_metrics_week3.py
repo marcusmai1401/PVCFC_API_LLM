@@ -10,8 +10,9 @@ Tests:
 - Decorator functionality
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from app.core.metrics_week3 import (
     Week3MetricsCollector,
@@ -95,9 +96,7 @@ class TestCircuitBreakerMetrics:
         )
         initial_count = metric._value._value
 
-        week3_metrics.track_circuit_breaker_state_change(
-            "opensearch", "closed", "open"
-        )
+        week3_metrics.track_circuit_breaker_state_change("opensearch", "closed", "open")
 
         assert metric._value._value == initial_count + 1
 

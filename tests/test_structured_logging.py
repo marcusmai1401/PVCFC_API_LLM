@@ -255,10 +255,11 @@ class TestJSONFormatter:
     def test_json_formatter_basic(self):
         """Test basic JSON formatting"""
         from datetime import datetime
+
         from loguru import logger as loguru_logger
 
         # Create a proper level object
-        level_obj = type('Level', (), {'name': 'INFO'})()
+        level_obj = type("Level", (), {"name": "INFO"})()
 
         record = {
             "time": datetime(2025, 10, 31, 10, 30, 0),
@@ -284,7 +285,7 @@ class TestJSONFormatter:
         """Test JSON formatting with context"""
         from datetime import datetime
 
-        level_obj = type('Level', (), {'name': 'INFO'})()
+        level_obj = type("Level", (), {"name": "INFO"})()
 
         record = {
             "time": datetime(2025, 10, 31, 10, 30, 0),
@@ -314,7 +315,7 @@ class TestJSONFormatter:
         """Test JSON formatting with exception"""
         from datetime import datetime
 
-        level_obj = type('Level', (), {'name': 'ERROR'})()
+        level_obj = type("Level", (), {"name": "ERROR"})()
 
         # Create mock exception
         exc_type = ValueError

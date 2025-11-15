@@ -212,9 +212,7 @@ class HealthChecker:
                 )
 
             # Get OpenSearch retriever from app state
-            opensearch_retriever = getattr(
-                self.app_state, "opensearch_retriever", None
-            )
+            opensearch_retriever = getattr(self.app_state, "opensearch_retriever", None)
             if not opensearch_retriever:
                 return ComponentHealth(
                     name="opensearch",
@@ -283,9 +281,7 @@ class HealthChecker:
 
         try:
             # Get conversation manager from app state
-            conversation_manager = getattr(
-                self.app_state, "conversation_manager", None
-            )
+            conversation_manager = getattr(self.app_state, "conversation_manager", None)
             if not conversation_manager:
                 return ComponentHealth(
                     name="redis",

@@ -13,9 +13,8 @@ Extends existing metrics.py with Week 2 integration.
 from functools import wraps
 from typing import Callable
 
-from prometheus_client import Counter, Gauge, Histogram
-
 from loguru import logger
+from prometheus_client import Counter, Gauge, Histogram
 
 # ========================================
 # Week 3: Circuit Breaker Metrics

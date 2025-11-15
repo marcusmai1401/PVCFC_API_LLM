@@ -9,14 +9,14 @@ Tests complete health checking workflow:
 - Circuit breaker integration
 """
 
+from unittest.mock import AsyncMock, MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.api.routers.health import router as health_router
 from app.core.health_checker import HealthChecker
-
 
 # Create test app
 app = FastAPI()

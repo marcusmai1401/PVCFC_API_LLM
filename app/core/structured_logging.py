@@ -10,10 +10,10 @@ Provides:
 
 Usage:
     from app.core.structured_logging import get_logger, log_context
-    
+
     # Get logger with context
     logger = get_logger(__name__)
-    
+
     # Use context manager for request tracking
     with log_context(trace_id="req_123", user_id="user_456"):
         logger.info("Processing request", extra={"query": "test"})

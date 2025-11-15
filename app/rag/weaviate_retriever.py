@@ -449,9 +449,7 @@ class WeaviateRetriever:
 
         if not circuit_breaker_enabled:
             # Circuit breaker disabled, use direct call
-            return self._execute_weaviate_query(
-                query_vector, where_filter, limit
-            )
+            return self._execute_weaviate_query(query_vector, where_filter, limit)
 
         # Use circuit breaker
         try:

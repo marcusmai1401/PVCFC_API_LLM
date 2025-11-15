@@ -114,7 +114,9 @@ class OpenSearchBM25Retriever:
 
         try:
             breaker = get_opensearch_breaker()
-            return breaker.call(self._execute_search, query=query, top_k=top_k, min_score=min_score)
+            return breaker.call(
+                self._execute_search, query=query, top_k=top_k, min_score=min_score
+            )
         except CircuitBreakerError:
             logger.warning(
                 "OpenSearch circuit breaker OPEN - returning empty results. "

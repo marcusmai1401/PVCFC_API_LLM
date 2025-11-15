@@ -9,7 +9,7 @@ Provides automatic:
 
 Usage:
     from app.api.middleware.observability import ObservabilityMiddleware
-    
+
     app.add_middleware(ObservabilityMiddleware)
 """
 
@@ -21,12 +21,13 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.core.structured_logging import get_request_logger, log_context
 from app.core.metrics_week3 import week3_metrics
+from app.core.structured_logging import get_request_logger, log_context
 
 # Import existing metrics if available
 try:
-    from app.core.metrics import request_counter, latency_histogram
+    from app.core.metrics import latency_histogram, request_counter
+
     HAS_LEGACY_METRICS = True
 except ImportError:
     HAS_LEGACY_METRICS = False
@@ -72,7 +73,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         # Get request details
         method = request.method
         path = self._normalize_path(request.url.path)
-        
+
         # Get request size
         request_size = int(request.headers.get("Content-Length", 0))
 
@@ -105,7 +106,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                 # Calculate metrics
                 duration = time.time() - start_time
                 status_code = response.status_code
-                
+
                 # Get response size (if available)
                 response_size = int(response.headers.get("Content-Length", 0))
 

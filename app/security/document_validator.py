@@ -197,7 +197,9 @@ class DocumentValidator:
                 has_audit = any(d[1] == AccessDecision.AUDIT for d in decisions)
 
                 if has_deny:
-                    denied_tags = [d[0] for d in decisions if d[1] == AccessDecision.DENY]
+                    denied_tags = [
+                        d[0] for d in decisions if d[1] == AccessDecision.DENY
+                    ]
                     logger.warning(
                         f"Access DENIED: User {user_role} cannot access tags {denied_tags}",
                         extra={
@@ -219,7 +221,9 @@ class DocumentValidator:
                     )
 
                 if has_audit:
-                    audit_tags = [d[0] for d in decisions if d[1] == AccessDecision.AUDIT]
+                    audit_tags = [
+                        d[0] for d in decisions if d[1] == AccessDecision.AUDIT
+                    ]
                     logger.info(
                         f"Access ALLOWED (AUDIT): Sensitive tags {audit_tags}",
                         extra={

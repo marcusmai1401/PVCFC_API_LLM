@@ -10,13 +10,12 @@ Tests complete API integration:
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from app.api.middleware.observability import ObservabilityMiddleware
 from app.api.routers.health import router as health_router
 from app.api.routers.metrics import router as metrics_router
-from app.api.middleware.observability import ObservabilityMiddleware
-
 
 # Create full app with middleware
 app = FastAPI()
@@ -24,12 +23,14 @@ app.add_middleware(ObservabilityMiddleware)
 app.include_router(health_router)
 app.include_router(metrics_router)
 
+
 # Mock app state
 class MockState:
     weaviate_client = None
     opensearch_client = None
     redis_client = None
     index_dir = "/mock"
+
 
 app.state = MockState()
 

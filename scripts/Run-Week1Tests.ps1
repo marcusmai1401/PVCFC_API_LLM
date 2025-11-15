@@ -53,34 +53,34 @@ try {
 # Step 2: Start Redis HA Stack
 if (-not $SkipDocker) {
     Write-Step "Step 2: Starting Redis HA Stack"
-    
+
     Set-Location $ProjectRoot
-    
+
     # Stop any existing Redis containers
     Write-Host "Stopping existing Redis containers..."
     docker compose -f docker-compose.redis-ha.yml down 2>&1 | Out-Null
-    
+
     # Start fresh
     Write-Host "Starting Redis HA stack (master + replica + 3 sentinels)..."
     docker compose -f docker-compose.redis-ha.yml up -d
-    
+
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Redis stack"
         exit 1
     }
-    
+
     # Wait for containers to be healthy
     Write-Host "Waiting for containers to be healthy - 30 seconds..."
     Start-Sleep -Seconds 30
-    
+
     # Verify containers
     Write-Host "`nContainer Status:"
     docker ps --filter "name=redis" --format "table {{.Names}}`t{{.Status}}`t{{.Ports}}"
-    
+
     # Check if all 5 containers are running
     $redisContainers = docker ps --filter "name=redis" --format "{{.Names}}"
     $expectedContainers = @("redis-master", "redis-replica-1", "redis-sentinel-1", "redis-sentinel-2", "redis-sentinel-3")
-    
+
     $allRunning = $true
     foreach ($expected in $expectedContainers) {
         if ($redisContainers -notcontains $expected) {
@@ -88,20 +88,20 @@ if (-not $SkipDocker) {
             $allRunning = $false
         }
     }
-    
+
     if (-not $allRunning) {
         Write-Failure "Not all Redis containers are running"
         Write-Host "`nCheck logs with:"
         Write-Host "  docker compose -f docker-compose.redis-ha.yml logs"
         exit 1
     }
-    
+
     Write-Success "All Redis containers are running"
-    
+
     # Verify sentinel can see master
     Write-Host "`nVerifying sentinel master discovery..."
     $sentinelOutput = docker exec redis-sentinel-1 redis-cli -p 26379 sentinel masters 2>&1
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Sentinel can discover master"
     } else {
@@ -130,7 +130,7 @@ try {
 if (-not $OnlyCache) {
     Write-Host "`n--- Test: Sentinel Discovery ---"
     python scripts/test_redis_ha.py --test discovery --password $RedisPassword
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Sentinel discovery test passed"
     } else {
@@ -155,7 +155,7 @@ $runPytest = Read-Host "`nRun full pytest suite? (y/n)"
 if ($runPytest -eq "y") {
     Write-Host "Running pytest..."
     pytest tests/unit/test_distributed_cache.py tests/unit/test_logging_filter.py -v
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Success "All pytest tests passed"
     } else {
@@ -168,7 +168,7 @@ if ($runPytest -eq "y") {
 # Step 5: Manual Failover Test Instructions
 if (-not $OnlyCache) {
     Write-Step "Step 5: Manual Failover Test (Optional)"
-    
+
     Write-Host ""
     Write-Host "To test Redis Sentinel failover manually:"
     Write-Host ""
