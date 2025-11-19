@@ -113,7 +113,7 @@ class Settings(BaseSettings):
     # Phase 3 - BGE Reranker Configuration
     # ========================================
     enable_bge_rerank: bool = Field(
-        default=False,
+        default=True,
         description="Enable BGE CrossEncoder reranking (Phase 3)",
     )
     bge_rerank_candidate_limit: int = Field(

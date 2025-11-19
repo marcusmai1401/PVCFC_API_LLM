@@ -61,12 +61,14 @@ class HybridWithTagsRetriever:
         self.tags_enabled = self.config.ENABLE_PID_TAGS
         self.spatial_searcher = None
         self.pid_enhancer = None
+        self.text_tag_detector = None
 
         if self.tags_enabled:
             try:
                 # Lazy import to avoid circular dependencies
                 from app.rag.query_processing.pid_query_enhancer import PIDQueryEnhancer
                 from app.rag.spatial.spatial_searcher import SpatialTagSearcher
+                from app.rag.text_tag_detector import TextTagDetector
 
                 # Level 2: Spatial clustering for absolute accuracy
                 self.spatial_searcher = SpatialTagSearcher(
@@ -75,9 +77,17 @@ class HybridWithTagsRetriever:
                     min_cluster_score=0.6,
                 )
                 self.pid_enhancer = PIDQueryEnhancer()
+
+                # Level 1: Text-only tag fallback (uses text_by_page.jsonl)
+                if getattr(self.config, "ENABLE_TEXT_TAG_FALLBACK", True):
+                    self.text_tag_detector = TextTagDetector(self.config)
+                    logger.info("✓ TextTagDetector fallback enabled for P&ID tags")
+                else:
+                    logger.info("TextTagDetector fallback disabled via config")
+
                 logger.info("✓ PID spatial search (Level 2) enabled")
             except Exception as e:
-                logger.warning(f"Failed to initialize spatial search components: {e}")
+                logger.warning(f"Failed to initialize spatial/text tag components: {e}")
                 logger.warning("Falling back to standard hybrid retrieval")
                 self.tags_enabled = False
 
@@ -278,6 +288,7 @@ class HybridWithTagsRetriever:
         strategy = analysis.get("strategy")
         tags_results = []
         fallback_reason = None
+        components_for_fallback: Optional[Dict] = None
 
         # Extract doc_id for Level 2 spatial search
         doc_id = self._extract_doc_id(transformed_query, **kwargs)
@@ -291,6 +302,7 @@ class HybridWithTagsRetriever:
             if strategy == "component_search":
                 # Component-based spatial clustering
                 components = analysis.get("components", {})
+                components_for_fallback = components or None
                 logger.info(f"Component spatial search: {components}")
 
                 # Level 2: Spatial clustering with geometric validation
@@ -389,6 +401,7 @@ class HybridWithTagsRetriever:
                     comp_analysis = self.pid_enhancer.enhance(tag_str)
                     if comp_analysis.get("strategy") == "component_search":
                         components = comp_analysis.get("components", {})
+                        components_for_fallback = components or None
 
                         # Handle None doc_id (multi-document search)
                         if doc_id is None:
@@ -447,6 +460,67 @@ class HybridWithTagsRetriever:
             logger.error(f"P&ID tags search exception: {e}")
             fallback_reason = f"Search exception: {str(e)}"
             tags_results = []
+
+        # Text-based tag fallback (Level 1) when spatial returns no tags
+        if (
+            not tags_results
+            and self.text_tag_detector is not None
+            and components_for_fallback is not None
+            and doc_id is not None
+        ):
+            try:
+                unit = components_for_fallback.get("unit", "")
+                prefix = components_for_fallback.get("prefix", "")
+                suffix = components_for_fallback.get("suffix", "")
+
+                if unit and prefix and suffix:
+                    max_gap = getattr(self.config, "TEXT_TAG_MAX_GAP_TOKENS", 5)
+                    text_hits = self.text_tag_detector.find_tag_hits(
+                        doc_id=doc_id,
+                        unit=unit,
+                        prefix=prefix,
+                        suffix=suffix,
+                        max_gap_tokens=max_gap,
+                    )
+
+                    if text_hits:
+                        logger.info(
+                            f"TextTagDetector: using {len(text_hits)} hits as tag fallback for "
+                            f"{unit} {prefix} {suffix} in doc_id={doc_id}"
+                        )
+                        tags_results = []
+                        tag_text = " ".join([unit, prefix, suffix]).strip()
+                        for hit in text_hits[:10]:
+                            tags_results.append(
+                                {
+                                    "tag": tag_text,
+                                    "doc_id": hit.doc_id,
+                                    "page": hit.page,
+                                    "bbox": None,
+                                    "score": hit.score,
+                                    "source": "text_tag_fallback",
+                                    "metadata": {
+                                        "tag_text": tag_text,
+                                        "text_fallback": True,
+                                        "context": hit.context,
+                                    },
+                                    "text": hit.context,
+                                    "chunk_id": f"{hit.doc_id}_p{hit.page}_text_tag_"
+                                    f"{unit}_{prefix}_{suffix}",
+                                }
+                            )
+                    else:
+                        logger.info(
+                            "TextTagDetector: no hits found for components "
+                            f"unit={unit}, prefix={prefix}, suffix={suffix}, doc_id={doc_id}"
+                        )
+                else:
+                    logger.debug(
+                        "TextTagDetector: components_for_fallback missing unit/prefix/suffix, "
+                        "skipping text fallback"
+                    )
+            except Exception as e:
+                logger.error(f"TextTagDetector fallback failed: {e}")
 
         # Empty results fallback check (simplified)
         if not tags_results:

@@ -190,6 +190,23 @@ class IngestionPipeline:
         self.component_indexer = None
         if self.enable_pid_tags:
             try:
+                # PATCH: Sync TagExtractionOrchestrator paths with pipeline output_dir
+                # This ensures tags are written to {output_dir}/entities instead of default artifacts
+                import os
+
+                # Path is already imported globally
+                import app.config.pipeline_config as config_module
+
+                # Set env vars to override config defaults
+                os.environ["ENTITIES_DIR"] = str(self.output_dir / "entities")
+                os.environ["LAYOUT_DIR"] = str(self.output_dir / "page_layout")
+                os.environ["CROPS_DIR"] = str(self.output_dir / "crops")
+                os.environ["LOGS_DIR"] = str(self.output_dir / "logs")
+
+                # Force reload config singleton to pick up new paths
+                config_module._config_instance = None
+                logger.info(f"Synced P&ID tag paths to: {self.output_dir}")
+
                 self.tag_orchestrator = TagExtractionOrchestrator(
                     enable_crops=True,
                     lazy_crops=True,  # Don't generate crops during ingestion for speed
@@ -1316,10 +1333,21 @@ class IngestionPipeline:
                 # Simple conversion from pdf_doc pages
                 extraction = {"file_path": pdf_doc.file_path, "pages": []}
                 for page in pdf_doc.pages:
+                    # INJECT PAGE MARKER: Critical for citation accuracy
+                    # This ensures text_chunker can attribute text to the correct page
+                    page_text_with_marker = (
+                        f"<!-- Page {page.page_num} -->\n{page.text}"
+                    )
+
                     page_data = {
                         "page_num": (page.page_num - 1) if page.page_num else 0,
                         "full_text": page.text,
-                        "blocks": [{"text": page.text, "structure_type": "paragraph"}],
+                        "blocks": [
+                            {
+                                "text": page_text_with_marker,
+                                "structure_type": "paragraph",
+                            }
+                        ],
                     }
                     # Add tables if present
                     if page.tables:
@@ -1329,8 +1357,13 @@ class IngestionPipeline:
                 markdown_text = md_result["markdown"]
                 structure_meta = md_result.get("structure", {})
         except Exception as e:
-            logger.warning(f"Markdown converter failed, using plain text: {e}")
-            markdown_text = "\n\n".join(page.text for page in pdf_doc.pages)
+            logger.warning(
+                f"Markdown converter failed, using plain text with page markers: {e}"
+            )
+            # INJECT PAGE MARKER in fallback path too
+            markdown_text = "\n\n".join(
+                f"<!-- Page {page.page_num} -->\n{page.text}" for page in pdf_doc.pages
+            )
             structure_meta = None
 
         # Save markdown (atomic write)

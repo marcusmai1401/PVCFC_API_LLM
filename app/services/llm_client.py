@@ -126,6 +126,28 @@ class GeminiClient(BaseLLMClient):
                     f"Response has no 'text' attribute. Available attrs: {[a for a in dir(response) if not a.startswith('_')]}"
                 )
 
+            # Check finish_reason first to understand why generation stopped
+            finish_reason = None
+            if hasattr(response, "candidates") and response.candidates:
+                try:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, "finish_reason"):
+                        finish_reason = str(candidate.finish_reason)
+                        logger.debug(f"Gemini finish_reason: {finish_reason}")
+
+                        # Log warning for problematic finish reasons
+                        if "MAX_TOKENS" in finish_reason:
+                            logger.warning(
+                                f"Gemini hit MAX_TOKENS limit (max_tokens={max_tokens}). "
+                                f"Response may be truncated. Consider increasing max_tokens."
+                            )
+                        elif "SAFETY" in finish_reason:
+                            logger.warning(
+                                f"Gemini blocked response due to safety: {finish_reason}"
+                            )
+                except (IndexError, AttributeError) as e:
+                    logger.debug(f"Could not check finish_reason: {e}")
+
             # Extract text - handle multiple ways response might structure the text
             content_text = ""
 
@@ -145,18 +167,48 @@ class GeminiClient(BaseLLMClient):
                                 and candidate.content.parts
                             ):
                                 for part in candidate.content.parts:
-                                    if hasattr(part, "text") and part.text:
-                                        content_text += part.text
+                                    if hasattr(part, "text"):
+                                        # Extract even if text is None/empty, to handle partial responses
+                                        part_text = (
+                                            part.text if part.text is not None else ""
+                                        )
+                                        content_text += part_text
                         # Alternative structure
-                        elif hasattr(candidate, "text") and candidate.text:
-                            content_text += candidate.text
+                        elif hasattr(candidate, "text"):
+                            candidate_text = (
+                                candidate.text if candidate.text is not None else ""
+                            )
+                            content_text += candidate_text
                 except (TypeError, AttributeError) as e:
                     logger.warning(f"Could not iterate through candidates: {e}")
 
+            # If still empty but MAX_TOKENS was hit, try harder to extract ANY text
+            if not content_text and finish_reason and "MAX_TOKENS" in finish_reason:
+                logger.warning(
+                    "MAX_TOKENS hit but no text extracted - trying harder..."
+                )
+                try:
+                    if hasattr(response, "candidates") and response.candidates:
+                        candidate = response.candidates[0]
+                        # Try to get raw content
+                        if hasattr(candidate, "content"):
+                            logger.debug(
+                                f"Candidate content type: {type(candidate.content)}"
+                            )
+                            logger.debug(
+                                f"Candidate content: {str(candidate.content)[:500]}"
+                            )
+                except Exception as e:
+                    logger.debug(f"Could not extract debug info: {e}")
+
             # Log warning if still no content
             if not content_text:
+                reason_msg = (
+                    f" (finish_reason: {finish_reason})" if finish_reason else ""
+                )
                 logger.warning(
-                    f"Gemini returned empty response for model {self.model}. Prompt length: {len(prompt)}"
+                    f"Gemini returned empty response for model {self.model}. "
+                    f"Prompt length: {len(prompt)}{reason_msg}"
                 )
                 content_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
 

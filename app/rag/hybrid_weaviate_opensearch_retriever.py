@@ -20,7 +20,7 @@ from loguru import logger
 from app.core.config import settings
 from app.rag.indexers.opensearch_bm25_retriever import create_opensearch_retriever
 from app.rag.query_transform import TransformedQuery
-from app.rag.retriever import RetrievalResult
+from app.rag.retriever import RetrievalResult, extract_text_with_parent_fallback
 from app.rag.weaviate_retriever import WeaviateRetriever, WeaviateSearchConfig
 from app.services.reranker import get_reranker_service
 
@@ -38,10 +38,27 @@ class HybridModernConfig:
     top_rrf: int = 60  # Results after RRF
 
     # Reranking
-    enable_bge_rerank: bool = True  # Use BGE reranking
+    enable_bge_rerank: bool = (
+        True  # Use BGE reranking (must stay True for technical docs)
+    )
     bge_top_k: int = 10  # Final results after BGE
     bge_level: str = "chunk"  # chunk, doc, or page
     bge_aggregation: str = "max"  # max, mean, or top3_mean
+
+    def __post_init__(self):
+        """Hard guard: never allow BGE rerank to be disabled at runtime.
+
+        This enforces a product decision that BGE CrossEncoder is mandatory for
+        hybrid technical-doc retrieval and prevents accidental toggling by
+        agents or ad-hoc scripts.
+        """
+        if not self.enable_bge_rerank:
+            from loguru import logger as _logger
+
+            _logger.warning(
+                "HybridModernConfig received enable_bge_rerank=False - overriding to True"
+            )
+            self.enable_bge_rerank = True
 
 
 class HybridWeaviateOpenSearchRetriever:
@@ -442,7 +459,9 @@ class HybridWeaviateOpenSearchRetriever:
 
             result = RetrievalResult(
                 chunk_id=metadata.get("chunk_id", hit.get("chunk_id", "unknown")),
-                text=hit["text"],
+                text=extract_text_with_parent_fallback(
+                    hit, metadata
+                ),  # Phase 3: Use parent_text
                 score=hit["score"],
                 source="opensearch_tag_boosted",
                 metadata=metadata,
@@ -477,7 +496,9 @@ class HybridWeaviateOpenSearchRetriever:
 
             result = RetrievalResult(
                 chunk_id=metadata.get("chunk_id", hit.get("chunk_id", "unknown")),
-                text=hit["text"],
+                text=extract_text_with_parent_fallback(
+                    hit, metadata
+                ),  # Phase 3: Use parent_text
                 score=hit["score"],
                 source="opensearch_bm25",
                 metadata=metadata,

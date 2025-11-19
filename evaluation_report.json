@@ -1,0 +1,1057 @@
+[
+  {
+    "question": "Ap suất đầu ra (Discharge Pressure) của máy nén CO2 K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+    "expected_answer": "Theo biểu đồ đường cong hiệu suất dự kiến của máy nén CO2 K06101 / KT06101, dưới điều kiện hoạt động 'Bình thường' (Normal), áp suất đầu ra là 158.00 BAR.A.",
+    "actual_answer": "Áp suất đầu ra (Discharge Pressure) của máy nén CO2 K06101 trong điều kiện hoạt động 'Bình thường' (Normal) là **147.1 bar A** [Doc 7, p.2].",
+    "expected_page": 2,
+    "found_pages": [
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer states the pressure is 147.1 bar A, while the expected answer states it is 158.00 BAR.A. These values are different.",
+    "latency": 22.538482189178467,
+    "error": null
+  },
+  {
+    "question": "Trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) của máy nén CO2 K06101 / KT06101 là bao nhiêu phần trăm?",
+    "expected_answer": "Theo biểu đồ đường cong hiệu suất ở trang 5, trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) của máy nén CO2 K06101 / KT06101 là 82.7%.",
+    "actual_answer": "Dựa trên biểu đồ đường cong hiệu suất dự kiến của máy nén CO2 [Doc 9, p. 5], trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) là **82.7%**.\n\nGiá trị này được xác định tại điểm hoạt động định mức trên biểu đồ \"POL. EFFICIENCY (%)\" so với \"SUCTION CAPACITY (M3/HR)\", tương ứng với lưu lượng hút là 36962.0 M3/HR [Doc 9, p. 5].",
+    "expected_page": 5,
+    "found_pages": [
+      5
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "Both answers state that the polytropic efficiency is 82.7% under the specified conditions, based on information found on page 5.",
+    "latency": 21.50068497657776,
+    "error": null
+  },
+  {
+    "question": "Áp suất dầu bôi trơn bình thường (Normal oil pressure) của bộ bánh răng (Gear unit) của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng thông số kỹ thuật ở trang 8, áp suất dầu bôi trơn bình thường của bộ bánh răng cho thiết bị K06101 / KT06101 là 2.0 barG.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 8,
+    "found_pages": [
+      1,
+      2,
+      13
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.968119859695435,
+    "error": null
+  },
+  {
+    "question": "Loại dầu bôi trơn nào được khuyến nghị sử dụng cho bộ bánh răng (Gear unit) của thiết bị K06101 / KT06101 ?",
+    "expected_answer": "Theo bảng Thông số Kỹ thuật (Technical Specifications) ở trang 8, loại dầu bôi trơn được khuyến nghị sử dụng cho bộ bánh răng của thiết bị K06101 / KT06101 là dầu tuabin ISO VG46 (Turbine oil ISO VG46).",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 8,
+    "found_pages": [
+      17,
+      21,
+      16
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 23.08178448677063,
+    "error": null
+  },
+  {
+    "question": "Tua-bin hơi nước KT06101 dẫn động cho thiết bị nào?",
+    "expected_answer": "Theo Bảng Dữ liệu Tua-bin Hơi nước (trang 1), tua-bin hơi nước KT06101 là thiết bị dẫn động (DRIVER) cho MÁY NÉN CO2 (CO2 COMPRESSOR).",
+    "actual_answer": "Tua-bin hơi nước KT06101 dẫn động cho Máy nén CO2 (CO2 COMPRESSOR) [Doc 1, p.1; Doc 2, p.1].\n\nThông tin này được xác nhận trong bảng dữ liệu của máy nén, trong đó nêu rõ thiết bị được dẫn động bởi (Driven by) tua-bin KT06101 [Doc 8, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately identifies that the KT06101 steam turbine drives the CO2 Compressor, which matches the key information in the expected answer.",
+    "latency": 21.159220218658447,
+    "error": null
+  },
+  {
+    "question": "Ở điều kiện hoạt động bình thường (Normal), áp suất và nhiệt độ hơi nước đầu vào (Inlet) của tua-bin KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng 'STEAM CONDITIONS' ở trang 1, trong điều kiện hoạt động bình thường (Normal), áp suất hơi nước đầu vào của tua-bin KT06101 là 39 Bar A và nhiệt độ là 370°C.",
+    "actual_answer": "Ở điều kiện hoạt động bình thường (Normal), các thông số hơi nước đầu vào (Inlet) của tua-bin KT06101 là:\n*   **Áp suất**: 39 Bar A [Doc 1, p.1; Doc 2, p.1]\n*   **Nhiệt độ**: 370 °C [Doc 1, p.1; Doc 2, p.1]",
+    "expected_page": 1,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer provides the same key information (39 Bar A and 370°C) as the expected answer regarding the pressure and temperature of the steam inlet for the KT06101 turbine under normal operating conditions.",
+    "latency": 21.134329795837402,
+    "error": null
+  },
+  {
+    "question": "Trong điều kiện hoạt động bình thường (Normal), áp suất đầu vào (Suction Pressure) của thiết bị máy nén amoniac K04441 là bao nhiêu?",
+    "expected_answer": "Theo bảng 'OPERATING CONDITIONS' ở trang 2, trong điều kiện hoạt động bình thường, áp suất hút đầu vào của máy nén amoniac K04441 là 2.82 bar A.",
+    "actual_answer": "Trong điều kiện hoạt động bình thường (Normal",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer is incomplete and does not provide the numerical value for the suction pressure, thus missing the key information from the expected answer.",
+    "latency": 29.52643585205078,
+    "error": null
+  },
+  {
+    "question": "Tốc độ (Speed) của thiết bị máy nén amoniac K04441 trong điều kiện định mức 1 (Rated condition 1) là bao nhiêu?",
+    "expected_answer": "Theo bảng 'PERFORMANCE DATA' ở trang 3, tốc độ của máy nén amoniac K04441 trong điều kiện định mức 1 là 8800 rpm.",
+    "actual_answer": "Dựa trên các tài liệu được cung cấp, tốc độ hoạt động liên tục tối đa (Maximum Continuous Speed - MCS) của máy nén amoniac K04441 là **9240 rpm** [Doc 1, p.1], [Doc 2, p.1].\n\nTài liệu cũng đề cập đến tốc độ dừng máy (TRIP) là 10164 rpm [Doc 1, p.1], [Doc 2, p.1].\n\nTuy nhiên, thuật ngữ \"Điều kiện định mức 1\" (Rated condition 1) không được định nghĩa hoặc đề cập một cách rõ ràng trong ngữ cảnh đã cho.",
+    "expected_page": 3,
+    "found_pages": [
+      1,
+      1
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "The generated answer does not provide the specific speed (8800 rpm) for Rated Condition 1 as mentioned in the Expected Answer. Instead, it gives the maximum continuous speed and TRIP speed, and acknowledges the absence of a clear definition for 'Rated condition 1' in the provided documents.",
+    "latency": 21.77067279815674,
+    "error": null
+  },
+  {
+    "question": "Trong điều kiện hoạt động bình thường (Normal), áp suất đầu ra của cấp nén thứ nhất (1st) của thiết bị máy nén CO2 K06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng 'DISCHARGE CONDITIONS' ở trang 2, trong điều kiện hoạt động bình thường, áp suất đầu ra của cấp nén thứ nhất là 4.70 bar A.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.454750061035156,
+    "error": null
+  },
+  {
+    "question": "Hiệu suất đa biến (Polytropic efficiency) của cấp nén thứ hai (2nd) trong điều kiện định mức (Rated) của thiết bị máy nén CO2 K06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng 'PERFORMANCE DATA' ở trang 3, hiệu suất đa biến của cấp nén thứ hai trong điều kiện định mức là 81.5%.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 24.164225816726685,
+    "error": null
+  },
+  {
+    "question": "Công suất trục (Shaft Power) của thiết bị K04441 / KT04441 là bao nhiêu trong điều kiện hoạt động 'Bình thường' (Normal)?",
+    "expected_answer": "Trong điều kiện hoạt động 'Bình thường' (Normal), công suất trục (Shaft Power) của máy nén Amoniac K04441 / KT04441 là 6176 KW.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy thông số \"Công suất trục\" (Shaft Power) trong ngữ cảnh được cung cấp.\n\nTuy nhiên, tài liệu có đề cập đến \"Công suất yêu cầu\" (Power req. (all losses incl.)) trong điều kiện hoạt động 'Bình thường' (Normal) là **6176 kW**. Giá trị công suất đảm bảo (guaranteed) là **6424 kW** [Doc 2, p.2].",
+    "expected_page": 2,
+    "found_pages": [
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.03368902206421,
+    "error": null
+  },
+  {
+    "question": "Lưu lượng hút (Suction Capacity) của thiết bị K04441 / KT04441 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+    "expected_answer": "Trong điều kiện hoạt động 'Bình thường' (Normal), lưu lượng hút (Suction Capacity) của máy nén Amoniac K04441 / KT04441 là 17800.0 M3/HR.",
+    "actual_answer": "Dựa trên các tài liệu được cung cấp, lưu lượng hút (Suction Capacity) của các thiết bị trong điều kiện hoạt động 'Bình thường' (Normal) như sau:\n\n*   Đối với thiết bị **K04441**, lưu lượng hút (dưới dạng lưu lượng dòng khối lượng - Weight flow) là **40384 kg/h** [Doc 1, p.1].\n*   Đối với thiết bị **KT04441**, lưu lượng hút (dưới dạng lưu lượng dòng khối lượng - Weight flow) là **37831 kg/h** [Doc 4, p.1].",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer does not provide the suction capacity in M3/HR, instead providing it in kg/h for both K04441 and KT04441. Therefore, the generated answer does not convey the same information as the expected answer.",
+    "latency": 21.432981967926025,
+    "error": null
+  },
+  {
+    "question": "Hiệu suất Polytropic (Pol. Efficiency) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Rated 1st' là bao nhiêu?",
+    "expected_answer": "Trong điều kiện hoạt động 'Rated 1st', hiệu suất Polytropic (Pol. Efficiency) của máy nén CO2 K06101 / KT06101 là 82.7%.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 5,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.569185972213745,
+    "error": null
+  },
+  {
+    "question": "Cột áp Polytropic (Polytropic Head) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Rated 2nd' là bao nhiêu?",
+    "expected_answer": "Trong điều kiện hoạt động 'Rated 2nd', cột áp Polytropic (Polytropic Head) của máy nén CO2 K06101 / KT06101 là 12600 M.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 7,
+    "found_pages": [
+      30,
+      29,
+      31
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 17.481611251831055,
+    "error": null
+  },
+  {
+    "question": "Kích thước danh nghĩa (Nominal Size) của vòi phun (Nozzle) số 4 (1st Suc.) trên máy nén LP của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo tài liệu, kích thước danh nghĩa (Nominal Size) của vòi phun (Nozzle) số 4 (1st Suc.) trên máy nén LP (2MCH606) của thiết bị K06101 / KT06101 là 28 inch.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 23.249340772628784,
+    "error": null
+  },
+  {
+    "question": "Giá trị lực và mô-men cho phép tối đa (Max. Allowable Force & Moments) của vòi phun (Nozzle) số 1 (4th Dis.) trên máy nén HP của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo tài liệu, giá trị lực và mô-men cho phép tối đa (Max. Allowable Force & Moments), tính theo công thức 0.914F+M, của vòi phun (Nozzle) số 1 (4th Dis.) trên máy nén HP (2BCH306/A) của thiết bị K06101 / KT06101 là 384 kg-m (3764 N.m).",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.021373748779297,
+    "error": null
+  },
+  {
+    "question": "Kích thước kết nối đường hồi dầu bôi trơn (LUBE OIL RETURN FROM COMPRESSOR & TURBINE) của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng danh sách kết nối (NOZZLE CONNECTION LIST), kích thước kết nối đường hồi dầu bôi trơn (LO-003) từ máy nén và tuabin của thiết bị K06101 / KT06101 là 10/12 inch, tiêu chuẩn ANSI 150Lb RF.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      18,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 23.330279111862183,
+    "error": null
+  },
+  {
+    "question": "Model của Bơm dầu bôi trơn (Lube Oil Pump) P06201A/B của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, model của Bơm dầu bôi trơn P06201A/B của thiết bị K06101 / KT06101 là GH-R2T-780.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.206384420394897,
+    "error": null
+  },
+  {
+    "question": "Lưu lượng (CAPACITY) của Bơm dầu bôi trơn khẩn cấp (Emergency Lube Oil Pump) P06201C của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, lưu lượng của Bơm dầu bôi trơn khẩn cấp P06201C của thiết bị K06101 / KT06101 là 493 lít/phút.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 10,
+    "found_pages": [
+      30,
+      18,
+      29
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 15.648249387741089,
+    "error": null
+  },
+  {
+    "question": "Dải đo (Scale Range) của Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0204 là bao nhiêu?",
+    "expected_answer": "Theo Bảng đặc tính kỹ thuật đồng hồ đo áp suất, dải đo của đồng hồ áp suất có mã hiệu 06-PG-0204 dùng để đo áp suất đầu đẩy bơm dầu bôi trơn A (L/O PUMP A DISCHARGE) là từ 0 đến 25 BarG.",
+    "actual_answer": "Dải đo (Scale Range) của Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0204 là **0~25BarG** [Doc 1, p.1], [Doc 2, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1,
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately provides the scale range (0~25BarG) for the pressure gauge with code 06-PG-0204, which aligns with the information given in the expected answer.",
+    "latency": 22.369954824447632,
+    "error": null
+  },
+  {
+    "question": "Lưu chất (Fluid) được đo bởi Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0209 là gì?",
+    "expected_answer": "Theo Bảng đặc tính kỹ thuật đồng hồ đo áp suất, lưu chất được đo bởi đồng hồ áp suất có mã hiệu 06-PG-0209 tại vị trí xả phụ (SECONDARY VENT) là hỗn hợp KHÍ & CO2 (AIR & CO2).",
+    "actual_answer": "Dựa trên bảng \"PRESSURE GAGES SPECIFICATION SHEET\", lưu chất (Fluid) được đo bởi Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0209 là **AIR & CO2** [Doc 1, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the fluid as AIR & CO2 based on the provided document and the pressure gauge code.",
+    "latency": 21.98384928703308,
+    "error": null
+  },
+  {
+    "question": "Trong trường hợp CASE 1 (kiểm tra định kỳ 4-6 năm), những bộ phận nào của Bơm cấp liệu Amoniac cần được chuẩn bị sẵn tại công trường?",
+    "expected_answer": "Theo đề xuất bảo trì, trong trường hợp CASE 1 (kiểm tra định kỳ 4-6 năm), các bộ phận cần chuẩn bị sẵn tại công trường bao gồm: Cụm rô-to (Rotor assembly), các bộ phận mài mòn (Wearing parts) và các bộ phận ổ đỡ (Bearing parts).",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 1,
+    "found_pages": [
+      45,
+      72,
+      44
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.70006561279297,
+    "error": null
+  },
+  {
+    "question": "Trong quá trình kiểm tra lớn (Major Inspection) sau 4-6 năm hoạt động, nếu phát hiện vết nứt trên Cánh bơm (Impeller) của Bơm cấp liệu Amoniac thì phải xử lý như thế nào?",
+    "expected_answer": "Theo quy trình kiểm tra, nếu phát hiện vết nứt trên Cánh bơm, đối với các khuyết tật nhỏ, cần loại bỏ và hoàn thiện bằng máy mài hoặc hàn sửa chữa. Nếu vết nứt không thể sửa chữa, phải thay thế bằng một chi tiết mới.",
+    "actual_answer": "Khi phát hiện vết nứt trên cánh bơm (Impeller) của Bơm cấp liệu Amoniac trong quá trình kiểm tra lớn, cần thực hiện các bước xử lý sau:\n\n*   **Ngừng hoạt động và Đánh giá sơ bộ:**\n    *   Dừng bơm ngay lập tức để đảm bảo an toàn và ngăn ngừa hư hỏng thêm.\n    *   Thực hiện đánh giá chi tiết vết nứt: vị trí, kích thước (chiều dài, chiều rộng), độ sâu, hình dạng và loại vết nứt (ví dụ: vết nứt bề mặt, vết nứt xuyên thành).\n    *   Xác định vật liệu chế tạo cánh bơm.\n    *   Xem xét điều kiện vận hành của bơm (áp suất, nhiệt độ, lưu chất Amoniac có tính ăn mòn).\n\n*   **Tham khảo Nhà sản xuất (OEM):**\n    *   Luôn ưu tiên tham khảo tài liệu hướng dẫn của nhà sản xuất bơm hoặc liên hệ trực tiếp với họ để được tư vấn cụ thể. Họ có thông tin chính xác nhất về vật liệu, thiết kế và khả năng sửa chữa.\n\n*   **Quyết định Sửa chữa hay Thay thế:**\n    *   **Thay thế cánh bơm (Khuyến nghị cao):**\n        *   Đây thường là lựa chọn an toàn và đáng tin cậy nhất, đặc biệt đối với bơm cấp liệu Amoniac (lưu chất nguy hiểm, áp suất cao) và khi vết nứt lớn, sâu, hoặc xuyên thành.\n        *   Thay thế đảm bảo hiệu suất và tuổi thọ của bơm như ban đầu, giảm thiểu rủi ro sự cố trong tương lai.\n        *   Nếu vật liệu cánh bơm khó hàn hoặc sửa chữa không đảm bảo độ bền cơ học và chống ăn mòn.\n    *   **Sửa chữa cánh bơm (Cần cân nhắc cực kỳ kỹ lưỡng):**\n        *   Chỉ xem xét khi vết nứt nhỏ, nông, ở vị trí không quan trọng, và không ảnh hưởng đến tính toàn vẹn cấu trúc hoặc cân bằng của cánh bơm.\n        *   Phải được thực hiện bởi thợ hàn có trình độ cao, sử dụng quy trình hàn chuyên dụng và vật liệu hàn tương thích với vật liệu cánh bơm và môi trường Amoniac.\n        *   Sau khi sửa chữa, cần thực hiện kiểm tra không phá hủy (NDT) như kiểm tra thẩm thấu (PT) hoặc siêu âm (UT) để xác minh chất lượng mối hàn.\n        *   Cánh bơm phải được cân bằng lại động học sau khi sửa chữa để tránh rung động khi hoạt động.\n        *   Việc sửa chữa phải được sự chấp thuận của nhà sản xuất hoặc chuyên gia kỹ thuật có kinh nghiệm.\n\n*   **Phân tích nguyên nhân gốc (Root Cause Analysis):**\n    *   Điều tra nguyên nhân gây ra vết nứt (ví dụ: mỏi vật liệu, ăn mòn, rung động quá mức, cavitation, lỗi vật liệu/sản xuất, vận hành sai) để đưa ra biện pháp phòng ngừa, tránh tái diễn trong tương lai.\n\n*   **Tài liệu hóa:**\n    *   Ghi lại toàn bộ quá trình kiểm tra, phát hiện, quyết định xử lý, các bước thực hiện và kết quả. Đây là thông tin quan trọng cho việc bảo trì và quản lý tài sản sau này.",
+    "expected_page": 2,
+    "found_pages": [
+      2,
+      2,
+      1,
+      1,
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "Both answers mention fixing small cracks by grinding or welding, and replacing the part if the crack is too severe. The generated answer gives a more detailed breakdown of the process, but it does not contradict the expected answer.",
+    "latency": 30.712504386901855,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng O-RING mã hiệu R-001 của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng, vật liệu của Phụ tùng O-RING mã hiệu R-001 là FKM.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      32,
+      31,
+      33
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.31809973716736,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng đệm ổ trượt (JOURNAL BEARING PADS) mã hiệu R-044 phía trục dẫn (DRIVER SIDE) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng, vật liệu của Phụ tùng đệm ổ trượt (JOURNAL BEARING PADS) mã hiệu R-044 phía trục dẫn (DRIVER SIDE) là S25C+WJ2B (ASTM A576 GR1025 + ASTM B23 ALLOY NO. 3).",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 10,
+    "found_pages": [
+      32,
+      29,
+      31
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.24480128288269,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng Mê cung mắt cánh (IMPELLER EYE LABYRINTH) cho tầng nén số 1 (1ST) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Mê cung mắt cánh (IMPELLER EYE LABYRINTH) cho tầng nén số 1, mã hiệu S-001, là AC7A-F.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      36,
+      35,
+      37
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 12.248451471328735,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng Ngõng chặn nghiêng (TILTING PADS) phía ổ chặn (THRUST BEARING SIDE) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Ngõng chặn nghiêng (TILTING PADS) phía ổ chặn, mã hiệu S-016, là S25C+WJ2B (ASTM A576 GR1025 + ASTM B23 ALLOY NO. 3).",
+    "actual_answer": "Vật liệu nền (Base material) của Phụ tùng Ngõng chặn nghiêng (Tilting Pads) phía ổ chặn (Thrust Bearing Side) của thiết bị K06101 là **CS** (Carbon Steel - Thép Carbon) [Doc 7, p.1; Doc 8, p.1].\n\nNgoài ra, tài liệu cũng chỉ rõ độ dày lớp Babbit là 1.5 mm [Doc 7, p.1; Doc 8, p.1].",
+    "expected_page": 5,
+    "found_pages": [
+      33,
+      32,
+      34
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "The generated answer provides \"CS (Carbon Steel - Thép Carbon)\" as the material, while the expected answer specifies \"S25C+WJ2B (ASTM A576 GR1025 + ASTM B23 ALLOY NO. 3)\". These are different materials. The generated answer also includes babbit layer thickness which is not in the expected answer.",
+    "latency": 19.860551834106445,
+    "error": null
+  },
+  {
+    "question": "Cụm làm kín khí khô (DRY GAS SEAL ASSEMBLY) phía trục dẫn (DRIVER SIDE) của thiết bị K06101 / KT06101 có mã phụ tùng là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, cụm làm kín khí khô (DRY GAS SEAL ASSEMBLY) phía trục dẫn (DRIVER SIDE), mã hiệu S-051, có mã phụ tùng là 3N4-019422-62001.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 12,
+    "found_pages": [
+      19,
+      25,
+      18
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 23.15777039527893,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Vòng dung sai (TOLERANCE RING) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Vòng dung sai (TOLERANCE RING), mã hiệu S-301, là MONEL K-500.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 19,
+    "found_pages": [
+      32,
+      19,
+      31
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.888025045394897,
+    "error": null
+  },
+  {
+    "question": "Dụng cụ chuyên dụng cho phớt khí khô (SPECIAL TOOL FOR DRY GAS SEAL) của thiết bị K06101 / KT06101 được cung cấp cho máy nén nào?",
+    "expected_answer": "Theo danh mục dụng cụ chuyên dụng, dụng cụ cho phớt khí khô (SPECIAL TOOL FOR DRY GAS SEAL) của thiết bị K06101 / KT06101 chỉ được cung cấp cho máy nén cao áp (1set for HP).",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      17,
+      19,
+      16
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.3348286151886,
+    "error": null
+  },
+  {
+    "question": "Tình trạng cung cấp bộ hiệu chuẩn cho hệ thống BNC (CARIBRATION KIT FOR BNC SYSTEM) của thiết bị K06101 / KT06101 như thế nào?",
+    "expected_answer": "Theo danh mục dụng cụ chuyên dụng, bộ hiệu chuẩn cho hệ thống BNC (CARIBRATION KIT FOR BNC SYSTEM) của thiết bị K06101 / KT06101 nằm ngoài phạm vi cung cấp (Out of Scope).",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      30,
+      19,
+      29
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.332982540130615,
+    "error": null
+  },
+  {
+    "question": "Số lượng que dò rung (Vibration probe) dự phòng cho hai năm vận hành của thiết bị máy nén CO2 K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo danh mục phụ tùng, số lượng que dò rung (Vibration probe) dự phòng cho hai năm vận hành của máy nén CO2 là 2 que dò.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      18,
+      29,
+      17
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 17.728761911392212,
+    "error": null
+  },
+  {
+    "question": "Số lượng lõi lọc cho bộ lọc phớt khí khô (Element for drygas seal filter) dự phòng cho hai năm vận hành của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo danh mục phụ tùng, số lượng lõi lọc cho bộ lọc phớt khí khô (Element for drygas seal filter) dự phòng cho hai năm vận hành là 200%.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.051034450531006,
+    "error": null
+  },
+  {
+    "question": "Các vật liệu chính để chế tạo Cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-002 của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng vận hành, các vật liệu chính để chế tạo cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-002 bao gồm: SUS420J2, SUS420J1, SNCM439, HUS60, S45C và SCM440.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      30,
+      1,
+      29
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.16044330596924,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của trục răng (PINION SHAFT) của hộp số HCD025 của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng vận hành, vật liệu của trục răng (PINION SHAFT) của hộp số HCD025 là SNC815.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      30,
+      19,
+      29
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.3851637840271,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của trục bánh răng (GEAR SHAFT) của hộp số HCD025 của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng vận hành, vật liệu của trục bánh răng (GEAR SHAFT) của hộp số HCD025 là SCM420.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      30,
+      19,
+      29
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 19.034844160079956,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng Mê cung gạt dầu (OIL SCRAPER LABYRINTH) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Phụ tùng Mê cung gạt dầu (OIL SCRAPER LABYRINTH), mã hiệu S-049, là AC7A-F.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 11,
+    "found_pages": [
+      30,
+      29,
+      31
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.772735118865967,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của Phụ tùng Vòng đệm làm kín (SEAL WASHER) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Phụ tùng Vòng đệm làm kín (SEAL WASHER), mã hiệu S-069, là SPCC.",
+    "actual_answer": "Trong các tài liệu được cung cấp, không có phụ tùng nào được gọi chính xác là \"Vòng đệm làm kín (SEAL WASHER)\". Tuy nhiên, có một mục được liệt kê là",
+    "expected_page": 15,
+    "found_pages": [
+      16,
+      27,
+      15
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer states that there is no such part, while the expected answer provides the exact material of the part.",
+    "latency": 27.012701988220215,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của dụng cụ Cảo khớp nối (GEAR PULLER) phía tuabin (TURBINE SIDE) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục dụng cụ chuyên dụng, bộ dụng cụ Cảo khớp nối (GEAR PULLER) phía tuabin, mã hiệu T-047, bao gồm các chi tiết làm từ vật liệu SCM440 (GUIDE), S45C (SLEEVE), SCM435 (PLUG), và NBR (O-RING).",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 11,
+    "found_pages": [
+      12,
+      30,
+      11
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.592565774917603,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của dụng cụ Chìa vặn lục giác (HEXAGON WRENCH KEY) kích thước 10mm của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo danh mục dụng cụ chuyên dụng, vật liệu của bộ dụng cụ Chìa vặn lục giác (HEXAGON WRENCH KEY), bao gồm cả kích thước 10mm (mã hiệu T-101-07), là SCM435.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 20,
+    "found_pages": [
+      18,
+      12,
+      17
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 22.099154233932495,
+    "error": null
+  },
+  {
+    "question": "Model của tuabin hơi (STEAM TURBINE) cho thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, model của tuabin hơi (STEAM TURBINE) cho thiết bị K06101 / KT06101 là ENKS40/45.",
+    "actual_answer": "Dựa trên các tài liệu được cung cấp, model (loại sản phẩm) của tuabin hơi (STEAM TURBINE) cho thiết bị KT06101 là **ENK40/45/60** [Doc 7, p.1].\n\nThông tin chi tiết:\n*   **Loại sản phẩm (Product type):** ENK40/45/60 [Doc 7, p.1].\n*   **Mã sản phẩm (Product code):** WT8043 [Doc 7, p.1].\n*   Trong danh sách đóng gói chi tiết, tuabin hơi cho KT06101 được xác định với mã hiệu (Spec) là WT8043 [Doc 8, p.3].\n*   Các tài liệu khác mô tả đây là loại tuabin ngưng tụ, trích hơi - bù hơi (Extraction-induction Condensate Turbine) nhưng không điền thông tin vào mục \"Model\" [Doc 1, p.1; Doc 2, p.1].",
+    "expected_page": 3,
+    "found_pages": [
+      1,
+      3
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer states the model is ENK40/45/60 while the expected answer states the model is ENKS40/45. The 'S' is missing in the generated answer, and the '60' is added, which changes the correctness.",
+    "latency": 22.66271162033081,
+    "error": null
+  },
+  {
+    "question": "Vật liệu chế tạo rotor của tuabin hơi cho thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, vật liệu chế tạo rotor của tuabin hơi cho thiết bị K06101 / KT06101 là 28CrMoNiV49.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 5,
+    "found_pages": [
+      4,
+      29,
+      3
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 20.017353057861328,
+    "error": null
+  },
+  {
+    "question": "Lưu lượng hơi trích (Extraction Flow) tối đa của tuabin hơi của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, lưu lượng hơi trích (Extraction Flow) tối đa của tuabin hơi của thiết bị K06101 / KT06101 là 63500 kg/giờ.",
+    "actual_answer": "Dựa trên các tài liệu được cung cấp, lưu lượng hơi trích (Extraction Flow) tối đa của tuabin hơi K06101 / KT06101 là **63500 kg/h** [Doc 3, p. 1].\n\nTrong bảng thông số \"STEAM CONDITIONS\", tại mục \"Extraction(controlled)\", giá trị lưu lượng (Flow) tối đa (Max) được ghi là 63500 kg/h [Doc 3, p. 1].",
+    "expected_page": 3,
+    "found_pages": [
+      1
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the maximum extraction flow as 63500 kg/h, which matches the expected answer.",
+    "latency": 11.789549589157104,
+    "error": null
+  },
+  {
+    "question": "Vật liệu chế tạo vỏ tuabin cao áp (HIGH PRESSURE CASING) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, vật liệu chế tạo vỏ tuabin cao áp (HIGH PRESSURE CASING) của thiết bị K06101 / KT06101 là ZG22Mo.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 5,
+    "found_pages": [
+      32,
+      1,
+      1
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 13.04234266281128,
+    "error": null
+  },
+  {
+    "question": "Model của Bình ngưng bề mặt (SURFACE CONDENSER) của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, model của Bình ngưng bề mặt (SURFACE CONDENSER) của thiết bị K06101 / KT06101 là N-1600-22.",
+    "actual_answer": "Model (Spec / 物号) của Bình ngưng bề mặt (Surface Condenser) là **2-3580-2300-08** [Doc 5, p. 7].\n\nThông tin này được tìm thấy trong danh sách đóng gói chi tiết (Detailed Packing List), trong đó thiết bị được mô tả là \"凝汽器 / Surface Condencer Condenser\" [Doc 5, p. 7].",
+    "expected_page": 2,
+    "found_pages": [
+      7
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "The generated answer provides a different model number than the expected answer. The generated answer claims the model is 2-3580-2300-08, while the expected answer says the model is N-1600-22. Thus, the information is not the same.",
+    "latency": 21.670335054397583,
+    "error": null
+  },
+  {
+    "question": "Vật liệu chế tạo các ống (TUBES) trong bình ngưng của thiết bị K06101 / KT06101 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, vật liệu chế tạo các ống (TUBES) trong bình ngưng của thiết bị K06101 / KT06101 là B338-2.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      16,
+      29,
+      15
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 16.234719038009644,
+    "error": null
+  },
+  {
+    "question": "Kết nối đầu vào hơi làm kín (Sealing Steam Inlet) của tuabin hơi ENKS40/45 có mã hiệu là gì và kích thước danh nghĩa là bao nhiêu?",
+    "expected_answer": "Theo bảng kết nối đường ống, kết nối đầu vào hơi làm kín (Sealing Steam Inlet) của tuabin hơi ENKS40/45 có mã hiệu là 'Da' và có đường kính danh nghĩa là 1 inch, cấp áp suất 600lbs.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 3,
+    "found_pages": [
+      139,
+      140,
+      141
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 16.971447229385376,
+    "error": null
+  },
+  {
+    "question": "Kết nối đầu vào dầu bôi trơn (Lube oil inlet) của tuabin hơi ENKS40/45 có mã hiệu là gì và kích thước danh nghĩa là bao nhiêu?",
+    "expected_answer": "Theo bảng kết nối đường ống, kết nối đầu vào dầu bôi trơn (Lube oil inlet) của tuabin hơi ENKS40/45 có mã hiệu là 'Oa' và có đường kính danh nghĩa là 3 inch, cấp áp suất 150lbs.",
+    "actual_answer": "[LOW CONFIDENCE]\nTheo sơ đồ đường ống hệ thống dầu (PIPING DIAGRAM OF OIL SYSTEM), kết nối đầu vào dầu bôi trơn (Lube oil inlet) của tuabin hơi ENKS40/45 có các thông số sau:\n*   **Mã hiệu:** N6 [Doc 10, p.1]\n*   **Kích thước danh nghĩa:** DN40 [Doc 10, p.1]",
+    "expected_page": 5,
+    "found_pages": [
+      1
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "The generated answer and the expected answer have conflicting information. The code and size of the Lube oil inlet are different.",
+    "latency": 20.617038011550903,
+    "error": null
+  },
+  {
+    "question": "Công suất hoạt động bình thường (Normal Power) của tuabin hơi ENKS40/45/60 của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo biểu đồ tiêu thụ hơi, công suất hoạt động bình thường (Normal Power) của tuabin hơi ENKS40/45/60 là 9481 kW.",
+    "actual_answer": "Công suất hoạt động bình thường (thiết kế) của tuabin hơi ENKS40/45/60 là 9481 kW [Doc 1, p.1]. Thông số này được ghi trên biểu đồ đường cong công suất-lưu lượng của tuabin [Doc 1, p.1; Doc 2, p.1].",
+    "expected_page": 2,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the normal power of the turbine as 9481 kW, matching the expected answer. The extra information regarding the source and design power does not contradict the expected answer.",
+    "latency": 22.158967971801758,
+    "error": null
+  },
+  {
+    "question": "Lưu lượng hơi cấp chính (Inlet flow) tại điểm hoạt động bình thường của tuabin hơi ENKS40/45/60 của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "expected_answer": "Theo biểu đồ tiêu thụ hơi, tại điểm hoạt động bình thường, lưu lượng hơi cấp chính (Inlet flow) của tuabin hơi ENKS40/45/60 là 93.23 t/h.",
+    "actual_answer": "Dựa trên biểu đồ \"Power-flow Curve\" (Đường cong Công suất - Lưu lượng), lưu lượng hơi cấp chính (Inlet flow) tại điểm hoạt động bình thường (Normal) của tuabin hơi ENKS40/45/60 (thiết bị K06101 / KT06101) là **93.23 t/h** [Doc 9, p. 2].\n\nĐiểm hoạt động bình thường này tương ứng với các thông số sau:\n*   **Công suất (Power):** 9481 kW [Doc 9, p. 2]\n*   **Lưu lượng hơi trích (Extraction):** 57.95 t/h [Doc 8, p. 1]\n*   **Tốc độ (Speed):** 7610 r/min [Doc 9, p. 2]",
+    "expected_page": 2,
+    "found_pages": [
+      2,
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the inlet flow as 93.23 t/h, which matches the expected answer.",
+    "latency": 27.807214736938477,
+    "error": null
+  },
+  {
+    "question": "Áp suất đầu ra (Discharge Pressure) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, áp suất đầu ra của máy nén CO2 K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là 158 bar A.",
+    "actual_answer": "Áp suất đầu ra (Discharge Pressure), hay còn gọi là áp suất xả (Exhaust Pressure), của thiết bị KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là **0.15 Bar A** [Doc 1, p.1; Doc 2, p.1].\n\nThông tin này được tìm thấy trong bảng \"STEAM CONDITIONS\", tại hàng \"Normal\" (số 22) và cột \"EXHAUST (condensed)\" [Doc 1, p.1; Doc 2, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "The generated answer states the discharge pressure is 0.15 Bar A, whereas the expected answer states it is 158 bar A. This is a significant difference, indicating the generated answer is incorrect.",
+    "latency": 20.736589908599854,
+    "error": null
+  },
+  {
+    "question": "Thành phần phần trăm mol của khí Carbon dioxide (CO2) ở đầu vào cấp 1 của thiết bị K06101 trong điều kiện bình thường là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, trong điều kiện bình thường, thành phần phần trăm mol của khí Carbon dioxide (CO2) ở đầu vào cấp 1 của thiết bị K06101 là 99%.",
+    "actual_answer": "Theo bảng phân tích khí (Gas analysis) tại đầu vào cấp 1 (At the inlet of 1st stage), thành phần phần trăm mol của khí Carbon dioxide (CO2) trong điều kiện bình thường (Normal Condition) là **99 Mol %** [Doc 2, p.4].",
+    "expected_page": 3,
+    "found_pages": [
+      4
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the percentage of CO2 at the inlet of the 1st stage of the K06101 equipment as 99 mol %, which matches the expected answer of 99%.",
+    "latency": 24.43946385383606,
+    "error": null
+  },
+  {
+    "question": "Vật liệu của các ống (Tubes) của thiết bị E06140 là gì?",
+    "expected_answer": "Theo bảng dữ liệu, vật liệu của các ống (Tubes) trong bình ngưng bề mặt của thiết bị E06140 là Titanium.",
+    "actual_answer": "[LOW CONFIDENCE]\nVật liệu của các ống (Tubes) của thiết bị E06140 là **Titanium** [Doc 1, p.1].\n\nThông tin này được tìm thấy trong bảng \"CONSTRUCTION OF ONE SHELL\", tại hàng \"Tube No.\" và cột \"Material\" [Doc 1, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the material of the tubes in device E06140 as Titanium, which aligns with the expected answer.",
+    "latency": 19.29782748222351,
+    "error": null
+  },
+  {
+    "question": "Áp suất hơi nước đầu vào (Inlet steam pressure) của thiết bị E06140 là bao nhiêu?",
+    "expected_answer": "Theo ghi chú trong bảng dữ liệu, áp suất hơi nước đầu vào của thiết bị E06140 sẽ là 0.15 Bar(A).",
+    "actual_answer": "[LOW CONFIDENCE]\nÁp suất hơi nước đầu vào (Inlet steam pressure) của thiết bị E06140 là **0.15 Bar(A)** [Doc 1, p.1].\n\nThông tin này được ghi trong mục \"Remarks\" ở cuối bảng dữ liệu, tại dòng 57: \"(1) Inlet steam pressure will be 0.15 Bar(A).\" [Doc 1, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately states the inlet steam pressure of device E06140 as 0.15 Bar(A), which matches the expected answer.",
+    "latency": 19.36440110206604,
+    "error": null
+  },
+  {
+    "question": "Áp suất và nhiệt độ hơi nước đầu vào (Inlet) bình thường của thiết bị KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, áp suất và nhiệt độ hơi nước đầu vào (Inlet) bình thường của thiết bị KT06101 lần lượt là 39 Bar A và 370°C.",
+    "actual_answer": "Theo tài liệu cung cấp, áp suất và nhiệt độ hơi nước đầu vào (Inlet) bình thường của thiết bị KT06101 là:\n*   **Áp suất**: 39 Bar A [Doc 1, p.1; Doc 2, p.1]\n*   **Nhiệt độ**: 370 °C [Doc 1, p.1; Doc 2, p.1]",
+    "expected_page": 1,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately states that the inlet pressure of KT06101 is 39 Bar A and the temperature is 370 degrees C.",
+    "latency": 18.39676260948181,
+    "error": null
+  },
+  {
+    "question": "Lưu lượng hơi trích (Extraction Flow) ở điều kiện hoạt động bình thường của thiết bị KT06101 là bao nhiêu?",
+    "expected_answer": "Theo bảng dữ liệu, lưu lượng hơi trích (Extraction Flow) ở điều kiện hoạt động bình thường của thiết bị KT06101 là 57950 kg/h.",
+    "actual_answer": "Lưu lượng hơi trích (Extraction Flow) ở điều kiện hoạt động bình thường của thiết bị KT06101 là **57950 kg/h** [Doc 1, p.1].\n\nThông số này được tìm thấy trong bảng \"STEAM CONDITIONS\", tại hàng \"Normal\" và cột \"Extraction(controlled)\" [Doc 1, p.1].",
+    "expected_page": 1,
+    "found_pages": [
+      1
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the extraction flow as 57950 kg/h, which matches the expected answer.",
+    "latency": 22.51614546775818,
+    "error": null
+  },
+  {
+    "question": "Thiết bị đo áp suất (PRESSURE TRANSMITTER) tại đường hơi trích (EXTRACTION) của tuabin hơi K06101 / KT06101 có mã hiệu là gì và dải đo của nó là bao nhiêu?",
+    "expected_answer": "Theo danh sách thiết bị đo, thiết bị đo áp suất tại đường hơi trích (EXTRACTION), mã hiệu 06-PT-101/-0250, có dải đo từ 0 đến 60 BarG.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      1,
+      1,
+      2
+    ],
+    "page_correct": true,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 17.37279200553894,
+    "error": null
+  },
+  {
+    "question": "Thiết bị đo nhiệt độ (RTD DUPLEX TYPE) tại ổ đỡ hướng kính phía sau (REAR JOURNAL BEARING) của tuabin hơi K06101 / KT06101 có mã hiệu là gì và dải đo là bao nhiêu?",
+    "expected_answer": "Theo danh sách thiết bị đo, thiết bị đo nhiệt độ tại ổ đỡ hướng kính phía sau (REAR JOURNAL BEARING), mã hiệu 06-TE-0256/-0257, có dải đo từ 0 đến 200°C.",
+    "actual_answer": "Không tìm thấy mã hiệu và dải đo của thiết bị đo nhiệt độ (RTD DUPLEX TYPE) tại ổ đỡ hướng kính phía sau (REAR JOURNAL BEARING) trong ngữ cảnh được cung cấp.\n\nTài liệu xác nhận loại cảm biến nhiệt độ được sử dụng là \"RTD (DOUBLE ELEMENT)\" [Doc 3, p.1; Doc 4, p.1; Doc 5, p.1].",
+    "expected_page": 4,
+    "found_pages": [
+      1,
+      1,
+      1
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 40.91692352294922,
+    "error": null
+  },
+  {
+    "question": "Việc lắp đặt tuabin hơi của thiết bị K06101 / KT06101 yêu cầu nhiệt độ môi trường xung quanh ở mức nào?",
+    "expected_answer": "Theo tài liệu hướng dẫn vận hành, việc lắp đặt tuabin hơi nên được thực hiện ở nhiệt độ môi trường trên 5°C. Nếu nhiệt độ xuống dưới 0°C, cần phải thực hiện các biện pháp chống đông cần thiết.",
+    "actual_answer": "[LOW CONFIDENCE]\nKhông tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      18,
+      29,
+      17
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 15.525792360305786,
+    "error": null
+  },
+  {
+    "question": "Cường độ nén của vữa chèn (grouting) cho móng tuabin hơi của thiết bị K06101 / KT06101 sau 72 giờ phải đạt yêu cầu tối thiểu là bao nhiêu?",
+    "expected_answer": "Theo tài liệu hướng dẫn vận hành, cường độ nén của vữa chèn cho móng tuabin hơi sau 72 giờ phải đạt tối thiểu là ≥60N/mm².",
+    "actual_answer": "[LOW CONFIDENCE]\nCường độ nén của vữa chèn (grouting) cho móng tuabin sau 72 giờ phải đạt yêu cầu tối thiểu là ≥60 N/mm² [Doc 3, p.1].\n\nTài liệu cũng nêu rõ các yêu cầu về cường độ nén ở các thời điểm khác nhau [Doc 3, p.1]:\n*   Sau 24 giờ: ≥40 N/mm²\n*   Cường độ cuối cùng: >70 N/mm²",
+    "expected_page": 6,
+    "found_pages": [
+      1
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly states that the compressive strength of the grout for steam turbine foundations after 72 hours must be at least ≥60 N/mm².",
+    "latency": 18.593037366867065,
+    "error": null
+  },
+  {
+    "question": "Công suất định mức (Rated power) của tuabin hơi WT8043 loại ENK40/45/60 là bao nhiêu?",
+    "expected_answer": "Theo tài liệu Hướng dẫn vận hành, công suất định mức của tuabin hơi WT8043 loại ENK40/45/60 là 11040 kW.",
+    "actual_answer": "Công suất định mức (Rated power) của tuabin hơi WT8043 loại ENK40/45/60 là **11040 kW** [Doc 1, p.1], [Doc 2, p.1].",
+    "expected_page": 21,
+    "found_pages": [
+      1,
+      1
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "Both answers state the rated power is 11040 kW.",
+    "latency": 21.002591848373413,
+    "error": null
+  },
+  {
+    "question": "Tốc độ cắt (Trip speed) của tuabin hơi WT8043 loại ENK40/45/60 là bao nhiêu?",
+    "expected_answer": "Theo tài liệu Hướng dẫn vận hành, tốc độ cắt của tuabin hơi WT8043 loại ENK40/45/60 là 9009 vòng/phút (r/min).",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 21,
+    "found_pages": [
+      1,
+      139,
+      140
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 17.668315172195435,
+    "error": null
+  },
+  {
+    "question": "Mã sản phẩm (Product code) của tuabin hơi có loại sản phẩm (Product type) ENK40/45/60 là gì?",
+    "expected_answer": "Theo tài liệu Hướng dẫn vận hành, mã sản phẩm của tuabin hơi loại ENK40/45/60 là T8043.",
+    "actual_answer": "Dựa trên các tài liệu được cung cấp, mã sản phẩm (Product code) của tuabin hơi có loại sản phẩm (Product type) ENK40/45/60 là **WT8043** [Doc 1, p.1; Doc 2, p.1] hoặc **T8043** [Doc 2, p.3; Doc 3, p.2].",
+    "expected_page": 1,
+    "found_pages": [
+      13,
+      14,
+      15
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately identifies T8043 as the product code, and includes WT8043 which also appears valid based on the document references. The expected answer specifically mentions T8043.",
+    "latency": 25.809141635894775,
+    "error": null
+  },
+  {
+    "question": "Các thông số hơi nước đầu vào (Inlet steam parameters) thông thường của tuabin hơi model N là gì?",
+    "expected_answer": "Theo tài liệu Hướng dẫn vận hành, các thông số hơi nước đầu vào thông thường (Usual inlet steam parameters) của tuabin hơi model N là tối đa 10.0MPa(a) và 510°C.",
+    "actual_answer": "Theo tài liệu, ký hiệu \"N\" trong model tuabin hơi chỉ \"Các thông số hơi nước đầu vào thông thường\" (Usual inlet steam parameters) [Doc 1, p.1; Doc 2, p.1]. Các thông số này có giá trị tối đa là:\n*   Áp suất: 10.0 Mpa(a) [Doc 1, p.1; Doc 5, p.1]\n*   Nhiệt độ: 510°C [Doc 1, p.1; Doc 5, p.1]",
+    "expected_page": 11,
+    "found_pages": [
+      139,
+      140,
+      141
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "The generated answer correctly identifies the inlet steam parameters for turbine model N as 10.0 MPa(a) and 510°C, which aligns with the expected answer.",
+    "latency": 18.932780742645264,
+    "error": null
+  },
+  {
+    "question": "Khối lượng tổng (Gross Weight) của kiện hàng chứa vỏ tuabin hơi (stream turbine case) của thiết bị KT06101 là bao nhiêu?",
+    "expected_answer": "Theo danh sách đóng gói, khối lượng tổng của kiện hàng HTC-001 chứa vỏ tuabin hơi (stream turbine case) của thiết bị KT06101 là 31,700 kg.",
+    "actual_answer": "Dựa trên bảng \"Summary Packing List\", khối lượng tổng (Gross Weight) của kiện hàng chứa vỏ tuabin hơi (stream turbine case) của thiết bị KT06101 là **31,700 KG** [Doc 1, p. 2].\n\nTrong bảng, dòng đầu tiên có mô tả \"主机箱 stream turbine case\" cho \"ITEM NO. KT06101\", và giá trị tương ứng trong cột \"GROSS WEIGHT (KG)\" là 31,700 [Doc 1, p. 2].",
+    "expected_page": 2,
+    "found_pages": [
+      2
+    ],
+    "page_correct": true,
+    "content_correct": true,
+    "judge_reason": "The generated answer accurately states the gross weight of the stream turbine case of the KT06101 equipment as 31,700 kg, which is consistent with the expected answer.",
+    "latency": 21.51268482208252,
+    "error": null
+  },
+  {
+    "question": "Thể tích (Measure't) của kiện hàng chứa rotor dự phòng (spare rotor case) của thiết bị KT06101 là bao nhiêu?",
+    "expected_answer": "Theo danh sách đóng gói, thể tích của kiện hàng HTC-002 chứa rotor dự phòng (spare rotor case) của thiết bị KT06101 là 8.431 m³.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp.",
+    "expected_page": 2,
+    "found_pages": [
+      32,
+      31,
+      33
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 21.39264726638794,
+    "error": null
+  },
+  {
+    "question": "Mã hiệu vật tư (Subject No.) của phụ tùng 'Rotor assembly' cho tuabin hơi ENK40/45/60 là gì?",
+    "expected_answer": "Theo tài liệu kỹ thuật phụ tùng, mã hiệu vật tư (Subject No.) của 'Rotor assembly' (Tổng thành rotor), mã số 24, là 2-3835-8043-11.",
+    "actual_answer": "Mã hiệu vật tư (Subject No.) của phụ tùng 'Rotor assembly' (转子 ENK40/45/60 总成) cho tuabin hơi ENK40/45/60 là **2-3835-8043-11** [Doc 4, p.1].",
+    "expected_page": 3,
+    "found_pages": [
+      13,
+      14,
+      15
+    ],
+    "page_correct": false,
+    "content_correct": true,
+    "judge_reason": "The generated answer provides the correct mã hiệu vật tư (Subject No.) for the 'Rotor assembly' which is '2-3835-8043-11'.",
+    "latency": 16.9470272064209,
+    "error": null
+  },
+  {
+    "question": "Số lượng của phụ tùng 'O-sealing ring 80x3.1' cho van dừng khẩn cấp (Emergency stop valve) của tuabin hơi ENK40/45/60 là bao nhiêu?",
+    "expected_answer": "Theo danh mục phụ tùng của van dừng khẩn cấp, số lượng của phụ tùng 'O-sealing ring 80x3.1', mã số (24), là 1 chiếc.",
+    "actual_answer": "Không tìm thấy trong ngữ cảnh được cung cấp thông tin về số lượng của phụ tùng 'O-sealing ring 80x3.1' dành riêng cho van dừng khẩn cấp (Emergency stop valve) của tuabin hơi ENK40/45/60.\n\nTuy nhiên, phụ tùng 'O-sealing ring 80x3.1' được liệt kê với số lượng là 1 trong danh sách phụ tùng chung [Doc 2, p.1], [Doc 4, p.1], [Doc 6, p.1], [Doc 8, p.1].",
+    "expected_page": 7,
+    "found_pages": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "page_correct": false,
+    "content_correct": false,
+    "judge_reason": "Answer indicates not found",
+    "latency": 51.44192457199097,
+    "error": null
+  }
+]

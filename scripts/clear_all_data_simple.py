@@ -75,9 +75,17 @@ def clear_weaviate():
 def clear_artifacts():
     """Clear artifacts directories"""
     logger.info("Clearing artifacts directories...")
+
+    # Use ARTIFACTS_DIR from env, fallback to local
+    artifacts_base = os.getenv("ARTIFACTS_DIR")
+    if artifacts_base:
+        artifacts_root = Path(artifacts_base)
+    else:
+        artifacts_root = PROJECT_ROOT / "artifacts"
+
     dirs = [
-        PROJECT_ROOT / "artifacts" / "ingestion_production",
-        PROJECT_ROOT / "artifacts" / "index_production",
+        artifacts_root / "ingestion_production",
+        artifacts_root / "index_production",
     ]
 
     for d in dirs:

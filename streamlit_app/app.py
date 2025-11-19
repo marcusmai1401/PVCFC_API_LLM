@@ -1,370 +1,162 @@
 """
-PVCFC RAG System - iOS/macOS Style UI
-
-Production-grade retrieval-augmented question answering with citations.
-Clean, minimal iOS/macOS inspired interface with glassmorphism.
+PVCFC Intelligent Search System
+Modern Enterprise UI for RAG and Document Management.
 """
 
 import os
 import sys
 from pathlib import Path
 
-import requests
 import streamlit as st
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Page configuration
+# Page Config
 st.set_page_config(
-    page_title="PVCFC RAG System",
+    page_title="PVCFC Intelligent Search",
+    page_icon="🔹",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Initialize iOS/macOS theme
+# Import Components
 try:
-    from streamlit_app.utils.theme import initialize_m3_theme
-
-    initialize_m3_theme()
+    from streamlit_app.components.chat_interface_modern import render_chat_interface
+    from streamlit_app.components.doc_browser import render_doc_browser
+    from streamlit_app.components.home import render_home
+    from streamlit_app.components.pdf_viewer_embedded import render_embedded_pdf_viewer
+    from streamlit_app.components.split_layout import render_split_view
 except ImportError:
-    from utils.theme import initialize_m3_theme
-
-    initialize_m3_theme()
-
-# Additional iOS-specific styling
-st.markdown(
-    """
-<style>
-    /* Additional page-level iOS styling */
-    .block-container {
-        padding-top: 3rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 1200px !important;
-    }
-
-    /* iOS-style dividers */
-    hr {
-        margin: 24px 0 !important;
-        border: none !important;
-        height: 0.5px !important;
-        background: rgba(0, 0, 0, 0.08) !important;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+    # Fallback for direct running
+    from components.chat_interface_modern import render_chat_interface
+    from components.doc_browser import render_doc_browser
+    from components.home import render_home
+    from components.pdf_viewer_embedded import render_embedded_pdf_viewer
+    from components.split_layout import render_split_view
 
 
-def initialize_session_state():
-    """Initialize session state variables from environment."""
+def load_css():
+    """Load the premium design system."""
+    css_path = Path(__file__).parent / "styles" / "modern.css"
+    with open(css_path, "r") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+def init_session_state():
+    """Initialize global session state."""
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "home"
+
     if "api_base_url" not in st.session_state:
-        # Read from environment with fallback to localhost
         st.session_state.api_base_url = os.getenv(
-            "PVCFC_API_BASE_URL", "http://127.0.0.1:8000"
+            "PVCFC_API_BASE_URL", "http://localhost:8000"
         )
 
-    # Hardcoded feature flags for simplified UI
-    st.session_state.enable_vision = True
-    st.session_state.enable_embedding = True
+    if "pdf_viewer_state" not in st.session_state:
+        st.session_state.pdf_viewer_state = {"open": False}
 
 
-def fetch_health(base: str, timeout: int = 3) -> bool:
-    """Check if the API backend is healthy."""
-    try:
-        resp = requests.get(f"{base}/healthz", timeout=timeout)
-        return resp.ok
-    except Exception:
-        return False
-
-
-def fetch_index_stats(base: str, timeout: int = 5) -> dict:
-    """Fetch index statistics from the API."""
-    try:
-        resp = requests.get(f"{base}/index-stats", timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        return None
-
-
-def _get_first(d: dict, keys: list, default: str = "—") -> str:
-    """Extract the first available value from a dict given a list of keys."""
-    for k in keys:
-        if isinstance(d, dict) and k in d and d[k] is not None:
-            return str(d[k])
-    return default
-
-
-def show_home():
-    """Render the Home page with iOS-styled system status."""
-    # iOS-style hero header
-    st.markdown(
-        """
-    <div class="ios-card" style="margin-bottom: 32px; text-align: center;">
-        <h1 class="ios-title-large" style="margin: 0 0 12px 0;">PVCFC RAG System</h1>
-        <p class="ios-body" style="margin: 0; color: #86868b;">
-            Production-grade retrieval-augmented question answering with citations and document grounding
-        </p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Use system_status component for consistency
-    try:
-        from streamlit_app.components.system_status import render_system_status
-
-        render_system_status(st.session_state.api_base_url)
-    except ImportError:
-        try:
-            from components.system_status import render_system_status
-
-            render_system_status(st.session_state.api_base_url)
-        except Exception as e:
-            # Fallback to simple display
-            st.error(f"Could not load system status: {str(e)}")
-
-            base = st.session_state.api_base_url
-            health_ok = fetch_health(base)
-
-            if health_ok:
-                st.success("✅ Backend API is healthy")
-            else:
-                st.error(
-                    f"❌ Backend API is not reachable at `{base}`. "
-                    "Please verify the service is running."
-                )
-
-
-def show_chat_interface():
-    """Show ChatGPT-style chat interface"""
-    try:
-        from streamlit_app.components.chat_interface import render as chat_render
-
-        # Get API base URL from session state
-        api_base_url = st.session_state.get("api_base_url", "http://127.0.0.1:8000")
-
-        # Render chat interface
-        chat_render(api_base_url=api_base_url)
-    except ImportError:
-        try:
-            from components.chat_interface import render as chat_render
-
-            api_base_url = st.session_state.get("api_base_url", "http://127.0.0.1:8000")
-            chat_render(api_base_url=api_base_url)
-        except Exception as e:
-            st.error(f"❌ Error loading Chat Interface: {str(e)}")
-            st.info("Chat interface component is not available.")
-
-
-def show_query_lab():
-    """Show the Query Lab (RAG QA) interface."""
-    # Priority 1: Full-featured PDF Citation Viewer (ENABLED)
-    try:
-        from streamlit_app.components.query_lab_improved import (
-            render as query_lab_render,
-        )
-
-        # SUCCESS: Show indicator that full viewer is loaded
-        st.sidebar.markdown(
-            '<p style="font-size: 10px; color: #34c759; margin: 4px 0;">'
-            "✅ Full PDF Viewer Loaded</p>",
+def render_sidebar():
+    """Render the premium app sidebar."""
+    with st.sidebar:
+        # Brand Header
+        st.markdown(
+            """
+            <div style="padding: 0 0.5rem 1.5rem 0.5rem;">
+                <div style="font-weight: 800; font-size: 1.4rem; color: var(--color-text-primary); letter-spacing: -0.03em;">
+                    <span style="color: var(--color-brand);">PVCFC</span> Search
+                </div>
+                <div style="font-size: 0.8rem; color: var(--color-text-tertiary); font-weight: 500;">
+                    Engineering Intelligence
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        query_lab_render()
-        return
-    except Exception as e:
-        # Show warning that fallback is being used
-        st.sidebar.warning(f"⚠️ Full viewer unavailable: {str(e)[:50]}...")
-        import logging
 
-        logging.error(f"query_lab_improved failed to load: {e}", exc_info=True)
-        pass
+        # Navigation Section
+        st.markdown('<div class="nav-section">PLATFORM</div>', unsafe_allow_html=True)
 
-    # Priority 2: iOS/macOS minimal version (fallback)
-    try:
-        from streamlit_app.components.query_lab_ios import render as query_lab_render
+        nav_items = [
+            {"id": "home", "icon": "🏠", "label": "Overview"},
+            {"id": "chat", "icon": "💬", "label": "AI Assistant"},
+            {"id": "documents", "icon": "📂", "label": "Repository"},
+        ]
 
-        st.sidebar.markdown(
-            '<p style="font-size: 10px; color: #ff9500; margin: 4px 0;">'
-            "⚠️ Minimal Viewer (No PDF)</p>",
+        for item in nav_items:
+            is_active = st.session_state.current_page == item["id"]
+            active_class = "active" if is_active else ""
+
+            if st.button(
+                f"{item['icon']}  {item['label']}",
+                key=f"nav_{item['id']}",
+                use_container_width=True,
+                type="secondary" if not is_active else "primary",
+            ):
+                st.session_state.current_page = item["id"]
+                # Close PDF on nav change to keep view clean, or keep it?
+                # Let's keep it open if they navigate, except Home.
+                if item["id"] == "home":
+                    st.session_state.pdf_viewer_state["open"] = False
+                st.rerun()
+
+        # Tools Section
+        st.markdown('<div class="nav-section">TOOLS</div>', unsafe_allow_html=True)
+        st.button(
+            "⚙️ Settings", key="nav_settings", use_container_width=True, disabled=True
+        )
+        st.button(
+            "📊 Analytics", key="nav_analytics", use_container_width=True, disabled=True
+        )
+
+        # Footer Profile
+        st.markdown(
+            """
+            <div style="margin-top: auto; padding-top: 2rem; border-top: 1px solid var(--color-border);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center;">👤</div>
+                    <div>
+                        <div style="font-size: 0.85rem; font-weight: 600;">Engineer User</div>
+                        <div style="font-size: 0.75rem; color: var(--color-text-tertiary);">admin@pvcfc.com</div>
+                    </div>
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        query_lab_render()
-        return
-    except Exception as e:
-        st.sidebar.error(f"Fallback 2 failed: {str(e)[:30]}")
-        import logging
-
-        logging.error(f"query_lab_ios failed to load: {e}", exc_info=True)
-        pass
-
-    # Priority 3: Legacy component (last resort)
-    try:
-        from streamlit_app.components.query_lab import render as query_lab_render
-
-        st.sidebar.markdown(
-            '<p style="font-size: 10px; color: #ff3b30; margin: 4px 0;">'
-            "⚠️ Legacy Viewer</p>",
-            unsafe_allow_html=True,
-        )
-        query_lab_render()
-    except ImportError:
-        try:
-            from components.query_lab import render as query_lab_render
-
-            st.sidebar.markdown(
-                '<p style="font-size: 10px; color: #ff3b30; margin: 4px 0;">'
-                "⚠️ Legacy Viewer</p>",
-                unsafe_allow_html=True,
-            )
-            query_lab_render()
-        except Exception as e:
-            st.error(f"❌ Error loading Query Lab: {str(e)}")
-            st.info(
-                "The Query Lab component is not available. "
-                "Please check the components directory."
-            )
 
 
 def main():
-    """Main application entry point."""
+    # 1. Setup
+    init_session_state()
+    load_css()
 
-    # Initialize session state
-    initialize_session_state()
+    # 2. Sidebar
+    render_sidebar()
 
-    # Sidebar navigation with iOS styling
-    with st.sidebar:
-        st.markdown(
-            """
-        <div style="padding: 8px 0 24px 0;">
-            <h1 class="ios-title" style="margin: 0;">PVCFC RAG</h1>
-            <p class="ios-caption" style="margin: 8px 0 0 0;">Document Intelligence</p>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
+    # 3. Main Content Routing
+    page = st.session_state.current_page
 
-        st.markdown("<hr>", unsafe_allow_html=True)
+    # Wrapper functions for split view compatibility
+    def content_home():
+        render_home()
 
-        # Initialize sidebar collapsed state
-        if "sidebar_collapsed" not in st.session_state:
-            st.session_state.sidebar_collapsed = False
+    def content_chat():
+        render_chat_interface(st.session_state.api_base_url)
 
-        # ISSUE 4 FIX: Simplified navigation - 2 pages (removed Advanced)
-        pages = ["Home", "Chat"]
-        page_icons = ["🏠", "💬"]
+    def content_docs():
+        render_doc_browser()
 
-        # Show full labels if expanded, icons only if collapsed
-        if not st.session_state.sidebar_collapsed:
-            page_labels = [f"{icon} {name}" for icon, name in zip(page_icons, pages)]
-        else:
-            page_labels = page_icons
-
-        page = st.radio(
-            "Navigate",
-            pages,
-            format_func=lambda x: page_labels[pages.index(x)],
-            index=1,  # Default to Chat
-            key="navigation",
-            label_visibility="collapsed",
-        )
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-        # API Configuration
-        st.markdown(
-            '<p class="ios-caption" style="margin-bottom: 8px; text-transform: uppercase; font-weight: 600;">API Configuration</p>',
-            unsafe_allow_html=True,
-        )
-        new_api_url = st.text_input(
-            "API Base URL",
-            value=st.session_state.api_base_url,
-            key="api_url_input",
-            label_visibility="collapsed",
-            placeholder="http://127.0.0.1:8000",
-            help="Backend API endpoint",
-        )
-
-        if new_api_url != st.session_state.api_base_url:
-            # Validate URL format
-            import re
-
-            url_pattern = r"^https?://[\w\-\.]+(:\d+)?/?$"
-            if not re.match(url_pattern, new_api_url.rstrip("/")):
-                st.error("Invalid URL format. Use: http://hostname:port")
-            else:
-                st.session_state.api_base_url = new_api_url.rstrip(
-                    "/"
-                )  # Remove trailing slash
-                st.success("API URL updated")
-                st.rerun()
-
-        # New Chat button in sidebar
-        if page == "Chat":
-            st.markdown("<hr>", unsafe_allow_html=True)
-            if st.button(
-                "🔄 New Conversation", use_container_width=True, type="primary"
-            ):
-                st.session_state.conversation_id = None
-                st.session_state.conversation_history = []
-                st.session_state.message_offset = 0
-                st.success("✓ New conversation started")
-                st.rerun()
-
-        # Minimal backend status indicator
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown(
-            '<p class="ios-caption" style="margin-bottom: 12px; text-transform: uppercase; font-weight: 600;">System Status</p>',
-            unsafe_allow_html=True,
-        )
-        base = st.session_state.api_base_url
-        is_healthy = fetch_health(base, timeout=2)
-
-        if is_healthy:
-            st.markdown(
-                """
-            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0;">
-                <div class="ios-status-dot ios-status-healthy"></div>
-                <span class="ios-body" style="font-weight: 500;">Healthy</span>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0;">
-                <div class="ios-status-dot ios-status-error"></div>
-                <span class="ios-body" style="font-weight: 500;">Offline</span>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-        # Footer
-        st.markdown(
-            """
-        <div style="margin-top: auto; padding-top: 24px;">
-            <p class="ios-caption" style="margin: 0;">PVCFC RAG System v0.8.0</p>
-            <p class="ios-caption" style="margin: 4px 0 0 0;">iOS/macOS Design</p>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
-    # Route to selected page
-    if page == "Home":
-        show_home()
-    elif page == "Chat":
-        show_chat_interface()
-    # ISSUE 4: Advanced tab removed - PDF viewer now integrated in Chat
+    # Route
+    if page == "home":
+        # Home always full width
+        content_home()
+    elif page == "chat":
+        render_split_view(content_chat, render_embedded_pdf_viewer)
+    elif page == "documents":
+        render_split_view(content_docs, render_embedded_pdf_viewer)
 
 
 if __name__ == "__main__":

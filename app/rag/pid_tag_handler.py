@@ -130,19 +130,58 @@ class PIDTagHandler:
             else:
                 return (f"Tag {tag_name} was not found in the database.", [])
 
-        # Find results that actually contain the tag
-        matching_results = []
-        for result in retrieval_results[:10]:  # Check top 10
-            text = result.text if hasattr(result, "text") else result.get("text", "")
-            # Normalize tag for comparison (remove spaces, hyphens)
-            tag_normalized = re.sub(r"[\s\-]", "", tag_name.upper())
+        # Normalize tag for comparison (remove spaces, hyphens)
+        tag_normalized = re.sub(r"[\s\-]", "", tag_name.upper())
+
+        # Find high-confidence tag hits from spatial/tags branch first,
+        # then fall back to generic text matches across retrieval_results.
+        spatial_tag_hits: List = []
+        text_hits: List = []
+
+        for result in retrieval_results:
+            # Extract text safely from RetrievalResult or dict
+            if hasattr(result, "text"):
+                text = result.text or ""
+            elif isinstance(result, dict):
+                text = result.get("text", "") or ""
+            else:
+                text = ""
+
             text_normalized = re.sub(r"[\s\-]", "", text.upper())
 
+            # Determine effective source (tags vs chunks)
+            source = getattr(result, "source", None)
+            if not source and hasattr(result, "metadata") and result.metadata:
+                source = result.metadata.get("source")
+
+            # Level 2 spatial/tag results come from HybridWithTagsRetriever
+            # with source="tags"; treat these as strongest evidence.
+            if source == "tags":
+                # For safety, still require a normalized match when text is present
+                if not text or tag_normalized in text_normalized:
+                    spatial_tag_hits.append(result)
+                    continue
+
+            # Generic text-based match (any branch)
             if tag_normalized in text_normalized:
-                matching_results.append(result)
+                text_hits.append(result)
+
+        # Decide which set of matches to use
+        if spatial_tag_hits:
+            matching_results = spatial_tag_hits
+            logger.info(
+                f"Using {len(matching_results)} spatial/tag hits for tag-location of {tag_name}"
+            )
+        elif text_hits:
+            matching_results = text_hits
+            logger.info(
+                f"Using {len(matching_results)} text hits for tag-location of {tag_name}"
+            )
+        else:
+            matching_results = []
 
         if not matching_results:
-            # Tag not found in text, but retrieval returned results
+            # Tag not found in any text/tag result, but retrieval returned results
             # Use top result as best guess
 
             # Get document name from first result

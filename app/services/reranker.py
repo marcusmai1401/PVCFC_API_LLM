@@ -37,9 +37,10 @@ class RerankerService:
             model_name: CrossEncoder model name (default: BAAI/bge-reranker-base)
         """
         self.model_name = model_name or os.getenv(
-            "RERANKER_MODEL", "BAAI/bge-reranker-base"
+            "RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"
         )
-        self._model: Optional[CrossEncoder] = None
+        self._model = None  # Can be FlagReranker or CrossEncoder
+        self._model_type = None  # Track which type is loaded
         self.batch_size = int(os.getenv("RERANKER_BATCH_SIZE", "32"))
 
         logger.info(
@@ -48,11 +49,51 @@ class RerankerService:
         )
 
     def _ensure_model(self):
-        """Lazy load the CrossEncoder model."""
+        """Lazy load the reranker model (prefer FlagReranker with GPU)."""
         if self._model is None:
-            logger.info(f"Loading CrossEncoder model: {self.model_name}")
-            self._model = CrossEncoder(self.model_name, max_length=512)
-            logger.info(f"CrossEncoder model loaded successfully")
+            logger.info(f"Loading reranker model: {self.model_name}")
+
+            # Try FlagReranker first (BAAI v2-m3 works best with this)
+            try:
+                import torch
+                from FlagEmbedding import FlagReranker
+
+                # Detect device
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                use_fp16 = device == "cuda"  # Only use FP16 on CUDA
+
+                logger.info(
+                    f"Attempting to load FlagReranker: device={device}, use_fp16={use_fp16}"
+                )
+
+                self._model = FlagReranker(
+                    self.model_name, use_fp16=use_fp16, device=device
+                )
+                self._model_type = "flag"
+
+                logger.info(
+                    f"✓ FlagReranker loaded successfully on {device} "
+                    f"(model={self.model_name}, fp16={use_fp16})"
+                )
+
+            except ImportError as e:
+                logger.warning(
+                    f"FlagEmbedding not installed ({e}). "
+                    f"Falling back to CrossEncoder (slower)."
+                )
+                self._model = CrossEncoder(self.model_name, max_length=512)
+                self._model_type = "cross"
+                logger.info(f"✓ CrossEncoder loaded: {self.model_name}")
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load FlagReranker on CUDA: {e}. "
+                    f"Falling back to CPU with CrossEncoder."
+                )
+                # Fallback to CPU with CrossEncoder
+                self._model = CrossEncoder(self.model_name, max_length=512)
+                self._model_type = "cross"
+                logger.info(f"✓ CrossEncoder loaded (CPU fallback): {self.model_name}")
 
     def rerank_chunks(
         self,
@@ -79,9 +120,15 @@ class RerankerService:
         # Prepare query-text pairs
         pairs = [[query, chunk.get("text", "")] for chunk in chunks]
 
-        # Get reranking scores
+        # Get reranking scores (API differs between FlagReranker and CrossEncoder)
         logger.info(f"Reranking {len(chunks)} chunks for query: {query[:50]}...")
-        scores = self._model.predict(pairs, batch_size=self.batch_size)
+
+        if self._model_type == "flag":
+            # FlagReranker uses compute_score
+            scores = self._model.compute_score(pairs, batch_size=self.batch_size)
+        else:
+            # CrossEncoder uses predict
+            scores = self._model.predict(pairs, batch_size=self.batch_size)
 
         # Combine chunks with scores
         chunk_scores = list(zip(chunks, scores))

@@ -1,5 +1,5 @@
 
-# PVCFC RAG — README - LAST UPDATE: 07/01/2025
+# PVCFC RAG — README - LAST UPDATE: 19/11/2025
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
@@ -120,6 +120,11 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 5. **Tag Reranking**: Boost exact tag matches (×10.0), fuzzy matches (×2.0-3.0).
 6. **Generation**: Có thể sử dụng **tag crops** cho vision citations.
 7. **Trả về**: **answer** + **citations** (có `bbox` + `crop_path` nếu từ tags).
+8. **P&ID Tag Location Queries (NEW)**: với `query_type="pid"` và câu hỏi dạng tag ngắn (vd: `"04 ZSH 4326/A"`), router `/ask` có thể nhận diện **truy vấn vị trí tag** và:
+   * Bỏ qua LLM sinh tự do, thay vào đó dùng `PIDTagHandler` để trả về câu trả lời dạng: `"Tag 04 ZSH 4326 xuất hiện ở [Doc 1, p.89]"`.
+   * Chạy một lượt truy vấn P&ID chuyên biệt (tags retriever) với `top_k` lớn hơn để **luôn bao phủ trang thực sự chứa tag** (kể cả khi BGE rerank thông thường đang ưu tiên các trang text lân cận như 85/86/102).
+   * Ưu tiên các hit `source="tags"` (Level 2 spatial search); nếu spatial không tìm thấy, fallback sang **text-only tag detection** dựa trên text đã trích từ PyMuPDF từng trang P&ID (TextTagDetector Level 1, dùng full-window patterns để bắt `unit/prefix/suffix` ngay cả khi bị tách rời trong text).
+   * Kết quả trả về luôn kèm citations (doc_id + page, và bbox nếu có) để UI highlight đúng trang P&ID chứa tag.
 
 ### 3.3 So sánh nhanh
 
@@ -140,21 +145,38 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 ## 4) Dữ liệu, OCR, Dedup & Quarantine
 
 * **Root dữ liệu**: `D:\Data_Raw` (cố định).
+* **Artifacts storage**: `D:\PVCFC_Artifacts` (production data, indexes, cache)
+  * Ingestion: `D:\PVCFC_Artifacts\ingestion_production`
+  * Indexes: `D:\PVCFC_Artifacts\index_production`
+  * Cache: `D:\PVCFC_Artifacts\cache`
 * **OCR LUÔN ENABLED**: Google Cloud Vision API. Per-page thresholds: CAD-like < 1700 chars (+ Real-ESRGAN 2x), non-CAD-like < 40 chars (không ESRGAN). Hỗ trợ `vie+eng`; Adaptive DPI (144-216).
 * **Dedup**:
 
   * `file_hash = SHA256(file_bytes)` → trùng **file y hệt**.
   * `content_hash = SHA1(normalized_text)` → trùng **nội dung**; **chỉ đại diện** vào index.
-* **Quarantine (log, không di chuyển file)**: `{output_dir}/quarantine.jsonl` ghi `corrupt|password|ocr_failed|read_error`.
-  - Ví dụ với `--output-dir artifacts/ingestion`: `artifacts/ingestion/quarantine.jsonl`
-* **doc_id_map.json**: `{output_dir}/doc_id_map.json` ánh xạ `doc_id → pdf_path` để **enrich citation** và **render trang**.
+* **Quarantine (log, không di chuyển file)**: `{ARTIFACTS_DIR}/ingestion_production/quarantine.jsonl` ghi `corrupt|password|ocr_failed|read_error`.
+* **doc_id_map.json**: `{ARTIFACTS_DIR}/ingestion_production/doc_id_map.json` ánh xạ `doc_id → pdf_path` để **enrich citation** và **render trang**.
 
 ---
 
 ## 5) Chunking & Metadata
 
-* **Chunk V1**: theo **ký tự** `size=1000`, `overlap=200` (configurable).
+* **Chunking Strategy (Phase 3)**: Parent-Child Hierarchical Chunking
+  * **Parent Chunks**: Large semantic blocks for LLM context
+    * Size: `parent_chunk_size=1800` chars
+    * Overlap: `parent_overlap=200` chars
+    * Purpose: Complete semantic context for generation
+  * **Child Chunks**: Small dense blocks for precise retrieval
+    * Size: `child_chunk_size=400` chars
+    * Overlap: `child_overlap=50` chars
+    * Purpose: Precise keyword/semantic matching
+  * **How it works**:
+    * Retrieval searches child chunks (high precision)
+    * Generation receives parent text (complete context)
+    * Parent text stored directly in child metadata (no joins)
+  * **Implementation**: `ParentChildChunker` class in `app/ingestion/text_chunker.py`
 * **Metadata tối thiểu**: `doc_id`, `page / page_start / page_end`, `source_format (vector|scan)`.
+* **Phase 3 Metadata**: `parent_text`, `parent_id`, `chunk_type`, `is_parent`, `parent_index`, `parent_char_count`
 * **Taxonomy (mở)**:
 
   * `equipment_id`: regex gợi ý **`\bKT?\d{5}\b`** → bắt **K06101**/**KT06101**.
@@ -353,11 +375,10 @@ GATE_THRESHOLD=0.55    # CAD-like score threshold (adjusted from 0.60)
 GRAY_ZONE_LOW=0.45     # Gray zone lower bound
 LAZY_CROP_GENERATION=true  # true: generate crops on-demand, false: at ingestion
 
-# Artifacts directory: tags, layouts, crops, telemetry
-# Note: Actual save location is artifacts/ingestion_production/ regardless of this setting
-# This ENV is used for legacy compatibility but ingestion code uses output_dir parameter
-ARTIFACTS_DIR=D:\PVCFC_Artifacts  # Legacy config path (not actively used)
-# Actual location: artifacts/ingestion_production/entities/tags.jsonl
+# Artifacts directory root (production): tags, layouts, crops, telemetry, helper indexes
+# On this machine: D:\PVCFC_Artifacts (configured via .env)
+# Ingestion output (chunks, processed): {ARTIFACTS_DIR}\ingestion_production\
+ARTIFACTS_DIR=D:\PVCFC_Artifacts
 
 # P&ID Spatial Components (Level 2)
 SPATIAL_COMPONENTS_INDEX_NAME=pvcfc_pid_spatial_components  # OpenSearch spatial components index for Level 2 search
@@ -385,9 +406,10 @@ $env:GOOGLE_APPLICATION_CREDENTIALS = "path\to\your\service-account-key.json"
 
 ```powershell
 # .venv đang active
-python tools\ingest.py `
+# Khuyến nghị: dùng cùng ARTIFACTS_DIR với production pipeline
+python tools\\ingest.py `
   --source-dir "D:\\Data_Raw" `
-  --output-dir "artifacts\\ingestion_production" `
+  --output-dir "D:\\PVCFC_Artifacts\\ingestion_production" `
   --enable-ocr `
   --workers 2 `
   --enable-pid-tags
@@ -415,7 +437,7 @@ python scripts\\utilities\\index_production_chunks.py
 # Components được tự động extract và index trong ingestion, nhưng có thể re-index:
 python tools\\ingest.py `
   --source-dir "D:\\Data_Raw" `
-  --output-dir "artifacts\\ingestion_production" `
+  --output-dir "D:\\PVCFC_Artifacts\\ingestion_production" `
   --enable-pid-tags `
   --skip-chunking  # Chỉ extract components (nếu cần)
 ```

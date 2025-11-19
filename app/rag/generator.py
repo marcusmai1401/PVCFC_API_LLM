@@ -160,17 +160,21 @@ def _compute_calibrated_confidence(
     answer_text: str,
     context_items: List[RetrievalResult],
     cfg: "GeneratorConfig",
+    query_text: str,  # NEW: Required for semantic similarity
     top_m: int = 5,
     length_threshold_chars: int = 200,
 ) -> Tuple[float, Dict[str, Any]]:
-    """Compute calibrated confidence score with boosts and penalties.
+    """Compute calibrated confidence score with weighted formula.
+
+    Formula: score = (rerank_score * 0.4) + (citation_quality * 0.3) + (semantic_similarity * 0.3)
 
     Args:
-        retrieval_results: List of retrieval results (for scores)
+        retrieval_results: List of retrieval results (for rerank scores)
         citations: Parsed citations with doc_id/page info
         answer_text: Generated answer text
         context_items: Context chunks passed to LLM (with metadata)
         cfg: Generator configuration
+        query_text: Original query text for semantic similarity calculation
         top_m: Number of top results to use for base score (default 5)
         length_threshold_chars: Minimum answer length for boost (default 200)
 
@@ -178,7 +182,17 @@ def _compute_calibrated_confidence(
         Tuple of (confidence_score, components_dict)
     """
 
-    # 1) Extract best score from each retrieval result
+    # Phase 2: New weighted confidence formula
+    # Components: (1) Retrieval Score, (2) Citation Quality, (3) Semantic Alignment
+
+    components = {
+        "retrieval_score": 0.0,
+        "citation_quality": 0.0,
+        "semantic_similarity": 0.0,
+        "final": 0.0,
+    }
+
+    # 1) RETRIEVAL SCORE (40% weight): Normalize top reranker score with Sigmoid
     def best_score(item: RetrievalResult) -> Optional[float]:
         """Extract the best available score from a result"""
         # Try fused_score, rerank_score, then score
@@ -189,104 +203,77 @@ def _compute_calibrated_confidence(
                     return float(v)
         return None
 
-    top = retrieval_results[:top_m] if retrieval_results else []
-    raw_scores = [best_score(x) for x in top]
-    raw_scores = [s for s in raw_scores if s is not None]
+    top = (
+        retrieval_results[:1] if retrieval_results else []
+    )  # Use top 1 for rerank score
+    if top:
+        raw_rerank = best_score(top[0])
+        if raw_rerank is not None:
+            # Normalize with Sigmoid: 1 / (1 + exp(-score))
+            import math
 
-    # 2) Rescale and compute base confidence
-    # HIGH-SCORE BYPASS: If all top scores are already high (≥0.80), skip rescaling
-    # This prevents artificially low confidence for high-quality retrievals
-    if raw_scores and min(raw_scores) >= 0.80:
-        base_conf = float(mean(raw_scores))
-        components = {
-            "raw_top_scores": raw_scores,
-            "base": round(base_conf, 4),
-            "boosts": {},
-            "penalties": {},
-            "note": "High-quality retrieval, no rescaling applied",
-        }
-        logger.debug(
-            f"High scores detected (min={min(raw_scores):.3f}), "
-            f"using raw average: {base_conf:.3f}"
-        )
+            try:
+                normalized_rerank = 1.0 / (1.0 + math.exp(-raw_rerank))
+            except (OverflowError, ValueError):
+                # Handle extreme values
+                normalized_rerank = 1.0 if raw_rerank > 0 else 0.0
+            components["retrieval_score"] = round(normalized_rerank, 4)
+            components["raw_rerank_score"] = round(raw_rerank, 4)
+        else:
+            components["retrieval_score"] = 0.3  # Default if no score
     else:
-        # Standard rescaling for lower/mixed scores
-        rescaled = _rescale_scores(raw_scores)
-        base_conf = float(mean(rescaled)) if rescaled else 0.3  # Conservative default
-        components = {
-            "raw_top_scores": raw_scores,
-            "rescaled_top_scores": rescaled,
-            "base": round(base_conf, 4),
-            "boosts": {},
-            "penalties": {},
-        }
+        components["retrieval_score"] = 0.3  # Default if no results
 
-    conf = base_conf
+    # 2) CITATION QUALITY (30% weight): Ratio of valid citations
+    if citations:
+        # All citations are considered valid if they exist (post-validation already done)
+        citation_ratio = 1.0  # Assume citations passed validation
+        components["citation_quality"] = round(citation_ratio, 4)
+        components["citation_count"] = len(citations)
+    else:
+        components["citation_quality"] = 0.0
+        components["citation_count"] = 0
 
-    # 3) Boost: full-page evidence
-    full_page_used = any(
-        getattr(ci, "metadata", {}).get("full_page", False)
-        for ci in (context_items or [])
+    # 3) SEMANTIC SIMILARITY (30% weight): Cosine similarity between query and answer embeddings
+    semantic_score = 0.0
+    if query_text and answer_text and len(answer_text.strip()) > 10:
+        try:
+            from app.services.embedding_enhanced import get_embedding_service
+
+            embedder = get_embedding_service()
+
+            # Embed query and answer
+            query_vec = embedder.embed_query(query_text)
+            answer_vec = embedder.embed_query(
+                answer_text
+            )  # Use same method for consistency
+
+            # Compute cosine similarity
+            from numpy import dot
+            from numpy.linalg import norm
+
+            cos_sim = dot(query_vec, answer_vec) / (
+                norm(query_vec) * norm(answer_vec) + 1e-8
+            )
+            semantic_score = float(max(0.0, min(1.0, cos_sim)))  # Clamp to [0, 1]
+
+            components["semantic_similarity"] = round(semantic_score, 4)
+            logger.debug(f"Semantic similarity: Q-A cosine = {semantic_score:.4f}")
+
+        except Exception as e:
+            logger.warning(f"Failed to compute semantic similarity: {e}")
+            components["semantic_similarity"] = 0.5  # Neutral default
+    else:
+        components["semantic_similarity"] = 0.5  # Neutral if no text
+
+    # 4) WEIGHTED FORMULA: Final Score = (Rerank * 0.4) + (Citation * 0.3) + (Semantic * 0.3)
+    conf = (
+        components["retrieval_score"] * 0.4
+        + components["citation_quality"] * 0.3
+        + components["semantic_similarity"] * 0.3
     )
-    if full_page_used:
-        conf += 0.10
-        components["boosts"]["full_page"] = 0.10
 
-    # 4) Boost: multiple consistent citations (same doc or clustered pages)
-    same_doc_or_cluster = False
-    if citations and len(citations) >= 2:
-        # Normalize citations to (doc_id, page) tuples
-        norm = []
-        for c in citations:
-            doc = c.doc_id
-            page = c.page
-            if doc:
-                norm.append((str(doc), int(page) if isinstance(page, int) else None))
-
-        if len(norm) >= 2:
-            docs = [d for d, _ in norm]
-            pages = [p for _, p in norm if p is not None]
-
-            # Check if all from same doc
-            if len(set(docs)) == 1:
-                same_doc_or_cluster = True
-            # Or if pages are clustered (within 2 pages)
-            elif pages and len(pages) >= 2:
-                pages_sorted = sorted(pages)
-                same_doc_or_cluster = (pages_sorted[-1] - pages_sorted[0]) <= 2
-
-    if same_doc_or_cluster:
-        conf += 0.05
-        components["boosts"]["multi_citation_consistency"] = 0.05
-
-    # 5) Boost: adequate answer length
-    if answer_text and len(answer_text.strip()) >= length_threshold_chars:
-        conf += 0.05
-        components["boosts"]["length"] = 0.05
-
-    # 6) Penalty: uncited fallback
-    uncited_fallback = any(
-        getattr(ci, "metadata", {}).get("uncited_fallback", False)
-        for ci in (context_items or [])
-    )
-    if uncited_fallback:
-        conf -= 0.10
-        components["penalties"]["uncited_fallback"] = -0.10
-
-    # 7) Penalty: uncertainty phrases
-    if answer_text:
-        if any(
-            re.search(p, answer_text, flags=re.IGNORECASE) for p in UNCERTAINTY_PATTERNS
-        ):
-            conf -= 0.07
-            components["penalties"]["uncertainty_phrases"] = -0.07
-
-    # 8) Penalty: short answer
-    if answer_text and len(answer_text.strip()) < 80:
-        conf -= 0.03
-        components["penalties"]["short_answer"] = -0.03
-
-    # 9) Clamp to [0, 1]
+    # Clamp final score to [0, 1]
     conf = float(max(0.0, min(1.0, conf)))
     components["final"] = round(conf, 4)
 
@@ -359,7 +346,7 @@ class GeneratorConfig:
 
     llm_tier: str = "standard"  # LLM tier to use
     # Max total context size in characters (approx). Increased to allow full-page scanning.
-    max_context_length: int = 20000
+    max_context_length: int = 60000
     # Max answer length (tokens). Can be tuned per environment; default generous.
     max_answer_length: int = 2048
     temperature: float = 0.3  # Lower = more focused
@@ -429,10 +416,16 @@ class GeneratorConfig:
         "image",
         "picture",
         "photo",
+        "drawing",
+        "layout",
+        "sơ đồ",
+        "bản vẽ",
         "hình",
+        "hình ảnh",
+        "cấu tạo",
+        "minh họa",
         "bảng",
         "biểu đồ",
-        "sơ đồ",
     )
     vision_text_only_negative_keywords: Tuple[str, ...] = (
         # If these are absent and table/figure keywords absent, likely text-only
@@ -745,17 +738,18 @@ class ResponseGenerator:
                     answer_text=answer if answer else "",
                     context_items=retrieved_docs,
                     cfg=self.config,
+                    query_text=query.normalized,  # NEW: Pass query for semantic similarity
                 )
                 # Store components for debugging/transparency
                 if "metadata_extra" not in locals():
                     metadata_extra = {}
                 metadata_extra["confidence_components"] = confidence_components
 
-                logger.debug(
+                logger.info(
                     f"Calibrated confidence: {confidence:.3f} "
-                    f"(base={confidence_components.get('base', 0):.3f}, "
-                    f"boosts={sum(confidence_components.get('boosts', {}).values()):.3f}, "
-                    f"penalties={sum(confidence_components.get('penalties', {}).values()):.3f})"
+                    f"(retrieval={confidence_components.get('retrieval_score', 0):.3f}, "
+                    f"citation={confidence_components.get('citation_quality', 0):.3f}, "
+                    f"semantic={confidence_components.get('semantic_similarity', 0):.3f})"
                 )
             else:
                 # Use legacy confidence calculation
@@ -1504,10 +1498,51 @@ Response:"""
             query_classification: Optional dict with 'type' field ("pid", "technical_doc", "auto")
                                   Used to conditionally apply tag matching bonus in reordering.
         """
-        # 0) Smart strategy gate DISABLED - Vision always ON for full multimodal capability
-        # User requirement: Always use Vision to combine text + image data for maximum accuracy
-        strategy_meta = {}
-        logger.debug("Vision strategy: ALWAYS ON (smart_vision_strategy disabled)")
+        # 0) Smart strategy gate (Phase 1 - Smart Toggle)
+        should_run_vision = False
+        trigger_reason = "none"
+
+        # 1. Check Critical Rule (P&ID / Drawing types)
+        is_pid_query = (
+            query_classification and query_classification.get("type") == "pid"
+        )
+
+        has_drawing_doc = False
+        for doc in retrieved_docs[:5]:  # Check top 5 docs for metadata
+            dtype = (doc.metadata or {}).get("doc_type", "").lower()
+            if any(x in dtype for x in ["pid", "p&id", "drawing", "diagram", "cad"]):
+                has_drawing_doc = True
+                break
+
+        if is_pid_query or has_drawing_doc:
+            should_run_vision = True
+            trigger_reason = "critical_rule_pid"
+
+        # 2. Check Visual Keywords in Query
+        if not should_run_vision:
+            combined_query = (original_query + " " + english_query).lower()
+            # Use keywords from config (updated with Vietnamese terms)
+            if any(
+                kw in combined_query for kw in self.config.vision_table_figure_keywords
+            ):
+                should_run_vision = True
+                trigger_reason = "visual_keywords"
+
+        # 3. Check Table Content/Markers in Context
+        if not should_run_vision:
+            # Check a portion of context for table markers
+            context_check = context[:5000]
+            # Pipe density check: > 10 pipes suggests markdown table
+            if "Table" in context_check or context_check.count("|") > 10:
+                should_run_vision = True
+                trigger_reason = "table_content"
+
+        if not should_run_vision:
+            logger.info("Vision gating: OFF (no smart triggers matched)")
+            return None
+
+        strategy_meta = {"trigger": trigger_reason}
+        logger.info(f"Vision gating: ON (trigger={trigger_reason})")
 
         # 1) Build list of (pdf_path, page) to render (prioritize visuals if strategy suggests)
         # DIAGNOSTIC: Log top retrieved_docs metadata

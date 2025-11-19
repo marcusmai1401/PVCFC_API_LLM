@@ -38,8 +38,10 @@ class TechnicalDocConfig(HybridModernConfig):
         self.opensearch_limit = 100  # Get more BM25 candidates
         self.weaviate_limit = 50  # Less semantic candidates
 
-        # DISABLE BGE rerank to avoid conflicts - use score-based instead
-        self.enable_bge_rerank = False
+        # IMPORTANT: Always enable BGE rerank for technical docs
+        # - This is required to correctly rank performance curves vs manuals
+        # - Do NOT allow runtime code to disable this flag
+        self.enable_bge_rerank = True
 
         # RRF weights favor keywords
         self.rrf_k = 60  # Standard RRF parameter

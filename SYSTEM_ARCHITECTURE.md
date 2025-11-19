@@ -1,8 +1,8 @@
-﻿# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
+# SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 1.5.0
-**Last Updated**: 2025-11-11
-**Document**: Complete Pipeline & Architecture Description (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix Support + Protobuf Resolution)
+**Version**: 1.6.0
+**Last Updated**: 2025-11-19
+**Document**: Complete Pipeline & Architecture Description (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix Support + Protobuf Resolution + Parent-Child Chunking)
 
 ---
 
@@ -151,8 +151,8 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │    ↓                        │   │    ↓                                │
 │ 3. Extract Tables           │   │ 3. Extract Tables                   │
 │    ↓                        │   │    ↓                                │
-│ 4. Semantic Chunking        │   │ 4. Semantic Chunking                │
-│    (1000 chars, 200 overlap)│   │    (1000 chars, 200 overlap)        │
+│ 4. Parent-Child Chunking    │   │ 4. Parent-Child Chunking            │
+│    (P:1800/200, C:400/50)⭐  │   │    (P:1800/200, C:400/50)⭐          │
 │    ↓                        │   │    ↓                                │
 │ 5. Tag extraction (light)   │   │ 5. ⭐ Page Layout Builder           │
 │    from text                │   │    • Bbox + font + rotation         │
@@ -278,7 +278,7 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 > - **Offline**: CADLikeGate (auto-detect via 8 features, S≥0.55) → PageLayoutBuilder (vector-first PyMuPDF + Google Cloud Vision OCR fallback) → TagExtractor (CODE-anchored AREA-CODE-NUM-SUFFIX assembly) → Geometric Assembly for auto-discovery → Spatial Component Extractor → Index components to `pvcfc_pid_spatial_components` (Level 2)
 > - **Online**: Manual `query_type` selection → If `pid`: Level 2 Spatial Search (component-based clustering) → RRF fusion with chunks → PID Tag Rerank → Attach bbox for vision citations
 > - **Configuration**: `config/cadlike_gate.yaml`, `config/tag_grammar.yaml`, `config/page_filters.yaml`
-> - **Artifacts**: `artifacts/ingestion_production/` → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png` (optional), `logs/tag_extraction_telemetry.jsonl`
+> - **Artifacts**: `{ARTIFACTS_DIR}` (hiện tại: `D:\PVCFC_Artifacts`) → `entities/tags.jsonl`, `page_layout/*.json`, `crops/*.png` (optional), `logs/tag_extraction_telemetry.jsonl`
 > - **Implementation**: `app/ingestion/tags/` (orchestrator, tag_extractor), `app/ingestion/cadlike_gate.py`, `app/ingestion/layout/`, `app/rag/spatial/` (Level 2), `app/rag/hybrid_with_tags_retriever.py`
 > - **Quick Start**: See `START_HERE_CAD_TAGS.md`, `CAD_TAG_EXTRACTION_QUICKSTART.md`
 
@@ -296,9 +296,11 @@ RAW PDF FILES
     • OCR if needed (Google Cloud Vision API + Real-ESRGAN)
     • Extract text + metadata
     ↓
-[2] CHUNKING (SEMANTIC STRATEGY)
-    • Semantic chunking (respects paragraphs/sentences)
-    • Size target: ~1000 chars, overlap: 200
+[2] CHUNKING (PARENT-CHILD STRATEGY - PHASE 3) ⭐
+    • Parent-Child Hierarchical Chunking
+    • Parent: ~1800 chars (overlap 200) - for LLM context
+    • Child: ~400 chars (overlap 50) - for retrieval
+    • Child chunks store parent_text directly (no joins)
     • Keep page metadata
     ↓
 [3] DEDUPLICATION
@@ -400,14 +402,13 @@ OUTPUT:
     • OpenSearch index "pvcfc_pid_spatial_components" (Level 2 spatial components index)
 ```
 
-> **Index Directory Note**: Default config uses artifacts/index_production, but current .env overrides to data/indexes. Check your environment.
+> **Index Directory Note**: Index root is configured via `INDEX_DIR` in `.env` (hiện tại: `D:\PVCFC_Artifacts\index_production`). Older docs có thể vẫn nhắc tới `artifacts/index_production`; hãy ưu tiên giá trị trong `.env`.
 
-> **P&ID Artifacts Location**: P&ID tag extraction artifacts are stored in `artifacts/ingestion_production/` (specified via --output-dir parameter):
-> - `entities/tags.jsonl`: Extracted instrument tags (1 JSON object per tag, e.g., {"doc_id": "...", "page": 5, "tag": "04 PSAL 2207", "parts": {...}, "bbox": [...], "confidence": 0.96})
-> - `page_layout/*.json`: Page-level layout data (text spans with bbox/font/rotation + vector drawings)
-> - `crops/*.png`: PNG crops of tag bboxes for vision citations (lazy mode: generated on-demand)
-> - `logs/tag_extraction_telemetry.jsonl`: Extraction metrics per document (cadlike_score, tags_found, warnings, elapsed_sec)
-> - **Note**: The ARTIFACTS_DIR environment variable in .env is for legacy compatibility; actual location is determined by ingestion --output-dir parameter
+> **P&ID Artifacts Location**: Các artifact P&ID sử dụng `ARTIFACTS_DIR` làm root (hiện tại: `D:\PVCFC_Artifacts`):
+> - `{ARTIFACTS_DIR}/entities/tags.jsonl`
+> - `{ARTIFACTS_DIR}/layout/*.json`
+> - `{ARTIFACTS_DIR}/crops/*.png` (nếu không ở lazy mode)
+> - `{ARTIFACTS_DIR}/logs/tag_extraction_telemetry.jsonl`
 
 ### 2.2 Query Time (Online)
 
@@ -681,35 +682,46 @@ content_hash = hashlib.sha1(normalized.encode()).hexdigest()
 
 ## 4. PHASE 2: INDEXING & STORAGE
 
-### 4.1 Chunking Strategy (SEMANTIC, NOT FIXED)
+### 4.1 Chunking Strategy (PARENT-CHILD HIERARCHICAL - PHASE 3) ⭐
 
 ```python
-# Semantic chunking (respects paragraph and sentence boundaries)
-# Default strategy in TextChunker class
-from app.ingestion.text_chunker import TextChunker
+# Phase 3: Parent-Child Hierarchical Chunking
+# Solves context fragmentation problem
+from app.ingestion.text_chunker import ParentChildChunker
 
-chunker = TextChunker(
-    chunk_size=1000,       # Target size in characters
-    chunk_overlap=200,      # Overlap between chunks
-    chunking_strategy="semantic"  # Options: "semantic", "sentence", "fixed"
+chunker = ParentChildChunker(
+    parent_chunk_size=1800,   # Large semantic blocks for LLM context
+    parent_overlap=200,       # Overlap between parent chunks
+    child_chunk_size=400,     # Small dense blocks for retrieval
+    child_overlap=50,         # Overlap between child chunks
+    min_chunk_size=100        # Minimum viable chunk size
 )
 
-# Semantic chunking process:
-# 1. Split text by paragraphs (\n\n+)
-# 2. If paragraph > chunk_size, split by sentences
-# 3. Build chunks respecting boundaries
-# 4. Add overlap from previous chunk
-# 5. Extract page metadata from content markers (<!-- Page X -->)
+# Parent-Child process:
+# 1. Create parent chunks from full text (~1800 chars each)
+# 2. For each parent, create N child chunks (~400 chars each)
+# 3. Store parent_text directly in child metadata (Option A - no joins)
+# 4. Index ONLY child chunks (parents not indexed separately)
+# 5. Retrieval: Search child chunks (precision)
+# 6. Generation: Use parent text from child.metadata (completeness)
 
-chunks = chunker.chunk_text(
-    text=page_text,
+child_chunks = chunker.chunk_text(
+    text=full_document_text,
     doc_id=doc_id,
-    metadata={"page": page_num, "doc_type": "manual"},
-    page_nums=[page_num]
+    metadata={"doc_type": "manual", "page": 1}
 )
+
+# Each child chunk has:
+# - text: child text (~400 chars) - INDEXED for retrieval
+# - metadata.parent_text: parent text (~1800 chars) - FOR LLM context
+# - metadata.parent_id: parent chunk identifier
+# - metadata.chunk_type: "child"
+# - metadata.is_parent: False
+# - metadata.parent_index: position of parent in document
+# - metadata.parent_char_count: length of parent text
 ```
 
-> **Chunking Note**: System uses **semantic chunking by default**, NOT simple fixed-size splitting. This preserves document structure and improves retrieval quality.
+> **Phase 3 Chunking Note**: System now uses **Parent-Child Hierarchical Chunking** (not simple semantic chunking). This solves context fragmentation by retrieving via small precise child chunks but sending complete parent context to LLM. Parent text is stored directly in child metadata for fast access (no database joins).
 
 ### 4.2 Deduplication
 
@@ -728,7 +740,7 @@ for hash_val, group in hash_groups.items():
     deduped_chunks.append(representative)
 ```
 
-### 4.3 Weaviate Indexing
+### 4.3 Weaviate Indexing (with Phase 3 Schema)
 
 ```python
 # Connect to Weaviate
@@ -738,14 +750,22 @@ client = weaviate.connect_to_local(
     grpc_port=50051
 )
 
-# Create collection with name "Chunk" (not "PVCFCDocuments")
+# Create collection with Phase 3 parent-child schema
 collection = client.collections.create(
     name="Chunk",  # Production collection name
     vectorizer_config=None,  # Manual vectorization
     properties=[
-        Property(name="text", data_type=DataType.TEXT),
+        # Original fields
+        Property(name="text", data_type=DataType.TEXT),  # Child text (indexed)
         Property(name="doc_id", data_type=DataType.TEXT),
         Property(name="page", data_type=DataType.INT),
+        # Phase 3: Parent-Child fields
+        Property(name="parent_text", data_type=DataType.TEXT),  # Parent text (for LLM)
+        Property(name="parent_id", data_type=DataType.TEXT),
+        Property(name="chunk_type", data_type=DataType.TEXT),  # "child"
+        Property(name="is_parent", data_type=DataType.BOOL),  # False
+        Property(name="parent_index", data_type=DataType.INT),
+        Property(name="parent_char_count", data_type=DataType.INT),
         # ... more properties
     ]
 )
@@ -765,10 +785,10 @@ with collection.batch.dynamic() as batch:
 
 > **Weaviate Collection Name**: Production uses "Chunk", configured via .env (WEAVIATE_COLLECTION=Chunk). Default in code is "PVCFCDocuments" but overridden.
 
-### 4.4 OpenSearch Indexing
+### 4.4 OpenSearch Indexing (with Phase 3 Schema)
 
 ```python
-# Create index with BM25 parameters (NO epsilon in OpenSearch)
+# Create index with BM25 parameters + Phase 3 parent-child mapping
 opensearch_client.indices.create(
     index="rag_chunks",
     body={
@@ -786,9 +806,23 @@ opensearch_client.indices.create(
         },
         "mappings": {
             "properties": {
-                "text": {"type": "text", "similarity": "bm25_custom"},
+                # Original fields
+                "text": {"type": "text", "similarity": "bm25_custom"},  # Child text (indexed)
                 "doc_id": {"type": "keyword"},
                 "page": {"type": "integer"},
+                # Phase 3: Parent-Child fields
+                "parent_text": {"type": "text", "index": False},  # Parent text (stored, not indexed)
+                "metadata": {
+                    "type": "object",
+                    "properties": {
+                        "parent_id": {"type": "keyword"},
+                        "parent_text": {"type": "text", "index": False},
+                        "chunk_type": {"type": "keyword"},
+                        "is_parent": {"type": "boolean"},
+                        "parent_index": {"type": "integer"},
+                        "parent_char_count": {"type": "integer"}
+                    }
+                }
                 # ... more fields
             }
         }
@@ -1177,12 +1211,53 @@ python tests\eval_pid_retrieval.py
 
 **Unit Tests**:
 ```powershell
-pytest tests\test_pid_query_enhancer.py -v
-pytest tests\test_pid_tag_reranker.py -v
-pytest tests\integration\test_pid_retrieval_integration.py -v
+pytest tests\\test_pid_query_enhancer.py -v
+pytest tests\\test_pid_tag_reranker.py -v
+pytest tests\\integration\\test_pid_retrieval_integration.py -v
 ```
 
-### 6.13 Graceful Degradation
+### 6.13 P&ID Tag Location Mode (Text + Spatial)
+
+**Implementation**: `app/rag/pid_tag_handler.py`, tích hợp trong router `/ask` (`app/api/routers/ask.py`).
+
+Chế độ này xử lý các truy vấn mà mục tiêu chính là **tìm vị trí của một tag P&ID** (ví dụ: `"04 ZSH 4326/A"`, `"Tag 04 PSAL 2207 nằm ở trang nào?"`).
+
+**Điều kiện kích hoạt (rút gọn):**
+- `request.query_type == "pid"`.
+- Và một trong hai:
+  - Câu hỏi chứa từ khóa vị trí: `"tag"`, `"thiết bị"`, `"trang"`, `"page"`, `"ở đâu"`, `"located"`, `"found"`, ... → `PIDTagHandler.detect_tag_query()`.
+  - Hoặc câu hỏi rất ngắn (≤3 token), chỉ chứa tag (vd: `"04 ZSH 4326/A"`) → `PIDQueryEnhancer.enhance()` parse được `{unit, prefix, suffix}` và đánh dấu là tag-only location query.
+
+**Dòng chảy khi chế độ này được bật:**
+
+1. Router `/ask` **bỏ qua** bước LLM generation chuẩn.
+2. Hệ thống chạy một lượt **P&ID retrieval chuyên biệt** với `HybridWithTagsRetriever`:
+   - Sử dụng `top_k` lớn (≈4×`max_context`, tối thiểu ~30) để đảm bảo danh sách kết quả **luôn chứa cả trang thực sự có tag** (vd: page 89), không chỉ các chunks text lân cận (page 85/86/102).
+   - Nếu có `tags_retriever` trong `app.state` thì ưu tiên dùng; nếu không, fallback về retriever chuẩn.
+3. Kết quả được đưa vào `PIDTagHandler.create_tag_location_answer(tag_name, retrieval_results, language)`:
+   - Chuẩn hoá tag: ví dụ `"04 ZSH 4326/A"` → `"04 ZSH 4326"` (bỏ suffix biến thể A/B/... khi cần).
+   - Ưu tiên các hit `source="tags"` (Level 2 `SpatialTagSearcher`) – đây là bằng chứng mạnh nhất về vị trí tag trên trang.
+   - Nếu không có hit `source="tags"`, sử dụng **text hits**: so khớp tag với text đã trích từ PyMuPDF (per-page text), với normal hoá bỏ khoảng trắng và dấu gạch (`04ZSH4326`).
+   - Nhóm theo `page`, chọn 1–2 trang có score cao nhất, sinh câu trả lời dạng: `"Tag 04 ZSH 4326 xuất hiện ở [Doc 1, p.89] của tài liệu **01. P&ID Ammonia Unit Rev12 (04000)**"`.
+4. `/ask` trả về JSON với:
+   - `answer`: câu trả lời vị trí tag (deterministic, không qua LLM),
+   - `citations`: danh sách các `RetrievalResult` đã được chuẩn hoá `doc_id`, `page`, `pdf_path`, `bbox` (nếu có),
+   - `confidence`: cố định cao (vd 0.95) khi tìm thấy hit rõ ràng.
+
+**Text-only Tag Fallback (Level 1 - từ text PyMuPDF):**
+
+- Được triển khai qua `TextTagDetector` dùng file `text_by_page.jsonl` (text trích từ PyMuPDF cho từng trang P&ID).
+- Kịch bản:
+  - Level 2 spatial search không tìm thấy đủ cụm `{unit, prefix, suffix}` với alignment hợp lệ.
+  - Có `doc_id` cụ thể để giới hạn phạm vi tìm kiếm.
+- Khi đó, `HybridWithTagsRetriever` gọi `text_tag_detector.find_tag_hits(...)` để quét text thuần:
+  - Dùng full-window patterns và token gap nhỏ để nhận diện chuỗi tương đương `"04 ZSH 4326"` ngay cả khi `04`, `ZSH`, `4326` bị tách dòng.
+  - Các kết quả này được convert thành "tag hits" với `source="text_tag_fallback"` và tham gia RRF fusion giống spatial hits.
+- `PIDTagHandler` không phân biệt nguồn (spatial vs text_tag_fallback), mà chọn theo mức độ khớp tag và score, nên vẫn trả về đúng `page` cho truy vấn vị trí tag.
+
+Kết quả: các truy vấn như `"04 ZSH 4326/A"` giờ có thể trả về **đúng trang P&ID thực sự chứa tag** (ví dụ page 89), với citations ổn định, thay vì rơi vào trang lân cận (85/86/102) hoặc câu LLM "không tìm thấy trong context".
+
+### 6.14 Graceful Degradation
 
 **P&ID enhancement failures are non-critical**:
 
@@ -1472,6 +1547,69 @@ def reciprocal_rank_fusion(
 
     return sorted_results
 ```
+
+### 7.5 Phase 3: Text Extraction for LLM Context ⭐
+
+**File:** `app/rag/retriever.py` (helper function)
+
+```python
+def extract_text_with_parent_fallback(
+    chunk_or_hit: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Phase 3 helper: Extract text for LLM context.
+
+    Retrieval searches child chunks (small, ~400 chars),
+    but generation should use parent text (large, ~1800 chars).
+
+    Priority:
+    1. Top-level 'parent_text' (OpenSearch)
+    2. metadata['parent_text'] (Weaviate)
+    3. Fallback to 'text' (child chunk)
+    """
+    # 1. Check top-level parent_text (OpenSearch)
+    parent_text = chunk_or_hit.get("parent_text")
+    if parent_text and isinstance(parent_text, str) and len(parent_text.strip()) > 0:
+        return parent_text
+
+    # 2. Check metadata.parent_text (Weaviate)
+    if metadata is None:
+        metadata = chunk_or_hit.get("metadata", {})
+
+    if metadata:
+        parent_text = metadata.get("parent_text")
+        if parent_text and isinstance(parent_text, str) and len(parent_text.strip()) > 0:
+            return parent_text
+
+    # 3. Fallback to child text
+    return chunk_or_hit.get("text", "")
+```
+
+**Integration Points:**
+- `app/rag/weaviate_retriever.py`: Lines 17, 542
+- `app/rag/hybrid_weaviate_opensearch_retriever.py`: Lines 23, 460, 495
+
+**Usage Example:**
+```python
+# In retrieval pipeline
+retrieved_chunks = retriever.search(query, k=10)
+
+# Build context for LLM
+context_blocks = []
+for chunk in retrieved_chunks:
+    # Extract parent text for generation (not child text)
+    text_for_llm = extract_text_with_parent_fallback(chunk)
+    context_blocks.append(text_for_llm)
+
+full_context = "\n\n".join(context_blocks)
+```
+
+**Impact:**
+- ✅ LLM receives complete semantic context (~1800 chars)
+- ✅ No context fragmentation
+- ✅ Retrieval still uses precise child chunks
+- ✅ No performance degradation (no joins)
 
 ---
 

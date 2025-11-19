@@ -1,8 +1,8 @@
 # Complete Pipeline Flow - From Raw Data to User Query
 
 **PVCFC RAG System - End-to-End Data Flow**
-**Date:** 2025-11-04
-**Version:** 1.4.0 (Level 2 + OCR Enhancement + Hybrid CAD Detection)
+**Date:** 2025-11-19
+**Version:** 1.6.0 (Level 2 + OCR Enhancement + Hybrid CAD Detection + Parent-Child Chunking)
 
 ---
 
@@ -80,13 +80,18 @@
 ### Command
 
 ```bash
+python scripts/ingest_production.py
+
+# Or manual parameters:
 python tools/ingest.py \
   --source-dir "D:\Data_Raw" \
-  --output-dir "artifacts/ingestion_production" \
+  --output-dir "D:\PVCFC_Artifacts\ingestion_production" \
   --enable-ocr \
   --enable-pid-tags \
   --workers 4
 ```
+
+> **Note**: Production script `scripts/ingest_production.py` automatically uses `D:\PVCFC_Artifacts` from `.env` (ARTIFACTS_DIR).
 
 ---
 
@@ -269,20 +274,44 @@ For each PDF:
          → Format: # Page X\n\ntext content...
          → Preserve structure
     ↓
-    1.4d: Create Chunks
-         → Strategy: Hierarchical chunking
-         → Size: ~1000 chars per chunk
-         → Overlap: 200 chars
-         → Each chunk has: chunk_id, text, metadata
+    1.4d: Create Chunks (PHASE 3 - Parent-Child Strategy) ⭐
+         → Strategy: Parent-Child Hierarchical Chunking
+         → Uses ParentChildChunker class
          ↓
-         → Example chunks from Page 113:
-            Chunk 1: "29 SG 2201A ... [1000 chars]"
-            Chunk 2: "... overlap ... [1000 chars]"
+         Step 1: Create Parent Chunks
+         → Size: ~1800 chars (large semantic blocks)
+         → Overlap: 200 chars
+         → Purpose: Complete context for LLM
+         ↓
+         Step 2: Create Child Chunks (for each parent)
+         → Size: ~400 chars (small dense blocks)
+         → Overlap: 50 chars
+         → Purpose: Precise retrieval matching
+         ↓
+         Step 3: Embed Parent in Child
+         → Store parent_text directly in child.metadata
+         → No database joins needed
+         ↓
+         → Each CHILD chunk has:
+            - chunk_id: unique identifier
+            - text: child text (~400 chars) - INDEXED for retrieval
+            - metadata.parent_text: parent text (~1800 chars) - FOR LLM
+            - metadata.parent_id: parent chunk ID
+            - metadata.chunk_type: "child"
+            - metadata.is_parent: False
+            - metadata.parent_index: position
+            - metadata.parent_char_count: parent length
+         ↓
+         → Example from Page 113:
+            Parent 1: "29 SG 2201A ... [1800 chars]"
+              → Child 1.1: "29 SG 2201A ... [400 chars]" + parent_text=Parent 1
+              → Child 1.2: "... overlap ... [400 chars]" + parent_text=Parent 1
+              → Child 1.3: "... overlap ... [400 chars]" + parent_text=Parent 1
 ```
 
 **Output:**
-- `artifacts/ingestion_production/processed/{doc_id}_processed.json`
-- `artifacts/ingestion_production/chunks/{doc_id}_chunks.jsonl`
+- `{ARTIFACTS_DIR}/ingestion_production/processed/{doc_id}_processed.json` (hiện tại: `D:\PVCFC_Artifacts\ingestion_production\processed`)
+- `{ARTIFACTS_DIR}/ingestion_production/chunks/{doc_id}_chunks.jsonl` (hiện tại: `D:\PVCFC_Artifacts\ingestion_production\chunks`)
 
 ---
 
@@ -473,7 +502,7 @@ Total: 247 components indexed for page 113
 
 **Output Files:**
 ```
-artifacts/ingestion_production/
+{ARTIFACTS_DIR}/ingestion_production/
 ├── chunks/
 │   ├── Ammonia_P&ID_04000_chunks.jsonl       (247 chunks)
 │   └── Compressor_Manual_ABC_chunks.jsonl    (89 chunks)
@@ -483,7 +512,7 @@ artifacts/ingestion_production/
 ├── corpus.jsonl                               (All chunks)
 └── documents.json                             (All docs metadata)
 
-D:\PVCFC_Artifacts/
+{ARTIFACTS_DIR}/
 ├── entities/
 │   └── tags.jsonl                             (All P&ID tags)
 ├── layout/
@@ -776,6 +805,45 @@ Step A7: Return Results
   ]
 }
 ```
+
+---
+
+### FLOW A.1: P&ID Tag Location Queries (Direct Answer Mode)
+
+Một nhánh đặc biệt dùng cho truy vấn **hỏi vị trí tag P&ID** (ví dụ: `"04 ZSH 4326/A"`, `"Tag 04 ZSH 4326 nằm ở trang nào?"`).
+
+```text
+User Query: "04 ZSH 4326/A"
+Mode: P&ID Search (query_type="pid")
+    ↓
+1. Detection in /ask router
+    - `PIDTagHandler.detect_tag_query()` bắt các câu hỏi có "tag", "thiết bị", "trang/page", "ở đâu", "located", "found"...
+    - Nếu không có từ khoá vị trí nhưng query rất ngắn (≤3 token) và `PIDQueryEnhancer.enhance()` parse được {unit, prefix, suffix}, hệ thống coi đây là **tag-only location query** (ví dụ: `"04 ZSH 4326/A"`).
+    ↓
+2. Dedicated P&ID retrieval for tag location
+    - Router `/ask` chạy lại `HybridWithTagsRetriever` (hoặc `tags_retriever`) với `top_k` lớn (≈4×`max_context`, tối thiểu ~30) và filter `doc_category=["pid"]`.
+    - Mục tiêu: đảm bảo danh sách kết quả **luôn chứa các hit thực sự có tag** (ví dụ page 89), kể cả khi BGE rerank ban đầu ưu tiên các trang text lân cận (85/86/102).
+    ↓
+3. PIDTagHandler.create_tag_location_answer(tag_name, retrieval_results)
+    - Chuẩn hoá tag: "04 ZSH 4326/A" → "04 ZSH 4326".
+    - Ưu tiên thứ tự nguồn:
+      3.1. Các hit `source="tags"` (Level 2 spatial search) với bbox từ `pvcfc_pid_spatial_components`.
+      3.2. Các hit text nơi tag xuất hiện trong nội dung (normal hoá bỏ khoảng trắng/gạch nối: `"04ZSH4326"`).
+      3.3. Nếu cả hai đều không có, dùng top result làm best guess với cảnh báo trong answer.
+    - Gom nhóm theo page, chọn 1–2 page có score cao nhất (ví dụ: page 89), sinh câu trả lời dạng: "Tag 04 ZSH 4326 xuất hiện ở [Doc 1, p.89] của tài liệu ...".
+    ↓
+4. Direct answer (no free-form LLM generation)
+    - `/ask` đóng gói answer + citations và **không** gửi prompt sang LLM, tránh trường hợp LLM nói "không tìm thấy trong context" dù đã xác định được trang.
+    - `confidence` được set cố định (vd 0.95) khi có hit rõ ràng.
+```
+
+**Text-only Tag Fallback (từ text PyMuPDF):**
+
+- Nếu Level 2 spatial search không trả về cluster nào nhưng có `doc_id` cụ thể, `HybridWithTagsRetriever` dùng `TextTagDetector` để quét `text_by_page.jsonl` (text trích từ PyMuPDF từng trang P&ID).
+- TextTagDetector sử dụng **full-window patterns** với số token gap nhỏ để nhận diện các chuỗi tương đương `"04 ZSH 4326"` ngay cả khi `04`, `ZSH`, `4326` bị tách rời trên dòng.
+- Các hit này được convert thành kết quả với `source="text_tag_fallback"` và được `PIDTagHandler` xử lý giống như spatial hits → vẫn trả về đúng page cho truy vấn vị trí tag.
+
+Kết quả: các truy vấn như `"04 ZSH 4326/A"` có thể trả về **đúng page P&ID thật sự chứa tag** (ví dụ page 89) với citations ổn định, không bị trộn với các trang lân cận chỉ chứa mô tả text.
 
 ---
 

@@ -6,9 +6,118 @@ from typing import List, Set
 
 from loguru import logger
 
+from app.core.config import settings
 from app.rag.spatial.component_clusterer import ComponentClusterer
 from app.rag.spatial.component_indexer import SpatialComponentIndexer
-from app.rag.spatial.schemas import Component, SearchResult
+from app.rag.spatial.schemas import Component, SearchResult, TagCluster
+from app.services.reranker import get_reranker_service
+
+
+class TagVariantGenerator:
+    """Generate OCR/formatting variants for tag components.
+
+    This provides a lightweight, index-compatible form of "fuzzy" matching by
+    trying common variations of unit/prefix/suffix instead of requiring changes
+    to the OpenSearch mapping (which uses keyword fields).
+    """
+
+    @staticmethod
+    def generate_variants(component_text: str, component_type: str) -> List[str]:
+        if not component_text:
+            return []
+
+        base = component_text.strip()
+        variants: Set[str] = {base}
+
+        # Remove spaces and hyphens (e.g., "04 PA" -> "04PA")
+        collapsed = base.replace(" ", "").replace("-", "")
+        variants.add(collapsed)
+
+        # Unit-specific variants (e.g., "4" -> "04", "004")
+        if component_type == "unit" and base.isdigit() and len(base) <= 2:
+            if len(base) == 1:
+                variants.add(f"0{base}")
+                variants.add(f"00{base}")
+            # Also keep original for safety
+
+        # Prefix casing variants
+        if component_type == "prefix":
+            variants.add(base.upper())
+            variants.add(base.lower())
+
+        # Common OCR confusions (O/0, I/1, S/5)
+        ocr_pairs = [
+            ("O", "0"),
+            ("0", "O"),
+            ("I", "1"),
+            ("1", "I"),
+            ("S", "5"),
+            ("5", "S"),
+        ]
+        for old, new in ocr_pairs:
+            if old in base:
+                variants.add(base.replace(old, new))
+
+        return list(variants)
+
+
+class TagClusterReranker:
+    """Rerank spatial tag clusters using BGE CrossEncoder scores.
+
+    NOTE: This adds a semantic signal on top of spatial geometry, which can help
+    when multiple candidate clusters exist across pages/docs. It reuses the
+    global BGE reranker service so no extra model is loaded.
+    """
+
+    def __init__(self):
+        self._reranker = get_reranker_service()
+
+    def rerank(
+        self, query_tag: str, clusters: List[TagCluster], top_k: int | None = None
+    ) -> List[TagCluster]:
+        if not clusters:
+            return clusters
+
+        # Build chunk-like payloads for the BGE reranker
+        chunks = []
+        for idx, cluster in enumerate(clusters):
+            chunks.append(
+                {
+                    "chunk_id": f"{cluster.doc_id}_p{cluster.page}_cluster_{idx}",
+                    "text": cluster.tag_text,
+                    "metadata": {"cluster_index": idx},
+                    "doc_id": cluster.doc_id,
+                    "source": "spatial_cluster",
+                    "original_score": float(cluster.score),
+                }
+            )
+
+        effective_top_k = top_k or len(chunks)
+
+        # Call BGE reranker (chunk-level)
+        reranked = self._reranker.rerank_chunks(
+            query=query_tag, chunks=chunks, top_k=effective_top_k
+        )
+
+        reranked_clusters: List[TagCluster] = []
+        for chunk, bge_score in reranked:
+            meta = chunk.get("metadata") or {}
+            idx = meta.get("cluster_index")
+            if idx is None or not (0 <= idx < len(clusters)):
+                continue
+
+            base_cluster = clusters[idx]
+            # Combine spatial score (geometry) with BGE score (semantic)
+            combined = 0.6 * float(base_cluster.score) + 0.4 * float(bge_score)
+            base_cluster.score = combined
+            reranked_clusters.append(base_cluster)
+
+        # Fall back to original order if something went wrong
+        if not reranked_clusters:
+            return clusters
+
+        reranked_clusters.sort(key=lambda c: c.score, reverse=True)
+        return reranked_clusters
 
 
 class SpatialTagSearcher:
@@ -52,10 +161,16 @@ class SpatialTagSearcher:
         """
         logger.info(f"Spatial search: {unit} {prefix} {suffix}")
 
-        # Step 1: Find pages containing ALL components
-        pages_with_unit = self._get_pages_with_component(unit, "unit", doc_id)
-        pages_with_prefix = self._get_pages_with_component(prefix, "prefix", doc_id)
-        pages_with_suffix = self._get_pages_with_component(suffix, "suffix", doc_id)
+        # Step 1: Find pages containing ALL components (with soft variants)
+        pages_with_unit = self._get_pages_with_component_with_variants(
+            unit, "unit", doc_id
+        )
+        pages_with_prefix = self._get_pages_with_component_with_variants(
+            prefix, "prefix", doc_id
+        )
+        pages_with_suffix = self._get_pages_with_component_with_variants(
+            suffix, "suffix", doc_id
+        )
 
         candidate_pages = pages_with_unit & pages_with_prefix & pages_with_suffix
 
@@ -68,24 +183,45 @@ class SpatialTagSearcher:
         logger.debug(f"Candidate pages: {sorted(candidate_pages)}")
 
         # Step 2: For each page, get components and find clusters
-        results = []
+        all_clusters: List[TagCluster] = []
 
         for page in candidate_pages:
-            # Get all components on this page
-            page_units = self._get_components_on_page(unit, "unit", doc_id, page)
-            page_prefixes = self._get_components_on_page(prefix, "prefix", doc_id, page)
-            page_suffixes = self._get_components_on_page(suffix, "suffix", doc_id, page)
+            # Get all components on this page (with variants fallback)
+            page_units = self._get_components_on_page_with_variants(
+                unit, "unit", doc_id, page
+            )
+            page_prefixes = self._get_components_on_page_with_variants(
+                prefix, "prefix", doc_id, page
+            )
+            page_suffixes = self._get_components_on_page_with_variants(
+                suffix, "suffix", doc_id, page
+            )
 
             # Find clusters
             clusters = self.clusterer.find_tag_clusters(
                 units=page_units, prefixes=page_prefixes, suffixes=page_suffixes
             )
 
-            # Convert clusters to search results
-            for cluster in clusters:
-                result = SearchResult(
-                    page=page,
-                    doc_id=doc_id,
+            all_clusters.extend(clusters)
+
+        # Optional: semantic reranking of clusters using BGE CrossEncoder
+        if all_clusters and settings.enable_bge_rerank:
+            try:
+                query_tag = f"{unit} {prefix} {suffix}".strip()
+                reranker = TagClusterReranker()
+                all_clusters = reranker.rerank(
+                    query_tag=query_tag, clusters=all_clusters
+                )
+            except Exception as e:
+                logger.error(f"BGE reranking for tag clusters failed: {e}")
+
+        # Convert clusters to search results
+        results: List[SearchResult] = []
+        for cluster in all_clusters:
+            results.append(
+                SearchResult(
+                    page=cluster.page,
+                    doc_id=cluster.doc_id,
                     score=cluster.score,
                     bbox=cluster.bbox,
                     source="spatial",
@@ -96,7 +232,7 @@ class SpatialTagSearcher:
                         "suffix": cluster.suffix.text,
                     },
                 )
-                results.append(result)
+            )
 
         # Sort by score
         results.sort(key=lambda r: r.score, reverse=True)
@@ -106,6 +242,35 @@ class SpatialTagSearcher:
         )
 
         return results
+
+    def _get_pages_with_component_with_variants(
+        self, component_text: str, component_type: str, doc_id: str
+    ) -> Set[int]:
+        """Get pages containing a component, trying common variants if needed.
+
+        This provides a soft form of fuzzy matching without changing index
+        mappings by issuing multiple exact term queries for likely variants.
+        """
+        # First try exact text
+        pages = self._get_pages_with_component(component_text, component_type, doc_id)
+        if pages:
+            return pages
+
+        # If nothing found, try variants
+        variant_pages: Set[int] = set()
+        variants = TagVariantGenerator.generate_variants(component_text, component_type)
+        for variant in variants:
+            if not variant or variant == component_text:
+                continue
+            v_pages = self._get_pages_with_component(variant, component_type, doc_id)
+            if v_pages:
+                logger.info(
+                    f"Spatial search: component '{component_text}' not found, "
+                    f"using variant '{variant}' ({component_type})"
+                )
+                variant_pages |= v_pages
+
+        return variant_pages
 
     def _get_pages_with_component(
         self, component_text: str, component_type: str, doc_id: str
@@ -155,7 +320,7 @@ class SpatialTagSearcher:
     def _get_components_on_page(
         self, component_text: str, component_type: str, doc_id: str, page: int
     ) -> List[Component]:
-        """Get all components of specific type on a page"""
+        """Get all components of specific type on a page (exact text only)."""
         comp_dicts = self.indexer.search_components(
             component_text=component_text,
             component_type=component_type,
@@ -179,3 +344,36 @@ class SpatialTagSearcher:
             components.append(component)
 
         return components
+
+    def _get_components_on_page_with_variants(
+        self, component_text: str, component_type: str, doc_id: str, page: int
+    ) -> List[Component]:
+        """Get components on a page, trying common variants if the exact text fails."""
+        components = self._get_components_on_page(
+            component_text=component_text,
+            component_type=component_type,
+            doc_id=doc_id,
+            page=page,
+        )
+        if components:
+            return components
+
+        variants = TagVariantGenerator.generate_variants(component_text, component_type)
+        all_components: List[Component] = []
+        for variant in variants:
+            if not variant or variant == component_text:
+                continue
+            alt_components = self._get_components_on_page(
+                component_text=variant,
+                component_type=component_type,
+                doc_id=doc_id,
+                page=page,
+            )
+            if alt_components:
+                logger.info(
+                    f"Spatial search: components for '{component_text}' missing on page {page}, "
+                    f"using variant '{variant}' ({component_type})"
+                )
+                all_components.extend(alt_components)
+
+        return all_components

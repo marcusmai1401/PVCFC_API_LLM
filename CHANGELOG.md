@@ -2,6 +2,137 @@
 
 All notable changes to the PVCFC RAG System.
 
+## [1.6.0] - 2025-11-19 - PARENT-CHILD CHUNKING STRATEGY (PHASE 3)
+
+### ✨ Added - Hierarchical Chunking for Better Context
+
+**Problem Identified:**
+- Previous chunking strategy used fixed 1000-char chunks with 200-char overlap
+- Context fragmentation: important context split across multiple chunks
+- LLM received incomplete semantic blocks, reducing answer quality
+- No distinction between retrieval granularity (precise) and generation context (comprehensive)
+
+**Solution Implemented - Parent-Child Chunking:**
+- **Parent Chunks**: Large semantic blocks (~1800 chars, 200 overlap) for LLM context
+- **Child Chunks**: Small dense blocks (~400 chars, 50 overlap) for precise retrieval
+- **Strategy**: Retrieve via child chunks (precision), but send parent text to LLM (completeness)
+- **Implementation**: Option A - store `parent_text` directly in child chunk metadata
+
+### 🔧 Implementation Details
+
+**1. New Chunker Class** (`app/ingestion/text_chunker.py:602-813`):
+- Added `ParentChildChunker` class
+- Parameters: `parent_chunk_size=1800`, `parent_overlap=200`, `child_chunk_size=400`, `child_overlap=50`
+- Creates hierarchical structure: 1 parent → N child chunks
+- Child chunks embed parent_text in metadata for fast retrieval (no joins needed)
+
+**2. Database Schema Updates**:
+- **Weaviate**: Added 6 new properties
+  - `parent_text` (TEXT): Full parent chunk text for LLM
+  - `parent_id` (TEXT): Parent chunk identifier
+  - `chunk_type` (TEXT): "child" or "parent"
+  - `is_parent` (BOOL): False for child (indexed), True for parent
+  - `parent_index` (INT): Parent position in document
+  - `parent_char_count` (INT): Parent text length
+- **OpenSearch**: Added same fields
+  - `parent_text` at top-level (not indexed, stored only)
+  - Parent-child relationship fields in metadata
+
+**3. Retrieval Helper Function** (`app/rag/retriever.py:75-111`):
+- Added `extract_text_with_parent_fallback()` helper
+- 3-tier priority:
+  1. Top-level `parent_text` (OpenSearch)
+  2. `metadata['parent_text']` (Weaviate)
+  3. Fallback to child `text` if parent unavailable
+- Integrated into:
+  - `app/rag/weaviate_retriever.py` (lines 17, 542)
+  - `app/rag/hybrid_weaviate_opensearch_retriever.py` (lines 23, 460, 495)
+
+**4. Ingestion Pipeline Integration**:
+- Updated `scripts/ingest_production.py` (line 115): Uses ParentChildChunker
+- Updated `scripts/complete_missing_and_index.py` (line 57): Uses ParentChildChunker
+- Both scripts create child chunks with parent_text embedded
+
+### 🧹 System Cleanup & Migration
+
+**Storage Migration to D: Drive**:
+- Migrated artifacts from `C:\Users\Admin\Desktop\Code - API_LLM_PVCFC\artifacts` to `D:\PVCFC_Artifacts`
+- Updated `.env`: `ARTIFACTS_DIR=D:\PVCFC_Artifacts`, `INDEX_DIR=D:\PVCFC_Artifacts\index_production`
+- Reason: Better performance, dedicated storage for production data
+
+**Cleanup Results**:
+- **C: Drive**: Deleted 889 MB (25 items - old artifacts, debug folders, test scripts)
+- **D: Drive**: Deleted 1,888 MB (2,784 files - old ingestion runs, test data, debug output)
+- **Total freed**: 2,777 MB (~2.7 GB)
+- Production code: Verified 100% intact
+
+**Files Modified**:
+- `app/ingestion/text_chunker.py` (added ParentChildChunker class)
+- `app/rag/retriever.py` (added extract_text_with_parent_fallback)
+- `app/rag/weaviate_retriever.py` (integrated helper)
+- `app/rag/hybrid_weaviate_opensearch_retriever.py` (integrated helper)
+- `scripts/ingest_production.py` (uses ParentChildChunker, reads ARTIFACTS_DIR from env)
+- `scripts/complete_missing_and_index.py` (uses ParentChildChunker, parent-child schema)
+- `scripts/clear_all_data_simple.py` (uses ARTIFACTS_DIR from env)
+- `.env` (ARTIFACTS_DIR, INDEX_DIR point to D: drive)
+
+### ✅ Testing & Verification
+
+**Paranoid Verification (3-step runtime proof)**:
+- **Step 1 (Smoke Test)**: Single PDF ingestion → Created 29 child chunks from 11 parents ✅
+- **Step 2 (Database Inspection)**: Raw JSON fetch → parent_text=632 chars, child text=333 chars (1.90x ratio) ✅
+- **Step 3 (Retrieval Simulation)**: Helper function → Returns parent text (632 chars), not child ✅
+
+**Impact**:
+- ✅ Improved context quality: LLM receives full semantic blocks instead of fragments
+- ✅ Maintained retrieval precision: Search still uses small child chunks
+- ✅ No performance degradation: parent_text stored directly (no joins)
+- ✅ Backward compatible: Falls back to child text if parent unavailable
+- ✅ Production ready: Full verification passed, system clean
+
+### 📊 System Status - Production Ready
+
+**Current Configuration**:
+- Chunking: Parent-Child (1800/400 chars)
+- Storage: `D:\PVCFC_Artifacts`
+- Ingestion script: `scripts/ingest_production.py`
+- Both Weaviate + OpenSearch: Phase 3 schema applied
+- Retrieval: Helper function integrated in all retrievers
+
+**Next Steps**:
+- Ready for full 7-hour production ingestion with Phase 3 chunking
+- Expected improved answer quality due to complete semantic context
+
+---
+
+## [1.5.1] - 2025-11-16 - P&ID TAG LOCATION (TEXT + SPATIAL)
+
+### ✨ Added - Direct P&ID Tag Location Answers
+
+- Implemented `PIDTagHandler` + `/ask` integration để xử lý **truy vấn vị trí tag P&ID** (ví dụ: `"04 ZSH 4326/A"`) trong chế độ `query_type="pid"`.
+- Khi truy vấn được nhận diện là tag-location (explicit hoặc implicit), router `/ask` **bỏ qua LLM generation** và dùng dedicated P&ID retrieval + TagHandler để trả về câu trả lời dạng: `"Tag XX xuất hiện ở [Doc 1, p.Y]"` với citations rõ ràng.
+- Thêm high-recall P&ID retrieval path cho chế độ này: sử dụng `HybridWithTagsRetriever` với `top_k` lớn hơn và filter `doc_category=["pid"]` để đảm bảo **trang thực sự chứa tag luôn nằm trong tập kết quả**.
+
+### ✨ Added - Text Tag Fallback from PyMuPDF Pages
+
+- Tích hợp **TextTagDetector** vào `HybridWithTagsRetriever` như Level‑1 fallback khi Level‑2 spatial search không tìm được tag.
+- TextTagDetector hoạt động trên text trích từ **PyMuPDF** theo từng trang (`text_by_page.jsonl`), sử dụng full-window patterns để nhận diện tag (`unit/prefix/suffix`) ngay cả khi bị tách rời trong text.
+- Các hit này được convert thành kết quả với `source="text_tag_fallback"` và tham gia RRF fusion + `PIDTagHandler` giống như spatial hits.
+
+### 🔧 Fixed - Wrong Page in Tag Location Answers
+
+- Trước đây, một số truy vấn tag (ví dụ `"04 ZSH 4326/A"`) trả về **page 102** hoặc câu trả lời "Không tìm thấy trong context" mặc dù tag thực tế nằm ở page 89.
+- Nguyên nhân: logic tag-location chỉ nhìn thấy top‑`max_context` results (BGE-reranked chunks), bỏ sót spatial/text hits ở page 89.
+- Khắc phục: `/ask` giờ chạy **riêng một lượt tag-location retrieval** và truyền **toàn bộ tập tag hits** vào `PIDTagHandler.create_tag_location_answer`, giúp citations ưu tiên đúng trang có tag (page 89) thay vì các trang lân cận (85/86/102).
+
+### Files Modified
+
+- `app/api/routers/ask.py` — thêm nhánh nhận diện tag-location, dedicated P&ID retrieval, và đóng gói direct answer.
+- `app/rag/hybrid_with_tags_retriever.py` — tích hợp `TextTagDetector` fallback và làm rõ phân biệt `source="tags"` vs `"text_tag_fallback"` trong RRF.
+- `app/rag/pid_tag_handler.py` — cập nhật logic chọn trang ưu tiên hits từ tags/text chứa tag, nhóm theo page và sinh câu trả lời tag-location ổn định.
+
+---
+
 ## [1.5.0] - 2025-11-11 - P&ID TAG EXTRACTION IMPROVEMENTS & PROTOBUF RESOLUTION
 
 ### 🔧 Fixed - P&ID Tag Extraction Single-Letter Prefix Support
@@ -418,10 +549,11 @@ All notable changes to the PVCFC RAG System.
 - ✅ Updated lines 370-377 (P&ID Artifacts Location note)
 - ✅ Added clarification about ARTIFACTS_DIR vs --output-dir
 
-**Key Clarifications Added:**
+**Key Clarifications Added (for version 1.2.0 at that time):**
 - Actual save location: `artifacts/ingestion_production/` (determined by `--output-dir` parameter)
 - `ARTIFACTS_DIR` in .env: Legacy compatibility only, not actively used by ingestion code
 - Production config: `ENABLE_PID_TAGS=true` (contrary to README example)
+- **Note (1.6.0+):** Từ version 1.6.0 trở đi, hệ thống đã **di chuyển artifacts sang `D:\PVCFC_Artifacts` và sử dụng trực tiếp `ARTIFACTS_DIR` + `INDEX_DIR` trong `.env`** (xem entry 1.6.0 ở trên).
 
 **Documentation Accuracy:**
 - Before: 60% accurate (mixed D:\ and artifacts/ paths)

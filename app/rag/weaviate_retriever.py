@@ -14,7 +14,7 @@ from weaviate.classes.query import Filter, MetadataQuery
 from app.core.circuit_breaker import get_weaviate_breaker
 from app.core.config import settings
 from app.rag.query_transform import TransformedQuery
-from app.rag.retriever import RetrievalResult
+from app.rag.retriever import RetrievalResult, extract_text_with_parent_fallback
 from app.services.embedding_enhanced import EmbeddingService
 from app.services.reranker import get_reranker_service
 
@@ -538,7 +538,8 @@ class WeaviateRetriever:
 
             # Extract properties (adjust field names to match your Weaviate schema)
             chunk_id = props.get("chunk_id", result["uuid"])
-            text = props.get("text", "")
+            # Phase 3: Use parent_text if available (props have parent_text at top-level)
+            text = extract_text_with_parent_fallback(props)
             doc_id = props.get("doc_id")
             page = props.get("page")
             bbox = props.get("bbox")  # Assuming bbox is stored as list

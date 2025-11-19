@@ -12,6 +12,7 @@ from app.core.config import Settings
 from app.core.metrics import MetricsCollector
 from app.rag.cove import ChainOfVerification
 from app.rag.generator import GeneratorConfig, ResponseGenerator
+from app.rag.query_processing.pid_query_enhancer import PIDQueryEnhancer
 from app.rag.query_transform import QueryTransformer
 from app.rag.reranker import Reranker
 from app.rag.retriever import HybridRetriever
@@ -20,6 +21,9 @@ from app.rag.weaviate_retriever import WeaviateRetriever
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ask", tags=["RAG"])
+
+# Global PID query enhancer for implicit tag-location detection in P&ID mode
+_pid_query_enhancer = PIDQueryEnhancer()
 
 
 # Dependencies will be injected from main app
@@ -396,10 +400,58 @@ async def ask_question(
         )
 
         # Step 3.5: Check if this is a P&ID tag location query (special handling)
-        from app.rag.pid_tag_handler import get_tag_handler
+        from app.rag.pid_tag_handler import TagLocationQuery, get_tag_handler
 
         tag_handler = get_tag_handler()
         tag_detection = tag_handler.detect_tag_query(request.query)
+
+        # Implicit tag-location detection for short P&ID tag queries
+        # Example: "04 ZSH 4326/A" (no explicit mention of "trang/page")
+        if (not tag_detection.is_tag_query) and request.query_type == "pid":
+            try:
+                pid_analysis = _pid_query_enhancer.enhance(request.query)
+                if pid_analysis.get("strategy") == "component_search":
+                    components = pid_analysis.get("components") or {}
+                    unit = (components.get("unit") or "").strip()
+                    prefix = (components.get("prefix") or "").strip()
+                    suffix = (components.get("suffix") or "").strip()
+
+                    has_all_components = bool(unit and prefix and suffix)
+
+                    # Heuristic: treat as tag-only if query is short and not a "why/how" question
+                    query_text = (request.query or "").strip()
+                    token_count = len(query_text.split())
+                    is_short = token_count <= 3
+
+                    lower_q = query_text.lower()
+                    question_keywords = [
+                        "vì sao",
+                        "tại sao",
+                        "như thế nào",
+                        "how ",
+                        " when ",
+                        "logic",
+                        "interlock",
+                        "giải thích",
+                        "explain",
+                    ]
+                    has_question_kw = any(kw in lower_q for kw in question_keywords)
+
+                    if has_all_components and is_short and not has_question_kw:
+                        # Build normalized tag name like "04 ZSH 4326" (ignore variant/annotation)
+                        tag_name_norm = " ".join([unit.zfill(2), prefix, suffix])
+                        tag_detection = TagLocationQuery(
+                            is_tag_query=True,
+                            tag_name=tag_name_norm,
+                            query_type="location",
+                        )
+                        logger.info(
+                            f"[{trace_id}] Implicit tag location query detected via PIDQueryEnhancer: {tag_name_norm}"
+                        )
+            except Exception as e:
+                logger.warning(
+                    f"[{trace_id}] Implicit tag location detection failed: {e}"
+                )
 
         if tag_detection.is_tag_query and tag_detection.tag_name:
             # Special handling for tag location queries - bypass LLM
@@ -408,9 +460,46 @@ async def ask_question(
                 f"Using direct answer from retrieval."
             )
 
+            # For tag-location queries, run a dedicated high-recall retrieval so that
+            # PIDTagHandler can see spatial/tag hits even if they fall below the normal top-k
+            # used for LLM context.
+            tag_retrieval_results = None
+            try:
+                # Prefer specialized P&ID tags retriever when in pid mode
+                if request.query_type == "pid":
+                    tag_retriever = (
+                        getattr(http_request.app.state, "tags_retriever", None)
+                        or retriever
+                    )
+                else:
+                    tag_retriever = retriever
+
+                # Propagate doc_id hint via FastAPI Request if provided (for Level 2 spatial search)
+                if getattr(request, "doc_id", None):
+                    setattr(http_request, "doc_id", request.doc_id)
+
+                # Use larger top_k for tag-location to improve recall around the true tag page
+                tag_top_k = max(request.max_context * 4, 30)
+
+                tag_retrieval_results = tag_retriever.search(
+                    transformed_query,
+                    top_k=tag_top_k,
+                    request=http_request,
+                )
+                logger.info(
+                    f"[{trace_id}] Tag-location dedicated retrieval returned "
+                    f"{len(tag_retrieval_results)} results (top_k={tag_top_k})"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[{trace_id}] Tag-location dedicated retrieval failed: {e}; "
+                    f"falling back to reranked results."
+                )
+                tag_retrieval_results = reranked_results
+
             answer_text, tag_citations = tag_handler.create_tag_location_answer(
                 tag_name=tag_detection.tag_name,
-                retrieval_results=reranked_results,
+                retrieval_results=tag_retrieval_results,
                 language=request.language,
             )
 

@@ -251,9 +251,11 @@ class PDFProcessor:
             OCR_CHAR_THRESHOLD = 1700
             logger.debug(f"Page {page_num}: Using CAD-like OCR threshold (1700 chars)")
         else:
-            # Regular technical docs: Low threshold for scanned pages only
-            OCR_CHAR_THRESHOLD = 40
-            logger.debug(f"Page {page_num}: Using regular doc OCR threshold (40 chars)")
+            # Regular technical docs: Increased threshold to capture headers/footers/partial scans
+            OCR_CHAR_THRESHOLD = 100
+            logger.debug(
+                f"Page {page_num}: Using regular doc OCR threshold (100 chars)"
+            )
 
         should_ocr = self.enable_ocr and page_content.char_count < OCR_CHAR_THRESHOLD
 
@@ -366,14 +368,16 @@ class PDFProcessor:
         for line in lines:
             line = line.strip()
             if line:
+                # Collapse multiple spaces within the line
+                line = re.sub(r"[ \t]+", " ", line)
                 cleaned_lines.append(line)
 
         # Join with single newlines
         text = "\n".join(cleaned_lines)
 
-        # Replace multiple spaces with single space
-        text = re.sub(r"\s+", " ", text)
-        text = re.sub(r"\n\s*\n", "\n\n", text)
+        # Restore paragraph breaks (double newline) where appropriate
+        # This heuristic is tricky; simple single newlines are safer for tables
+        # text = re.sub(r"\n\s*\n", "\n\n", text)
 
         return text.strip()
 

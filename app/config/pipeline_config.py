@@ -277,6 +277,12 @@ class PipelineConfig:
     TAGGY_MIN_REGEX_HITS = int(os.environ.get("TAGGY_MIN_REGEX_HITS", "3"))
     TAGGY_MIN_CODE_TOKENS = int(os.environ.get("TAGGY_MIN_CODE_TOKENS", "4"))
 
+    # Text-based tag fallback configuration (Level 1)
+    ENABLE_TEXT_TAG_FALLBACK = (
+        os.environ.get("ENABLE_TEXT_TAG_FALLBACK", "true").lower() == "true"
+    )
+    TEXT_TAG_MAX_GAP_TOKENS = int(os.environ.get("TEXT_TAG_MAX_GAP_TOKENS", "5"))
+
     # DEPRECATED: Level 3 tags index (replaced by Level 2 spatial components)
     # TAGS_INDEX_NAME = os.environ.get("TAGS_INDEX_NAME", "pvcfc_pid_tags")
 

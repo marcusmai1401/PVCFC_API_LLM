@@ -20,7 +20,7 @@ if env_path.exists():
 from loguru import logger
 
 from app.ingestion.pdf_processor import PDFProcessor
-from app.ingestion.text_chunker import TextChunker
+from app.ingestion.text_chunker import ParentChildChunker
 
 
 def process_missing_file():
@@ -53,11 +53,13 @@ def process_missing_file():
         logger.warning("No text extracted, skipping chunking")
         return None
 
-    # Chunking
-    chunker = TextChunker(
-        chunk_size=1000,
-        chunk_overlap=200,
-        chunking_strategy="semantic",
+    # Chunking with Phase 3 Parent-Child strategy
+    chunker = ParentChildChunker(
+        parent_chunk_size=1800,
+        parent_overlap=200,
+        child_chunk_size=400,
+        child_overlap=50,
+        min_chunk_size=100,
     )
 
     doc_dict = pdf_doc.to_dict()
@@ -104,20 +106,35 @@ def index_to_opensearch():
             logger.info("Deleting old rag_chunks index...")
             client.indices.delete(index="rag_chunks")
 
-        # Create index with mapping
+        # Create index with Phase 3 parent-child mapping
         mapping = {
             "mappings": {
                 "properties": {
                     "chunk_id": {"type": "keyword"},
                     "doc_id": {"type": "keyword"},
                     "text": {"type": "text"},
+                    "parent_text": {
+                        "type": "text",
+                        "index": False,
+                    },  # Phase 3: Parent text (not indexed, stored only)
                     "page_start": {"type": "integer"},
                     "page_end": {"type": "integer"},
                     "page": {"type": "integer"},
                     "chunk_index": {"type": "integer"},
                     "tags": {"type": "keyword"},
                     "tags_raw": {"type": "keyword"},
-                    "metadata": {"type": "object", "enabled": True},
+                    "metadata": {
+                        "type": "object",
+                        "enabled": True,
+                        "properties": {
+                            "parent_id": {"type": "keyword"},
+                            "parent_text": {"type": "text", "index": False},
+                            "chunk_type": {"type": "keyword"},
+                            "is_parent": {"type": "boolean"},
+                            "parent_index": {"type": "integer"},
+                            "parent_char_count": {"type": "integer"},
+                        },
+                    },
                 }
             }
         }
@@ -137,7 +154,7 @@ def index_to_opensearch():
             f"Loaded {len(all_chunks)} chunks from {len(list(chunks_dir.glob('*_chunks.json')))} files"
         )
 
-        # Bulk index with flattened tags and page
+        # Bulk index with Phase 3 parent_text mapping
         actions = []
         for chunk in all_chunks:
             metadata = chunk.get("metadata", {})
@@ -146,6 +163,9 @@ def index_to_opensearch():
                 "chunk_id": chunk["chunk_id"],
                 "doc_id": chunk["doc_id"],
                 "text": chunk["text"],
+                "parent_text": metadata.get(
+                    "parent_text"
+                ),  # Phase 3: Extract parent_text from metadata
                 "page_start": chunk.get("page_start"),
                 "page_end": chunk.get("page_end"),
                 "page": metadata.get("page"),
@@ -198,7 +218,7 @@ def index_to_weaviate():
             logger.info("Deleting old Chunk collection...")
             client.collections.delete("Chunk")
 
-        # Create collection
+        # Create collection with Phase 3 parent-child schema
         client.collections.create(
             name="Chunk",
             vectorizer_config=wvc.config.Configure.Vectorizer.none(),
@@ -208,6 +228,24 @@ def index_to_weaviate():
                 ),
                 wvc.config.Property(name="doc_id", data_type=wvc.config.DataType.TEXT),
                 wvc.config.Property(name="text", data_type=wvc.config.DataType.TEXT),
+                wvc.config.Property(
+                    name="parent_text", data_type=wvc.config.DataType.TEXT
+                ),  # Phase 3
+                wvc.config.Property(
+                    name="parent_id", data_type=wvc.config.DataType.TEXT
+                ),
+                wvc.config.Property(
+                    name="chunk_type", data_type=wvc.config.DataType.TEXT
+                ),
+                wvc.config.Property(
+                    name="is_parent", data_type=wvc.config.DataType.BOOL
+                ),
+                wvc.config.Property(
+                    name="parent_index", data_type=wvc.config.DataType.INT
+                ),
+                wvc.config.Property(
+                    name="parent_char_count", data_type=wvc.config.DataType.INT
+                ),
                 wvc.config.Property(
                     name="chunk_index", data_type=wvc.config.DataType.INT
                 ),
@@ -249,6 +287,12 @@ def index_to_weaviate():
                         "chunk_id": chunk["chunk_id"],
                         "doc_id": chunk["doc_id"],
                         "text": chunk["text"],
+                        "parent_text": metadata.get("parent_text"),  # Phase 3
+                        "parent_id": metadata.get("parent_id"),
+                        "chunk_type": metadata.get("chunk_type"),
+                        "is_parent": metadata.get("is_parent", False),
+                        "parent_index": metadata.get("parent_index"),
+                        "parent_char_count": metadata.get("parent_char_count"),
                         "chunk_index": chunk.get("chunk_index", 0),
                         "page_start": chunk.get("page_start"),
                         "page_end": chunk.get("page_end"),

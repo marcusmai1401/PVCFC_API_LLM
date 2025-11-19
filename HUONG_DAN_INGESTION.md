@@ -2,7 +2,7 @@
 
 > **Tài liệu hướng dẫn đầy đủ về quy trình xử lý và lập chỉ mục tài liệu PDF cho hệ thống RAG**
 >
-> **Cập nhật:** 2025-11-11 (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix)
+> **Cập nhật:** 2025-11-19 (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix + Parent-Child Chunking)
 > **Hệ điều hành:** Windows
 > **Shell:** PowerShell 5.1+
 
@@ -146,9 +146,13 @@ python -c "from realesrgan import RealESRGANer; print('✓ Real-ESRGAN OK')"
 ### 3.1 Bước 1: Ingestion - Xử lý PDF (5-10 phút)
 
 ```powershell
+# Sử dụng production script (khuyến nghị)
+python scripts\ingest_production.py
+
+# Hoặc thủ công với parameters:
 python tools/ingest.py `
   --source-dir "D:\Data_Raw" `
-  --output-dir "artifacts\ingestion_production" `
+  --output-dir "D:\PVCFC_Artifacts\ingestion_production" `
   --workers 2 `
   --enable-pid-tags
 ```
@@ -156,9 +160,11 @@ python tools/ingest.py `
 **Lưu ý:**
 - OCR **LUÔN ENABLED** by default, không cần `--enable-ocr` flag
 - Nếu muốn tắt OCR: thêm `--no-ocr` flag
+- **Phase 3**: Sử dụng Parent-Child Chunking (parent ~1800 chars, child ~400 chars)
+- **Storage**: Tự động sử dụng `D:\PVCFC_Artifacts` từ `.env` (ARTIFACTS_DIR)
 
 **Kết quả:**
-- `chunks.jsonl` (~5,000 chunks)
+- `chunks.jsonl` (~5,000 child chunks với parent_text embedded)
 - `entities/tags.jsonl` (~200 tags từ Geometric Assembly)
 - `page_layout/*.json` (spatial layout data)
 - **Spatial components tự động được extract và index** vào `pvcfc_pid_spatial_components`
@@ -243,22 +249,24 @@ Score = Σ(weight × feature)
     └─ Score < 0.55 → Technical Doc Pipeline
 ```
 
-#### 4.1.2 Technical Doc Processing
+#### 4.1.2 Technical Doc Processing (V1 - tools/ingest.py)
 
 **Input:** PDF file
 **Output:** `chunks.jsonl`, `doc_id_map.json`
 
-**Quy trình:**
+**Quy trình (ingest V1 - legacy, semantic chunking):
 1. Parse PDF (PyMuPDF)
 2. Extract text (vector hoặc OCR nếu cần)
 3. OCR với Google Cloud Vision + Real-ESRGAN (nếu text < threshold)
-4. Semantic chunking (1000 chars, 200 overlap)
+4. Semantic chunking (1000 chars, 200 overlap) bằng `TextChunker`
 5. Save chunks
 
-**Tham số mặc định:**
+**Tham số mặc định (ingest V1):**
 - OCR threshold: 40 chars (technical docs)
 - Chunk size: 1000 chars
 - Chunk overlap: 200 chars
+
+> **Lưu ý (Phase 3 - Production):** Pipeline production dùng `scripts/ingest_production.py` với **Parent-Child Chunking** (parent ~1800 / child ~400). Mục 4.1.2 mô tả pipeline V1 (tools/ingest.py) cho mục đích tham khảo/legacy.
 
 #### 4.1.3 CAD-like Processing (Extended)
 
@@ -410,23 +418,23 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ask" `
 #### Technical Doc Outputs:
 ```powershell
 # Chunks
-$chunkCount = (Get-Content "artifacts\ingestion_production\chunks.jsonl").Count
+$chunkCount = (Get-Content "D:\\PVCFC_Artifacts\\ingestion_production\\chunks.jsonl").Count
 Write-Host "✓ Created $chunkCount chunks" -ForegroundColor Green
 
 # Doc ID map
-Get-Content "artifacts\ingestion_production\doc_id_map.json" | ConvertFrom-Json | Select-Object -First 5
+Get-Content "D:\\PVCFC_Artifacts\\ingestion_production\\doc_id_map.json" | ConvertFrom-Json | Select-Object -First 5
 ```
 
 #### P&ID Outputs:
 ```powershell
 # Tags (Geometric Assembly)
-if (Test-Path "artifacts\ingestion_production\entities\tags.jsonl") {
-    $tagCount = (Get-Content "artifacts\ingestion_production\entities\tags.jsonl").Count
+if (Test-Path "D:\\PVCFC_Artifacts\\ingestion_production\\entities\\tags.jsonl") {
+    $tagCount = (Get-Content "D:\\PVCFC_Artifacts\\ingestion_production\\entities\\tags.jsonl").Count
     Write-Host "✓ Extracted $tagCount tags" -ForegroundColor Green
 }
 
 # Page layouts
-$layoutCount = (Get-ChildItem "artifacts\ingestion_production\page_layout" -Filter "*.json").Count
+$layoutCount = (Get-ChildItem "D:\\PVCFC_Artifacts\\ingestion_production\\page_layout" -Filter "*.json").Count
 Write-Host "✓ Extracted $layoutCount page layouts" -ForegroundColor Green
 
 # Spatial components (Level 2)
@@ -574,7 +582,7 @@ docker-compose up -d opensearch
 $env:ENABLE_PID_TAGS = "true"
 
 # Kiểm tra telemetry
-Get-Content "artifacts\ingestion_production\logs\tag_extraction_telemetry.jsonl" |
+Get-Content "D:\\PVCFC_Artifacts\\logs\\tag_extraction_telemetry.jsonl" |
     ConvertFrom-Json |
     Where-Object { $_.doc_id -eq "your_file.pdf" } |
     Select-Object cadlike_score, is_cadlike, tags_found_total
@@ -611,7 +619,7 @@ python tools/ingest.py --help
 # Với OCR (default)
 python tools/ingest.py `
   --source-dir "D:\Data_Raw" `
-  --output-dir "artifacts\ingestion_production" `
+  --output-dir "D:\PVCFC_Artifacts\ingestion_production" `
   --enable-pid-tags `
   --workers 4 `
   --chunk-size 2000 `
@@ -620,7 +628,7 @@ python tools/ingest.py `
 # Không OCR (fast mode)
 python tools/ingest.py `
   --source-dir "D:\Data_Raw" `
-  --output-dir "artifacts\ingestion_production" `
+  --output-dir "D:\PVCFC_Artifacts\ingestion_production" `
   --no-ocr `
   --enable-pid-tags `
   --workers 4
@@ -691,8 +699,8 @@ Code - API_LLM_PVCFC/
 │   │   └── create_spatial_components_index.py
 │   └── utilities/
 │       └── index_production_chunks.py
-├── artifacts/
-│   └── ingestion_production/
+├── D:\PVCFC_Artifacts\
+│   └── ingestion_production\
 │       ├── chunks.jsonl
 │       ├── entities/tags.jsonl
 │       ├── page_layout/*.json

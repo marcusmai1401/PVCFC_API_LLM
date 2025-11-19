@@ -72,6 +72,49 @@ class RetrievalResult:
         }
 
 
+def extract_text_with_parent_fallback(
+    chunk_or_hit: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Phase 3 helper: Extract text for LLM context, preferring parent_text over child text.
+
+    Retrieval searches against child chunks (small, dense blocks ~400 chars),
+    but generation should use parent chunks (large semantic blocks ~1800 chars).
+
+    Priority:
+    1. Top-level 'parent_text' field (OpenSearch)
+    2. metadata['parent_text'] (Weaviate or nested)
+    3. Fallback to 'text' (child chunk)
+
+    Args:
+        chunk_or_hit: Chunk/hit dict from database
+        metadata: Optional explicit metadata dict
+
+    Returns:
+        Text string for LLM context (parent if available, child otherwise)
+    """
+    # 1. Check top-level parent_text (OpenSearch stores it here)
+    parent_text = chunk_or_hit.get("parent_text")
+    if parent_text and isinstance(parent_text, str) and len(parent_text.strip()) > 0:
+        return parent_text
+
+    # 2. Check metadata.parent_text (Weaviate or nested structure)
+    if metadata is None:
+        metadata = chunk_or_hit.get("metadata", {})
+
+    if metadata:
+        parent_text = metadata.get("parent_text")
+        if (
+            parent_text
+            and isinstance(parent_text, str)
+            and len(parent_text.strip()) > 0
+        ):
+            return parent_text
+
+    # 3. Fallback to child text
+    return chunk_or_hit.get("text", "")
+
+
 @dataclass
 class HybridSearchConfig:
     """Configuration for hybrid search"""

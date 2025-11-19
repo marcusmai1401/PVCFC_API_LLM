@@ -149,7 +149,7 @@ class OpenSearchBM25Retriever:
                                         "title",  # Document title, default boost
                                     ],
                                     "type": "best_fields",
-                                    "operator": "or",
+                                    "minimum_should_match": "75%",
                                     "boost": 1.0,
                                 }
                             },
@@ -166,7 +166,7 @@ class OpenSearchBM25Retriever:
                                                     "title",
                                                 ],
                                                 "type": "best_fields",
-                                                "operator": "or",
+                                                "minimum_should_match": "75%",
                                             }
                                         },
                                         {"term": {"is_tag_entity": True}},

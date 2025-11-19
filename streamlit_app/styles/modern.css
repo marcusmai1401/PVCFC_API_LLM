@@ -1,0 +1,378 @@
+/* Modern Enterprise Design System - v2.0 Premium
+ * Style: High-end SaaS, Data-dense, Sophisticated
+ * Palette: Indigo/Slate foundation, Vivid Accents
+ */
+
+/* Import fonts: Plus Jakarta Sans for UI, JetBrains Mono for Code */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+    /* Core Palette - Enterprise Dark Slate */
+    --color-bg-body: #f8fafc; /* Slate 50 */
+    --color-bg-card: #ffffff;
+    --color-bg-sidebar: #ffffff;
+
+    /* Typography Colors */
+    --color-text-primary: #0f172a; /* Slate 900 */
+    --color-text-secondary: #475569; /* Slate 600 */
+    --color-text-tertiary: #94a3b8; /* Slate 400 */
+
+    /* Brand Colors - Deep Indigo & Vivid Blue */
+    --color-brand: #4f46e5; /* Indigo 600 */
+    --color-brand-light: #e0e7ff; /* Indigo 100 */
+    --color-brand-hover: #4338ca; /* Indigo 700 */
+
+    /* Semantic Colors */
+    --color-success: #10b981; /* Emerald 500 */
+    --color-warning: #f59e0b; /* Amber 500 */
+    --color-error: #ef4444; /* Red 500 */
+    --color-info: #3b82f6; /* Blue 500 */
+
+    /* Borders & Lines */
+    --color-border: #e2e8f0; /* Slate 200 */
+    --color-border-hover: #cbd5e1; /* Slate 300 */
+
+    /* Spacing System */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-12: 3rem;
+
+    /* Shadows - Premium layering */
+    --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+    --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.1), 0 1px 2px -1px rgb(15 23 42 / 0.1);
+    --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -2px rgb(15 23 42 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.1);
+    --shadow-float: 0 20px 25px -5px rgb(15 23 42 / 0.1), 0 8px 10px -6px rgb(15 23 42 / 0.1);
+
+    /* Radius */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+}
+
+/* =========================================
+   Global Reset & Base Styles
+   ========================================= */
+html, body, .stApp {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--color-bg-body);
+    color: var(--color-text-primary);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--color-text-primary);
+    font-weight: 700;
+    letter-spacing: -0.025em; /* Tight tracking for modern feel */
+}
+
+code, pre, .stCode {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Streamlit Cruft Removal */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+.block-container {
+    padding-top: 2rem !important;
+    padding-bottom: 4rem !important;
+    max-width: 1400px !important; /* Wider for dashboard feel */
+}
+
+/* =========================================
+   Component: App Sidebar
+   ========================================= */
+[data-testid="stSidebar"] {
+    background-color: var(--color-bg-sidebar);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+}
+
+[data-testid="stSidebar"] .block-container {
+    padding-top: 2rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+/* Sidebar Nav Item - Custom Styled */
+.nav-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    font-size: 0.95rem;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+
+.nav-item:hover {
+    background-color: #f1f5f9; /* Slate 100 */
+    color: var(--color-text-primary);
+}
+
+.nav-item.active {
+    background-color: #eff6ff; /* Blue 50 */
+    color: var(--color-brand);
+    border-color: #dbeafe; /* Blue 200 */
+    font-weight: 600;
+}
+
+.nav-icon {
+    margin-right: 0.75rem;
+    font-size: 1.1rem;
+    opacity: 0.8;
+}
+
+/* Sidebar Section Header */
+.nav-section {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-tertiary);
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    padding-left: 0.5rem;
+}
+
+/* =========================================
+   Component: Action Cards (Home)
+   ========================================= */
+.hero-container {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    padding: 3rem;
+    text-align: center;
+    margin-bottom: 3rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.feature-card {
+    background-color: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    height: 100%;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: var(--color-brand);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-brand-light);
+}
+
+.feature-card:hover::before {
+    opacity: 1;
+}
+
+.feature-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background-color: #eff6ff;
+    color: var(--color-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.feature-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.feature-desc {
+    font-size: 0.95rem;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
+
+/* =========================================
+   Component: Chat Interface
+   ========================================= */
+.chat-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.chat-bubble {
+    padding: 1.25rem 1.5rem;
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.chat-bubble.user {
+    background-color: #ffffff;
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-brand);
+    margin-left: 2rem;
+}
+
+.chat-bubble.bot {
+    background-color: #ffffff; /* Keep clean white */
+    border: 1px solid var(--color-border);
+    background-image: linear-gradient(to bottom right, #ffffff, #f8fafc);
+    margin-right: 2rem;
+}
+
+.chat-avatar {
+    position: absolute;
+    top: -10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: var(--shadow-sm);
+    background: white;
+    border: 1px solid var(--color-border);
+}
+
+.chat-bubble.user .chat-avatar { right: -10px; background: #eff6ff; }
+.chat-bubble.bot .chat-avatar { left: -10px; background: #f0fdf4; }
+
+/* Citations Expander */
+.streamlit-expanderHeader {
+    background-color: #f8fafc;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: var(--color-text-secondary) !important;
+}
+
+.streamlit-expanderContent {
+    border: 1px solid var(--color-border);
+    border-top: none;
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+    background-color: #ffffff;
+    padding: 1rem;
+}
+
+/* =========================================
+   Component: Data Tables & Grid
+   ========================================= */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+/* =========================================
+   Inputs & Buttons
+   ========================================= */
+.stTextInput input, .stTextArea textarea {
+    background-color: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    box-shadow: var(--shadow-xs);
+    transition: all 0.2s ease;
+}
+
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); /* Indigo glow */
+    outline: none;
+}
+
+.stButton button {
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.6rem 1.2rem;
+    letter-spacing: 0.01em;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-xs);
+}
+
+.stButton button[kind="primary"] {
+    background-color: var(--color-brand);
+    color: white;
+    border: 1px solid transparent;
+}
+
+.stButton button[kind="primary"]:hover {
+    background-color: var(--color-brand-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.stButton button[kind="secondary"] {
+    background-color: #ffffff;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+}
+
+.stButton button[kind="secondary"]:hover {
+    background-color: #f8fafc;
+    border-color: var(--color-text-secondary);
+    color: var(--color-text-primary);
+}
+
+/* =========================================
+   Utilities & Badges
+   ========================================= */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badge.blue { background: #eff6ff; color: #3b82f6; border: 1px solid #dbeafe; }
+.badge.green { background: #f0fdf4; color: #10b981; border: 1px solid #dcfce7; }
+.badge.gray { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+.text-gradient {
+    background: linear-gradient(to right, var(--color-brand), #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}

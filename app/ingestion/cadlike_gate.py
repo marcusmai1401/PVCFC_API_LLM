@@ -537,9 +537,13 @@ class CADLikeGate:
         taggy_pages = []
         pattern = re.compile(self.regex_3piece["pattern"])
 
+        # Track total text length to detect scanned docs
+        total_text_len = 0
+
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             text = page.get_text()
+            total_text_len += len(text)
 
             # Check condition 1: regex hits
             regex_hits = len(pattern.findall(text))
@@ -553,6 +557,14 @@ class CADLikeGate:
                 taggy_pages.append(page_idx)
 
         logger.debug(f"Selected {len(taggy_pages)} taggy pages out of {len(doc)}")
+
+        # Fallback for scanned documents (if essentially no text found)
+        # If no pages selected and text is very sparse, assume it's a scan and process all pages
+        if not taggy_pages and total_text_len < 100 * len(doc):
+            logger.info(
+                "Document appears to be scanned (sparse text), fallback to processing all pages for tags"
+            )
+            return list(range(len(doc)))
 
         return taggy_pages
 
