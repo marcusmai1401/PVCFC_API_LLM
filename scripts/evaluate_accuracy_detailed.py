@@ -27,7 +27,9 @@ CAD_KEYWORDS = [
 CAD_ANSWER_KEYWORDS = ["bản vẽ", "sơ đồ"]
 
 # Gemini Judge Config
-GEMINI_API_KEY = "AIzaSyDrGlVauYi0V7EM-QXm3YSKzY9utDxr9K8"  # Hardcoded from .env for simplicity in this script context
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Load from environment variable
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY environment variable is required")
 JUDGE_MODEL = "gemini-2.0-flash"  # Use a fast/cheap model for judging
 
 console = Console()
