@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     llm_model_heavy: Optional[str] = Field(
         default=None, description="Model cho tier nặng"
     )
+    llm_max_output_tokens: int = Field(
+        default=8192,
+        description="Maximum output tokens for LLM generation (affects both light and heavy tiers)"
+    )
 
     # Cấu hình Embedding (provider/model). Cho phép alias qua EMBEDDING_LLM
     embedding_provider: Literal["openai", "gemini", "local", "none"] = "none"
@@ -51,12 +55,12 @@ class Settings(BaseSettings):
     # Phase 2 - Retrieval & Context
     # ========================================
     max_context: int = Field(
-        default=8,
-        description="Maximum number of context chunks to send to LLM for generation",
+        default=20,
+        description="Maximum number of context chunks to send to LLM for generation (increased for Gemini 3.0 Pro)",
     )
     top_rerank: int = Field(
-        default=20,
-        description="Number of top candidates to keep after reranking (before selecting MAX_CONTEXT)",
+        default=30,
+        description="Number of top candidates to keep after reranking (must be >= MAX_CONTEXT)",
     )
 
     # ========================================
@@ -65,6 +69,10 @@ class Settings(BaseSettings):
     vision_page_selector_enabled: bool = Field(
         default=True,
         description="Enable Vision-based multimodal page selector (uses image understanding)",
+    )
+    vision_always_on: bool = Field(
+        default=True,
+        description="Always use vision generation when pages available (bypasses smart gating strategy)",
     )
     text_range_scan_enabled: bool = Field(
         default=False,
@@ -117,12 +125,12 @@ class Settings(BaseSettings):
         description="Enable BGE CrossEncoder reranking (Phase 3)",
     )
     bge_rerank_candidate_limit: int = Field(
-        default=50,
-        description="Number of candidates to retrieve before BGE reranking (over-retrieve for precision)",
+        default=100,
+        description="Number of candidates to retrieve before BGE reranking (increased to 100 for better recall)",
     )
     bge_rerank_top_k: int = Field(
-        default=10,
-        description="Final number of results after BGE reranking",
+        default=20,
+        description="Final number of results after BGE reranking (increased to match MAX_CONTEXT)",
     )
     bge_rerank_level: Literal["chunk", "doc", "page"] = Field(
         default="chunk",
@@ -181,8 +189,8 @@ class Settings(BaseSettings):
         description="Weaviate query timeout in seconds",
     )
     weaviate_retrieval_limit: int = Field(
-        default=50,
-        description="Number of results to retrieve from Weaviate before reranking",
+        default=100,
+        description="Number of results to retrieve from Weaviate before reranking (increased to 100 for better recall)",
     )
 
     # ========================================
@@ -215,6 +223,10 @@ class Settings(BaseSettings):
     opensearch_bm25_b: float = Field(
         default=0.75,
         description="BM25 b parameter (length normalization)",
+    )
+    opensearch_retrieval_limit: int = Field(
+        default=100,
+        description="Number of results to retrieve from OpenSearch before reranking (increased to 100 for better recall)",
     )
 
     # ========================================

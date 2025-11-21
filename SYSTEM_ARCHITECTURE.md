@@ -1,8 +1,8 @@
 # SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 1.6.0
-**Last Updated**: 2025-11-19
-**Document**: Complete Pipeline & Architecture Description (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix Support + Protobuf Resolution + Parent-Child Chunking)
+**Version**: 1.7.0
+**Last Updated**: 2025-11-21
+**Document**: Complete Pipeline & Architecture (Gemini 3.0 Pro + Retrieval Optimization + Context Expansion + Parent-Child Chunking + 300s Client Timeout)
 
 ---
 
@@ -103,11 +103,11 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 | **Backend** | FastAPI + Python 3.11 | API server |
 | **Vector DB** | Weaviate (gRPC) | Semantic search |
 | **Keyword Search** | OpenSearch (BM25) | Keyword search |
-| **LLM** | Gemini 2.5 Pro/Flash | Generation |
+| **LLM** | **Gemini 3.0 Pro Preview** / 2.5 Flash | Generation (Heavy/Light) |
 | **Embedding** | Gemini Embedding 001 (768D) | Text vectorization |
-|| **Reranker** | BGE CrossEncoder (optional, configurable) | Result reranking |
+|| **Reranker** | BGE CrossEncoder (ENABLED) | Result reranking |
 | **OCR** | Google Cloud Vision API + Real-ESRGAN (2x upscaling) | Scanned PDF processing with enhanced image quality |
-| **UI** | Streamlit | Testing & debugging |
+| **UI** | Streamlit (300s timeout) | Testing & debugging |
 | **Monitoring** | Loguru + Metrics | Logging & observability |
 
 > **Note**: BGE reranking is **OPTIONAL** and can be enabled via `ENABLE_BGE_RERANK=true` in .env. Currently **ENABLED** in production config. Adds ~100-400ms latency but improves semantic ranking accuracy.

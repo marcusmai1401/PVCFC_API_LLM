@@ -61,7 +61,7 @@ def call_rag_api(
     api_base_url: str,
     auth_token: str,
     params: Dict[str, Any],
-    timeout: int = 30,
+    timeout: int = 300,
     max_retries: int = 3,
     logger=None,
 ) -> Dict[str, Any]:

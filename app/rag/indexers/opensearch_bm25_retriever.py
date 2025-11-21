@@ -244,7 +244,7 @@ class OpenSearchBM25Retriever:
             return []
 
     def search_with_tag_boosting(
-        self, query: str, detected_tags: List[str] = None, top_k: int = 50
+        self, query: str, detected_tags: List[str] = None, top_k: int = 100
     ) -> List[Dict[str, Any]]:
         """
         Enhanced search with tag boosting for P&ID documents

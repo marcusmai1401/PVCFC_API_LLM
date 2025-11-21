@@ -313,16 +313,25 @@ class UniversalEmbeddingService:
 
                     # Call API (genai is sync, so run in executor)
                     loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(
-                        None,
-                        lambda: genai.embed_content(
-                            model=self._gemini_model,
-                            content=text,
-                            task_type=self.embed_task_doc.lower(),
-                            output_dimensionality=self.output_dim,
-                            title=None,
+                    
+                    logger.debug(f"  Starting API call for text length {len(text)}...")
+                    
+                    # Add timeout of 60 seconds (increased for large batches)
+                    result = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            lambda: genai.embed_content(
+                                model=self._gemini_model,
+                                content=text,
+                                task_type=self.embed_task_doc.lower(),
+                                output_dimensionality=self.output_dim,
+                                title=None,
+                            ),
                         ),
+                        timeout=60.0
                     )
+                    
+                    logger.debug(f"  API call finished.")
 
                     embedding = result["embedding"]
 
@@ -338,6 +347,14 @@ class UniversalEmbeddingService:
                     self._save_to_cache(text, embedding)
 
                     return embedding
+
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout embedding text (len={len(text)})")
+                    self.metrics["retries"] += 1
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+                        continue
+                    break
 
                 except Exception as e:
                     error_str = str(e)

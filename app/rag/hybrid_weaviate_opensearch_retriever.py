@@ -29,9 +29,9 @@ from app.services.reranker import get_reranker_service
 class HybridModernConfig:
     """Configuration for modern hybrid retrieval"""
 
-    # Retrieval limits
-    weaviate_limit: int = 50  # Candidates from Weaviate
-    opensearch_limit: int = 50  # Candidates from OpenSearch
+    # Retrieval limits (increased to 100 for better recall on diagram-heavy documents)
+    weaviate_limit: int = 100  # Candidates from Weaviate
+    opensearch_limit: int = 100  # Candidates from OpenSearch
 
     # Fusion
     rrf_k: int = 60  # RRF constant
@@ -41,17 +41,32 @@ class HybridModernConfig:
     enable_bge_rerank: bool = (
         True  # Use BGE reranking (must stay True for technical docs)
     )
-    bge_top_k: int = 10  # Final results after BGE
+    bge_top_k: int = 20  # Final results after BGE (increased to match MAX_CONTEXT)
     bge_level: str = "chunk"  # chunk, doc, or page
     bge_aggregation: str = "max"  # max, mean, or top3_mean
 
     def __post_init__(self):
-        """Hard guard: never allow BGE rerank to be disabled at runtime.
+        """Post-initialization: load from settings and apply hard guards.
 
-        This enforces a product decision that BGE CrossEncoder is mandatory for
-        hybrid technical-doc retrieval and prevents accidental toggling by
-        agents or ad-hoc scripts.
+        1. Override limits from settings if available (allows ENV config)
+        2. Hard guard: never allow BGE rerank to be disabled at runtime.
         """
+        # Load retrieval limits from settings (ENV override)
+        try:
+            if hasattr(settings, 'weaviate_retrieval_limit'):
+                self.weaviate_limit = settings.weaviate_retrieval_limit
+            if hasattr(settings, 'opensearch_retrieval_limit'):
+                self.opensearch_limit = settings.opensearch_retrieval_limit
+            if hasattr(settings, 'bge_rerank_candidate_limit'):
+                # Update top_rrf to match candidate limit
+                self.top_rrf = settings.bge_rerank_candidate_limit
+            if hasattr(settings, 'bge_rerank_top_k'):
+                # Override final top_k from settings
+                self.bge_top_k = settings.bge_rerank_top_k
+        except Exception as e:
+            logger.warning(f"Failed to load retrieval limits from settings: {e}")
+
+        # Hard guard: BGE rerank must always be enabled
         if not self.enable_bge_rerank:
             from loguru import logger as _logger
 

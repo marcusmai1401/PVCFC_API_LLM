@@ -348,7 +348,7 @@ class GeneratorConfig:
     # Max total context size in characters (approx). Increased to allow full-page scanning.
     max_context_length: int = 60000
     # Max answer length (tokens). Can be tuned per environment; default generous.
-    max_answer_length: int = 2048
+    max_answer_length: int = 8192
     temperature: float = 0.3  # Lower = more focused
     include_citations: bool = True
     citation_style: str = "inline"  # inline, footnote, or separate
@@ -458,6 +458,23 @@ class ResponseGenerator:
             config: Generator configuration
         """
         self.config = config or GeneratorConfig()
+        # Apply ENV overrides for max_answer_length from settings
+        try:
+            from app.core.config import settings
+            if hasattr(settings, 'llm_max_output_tokens'):
+                self.config.max_answer_length = settings.llm_max_output_tokens
+        except Exception:
+            pass
+        
+        # Load vision_always_on from settings (production override)
+        self.vision_always_on = False
+        try:
+            from app.core.config import settings
+            if hasattr(settings, 'vision_always_on'):
+                self.vision_always_on = settings.vision_always_on
+        except Exception:
+            pass
+        
         # Apply ENV overrides for vision settings (optional)
         try:
             import os
@@ -1498,48 +1515,54 @@ Response:"""
             query_classification: Optional dict with 'type' field ("pid", "technical_doc", "auto")
                                   Used to conditionally apply tag matching bonus in reordering.
         """
-        # 0) Smart strategy gate (Phase 1 - Smart Toggle)
-        should_run_vision = False
-        trigger_reason = "none"
-
-        # 1. Check Critical Rule (P&ID / Drawing types)
-        is_pid_query = (
-            query_classification and query_classification.get("type") == "pid"
-        )
-
-        has_drawing_doc = False
-        for doc in retrieved_docs[:5]:  # Check top 5 docs for metadata
-            dtype = (doc.metadata or {}).get("doc_type", "").lower()
-            if any(x in dtype for x in ["pid", "p&id", "drawing", "diagram", "cad"]):
-                has_drawing_doc = True
-                break
-
-        if is_pid_query or has_drawing_doc:
+        # 0) VISION_ALWAYS_ON bypass: skip all smart gating if configured
+        if self.vision_always_on:
             should_run_vision = True
-            trigger_reason = "critical_rule_pid"
+            trigger_reason = "always_on_production"
+            logger.info(f"Vision gating: ALWAYS-ON mode (bypassing smart triggers)")
+        else:
+            # 0) Smart strategy gate (Phase 1 - Smart Toggle)
+            should_run_vision = False
+            trigger_reason = "none"
 
-        # 2. Check Visual Keywords in Query
-        if not should_run_vision:
-            combined_query = (original_query + " " + english_query).lower()
-            # Use keywords from config (updated with Vietnamese terms)
-            if any(
-                kw in combined_query for kw in self.config.vision_table_figure_keywords
-            ):
+            # 1. Check Critical Rule (P&ID / Drawing types)
+            is_pid_query = (
+                query_classification and query_classification.get("type") == "pid"
+            )
+
+            has_drawing_doc = False
+            for doc in retrieved_docs[:5]:  # Check top 5 docs for metadata
+                dtype = (doc.metadata or {}).get("doc_type", "").lower()
+                if any(x in dtype for x in ["pid", "p&id", "drawing", "diagram", "cad"]):
+                    has_drawing_doc = True
+                    break
+
+            if is_pid_query or has_drawing_doc:
                 should_run_vision = True
-                trigger_reason = "visual_keywords"
+                trigger_reason = "critical_rule_pid"
 
-        # 3. Check Table Content/Markers in Context
-        if not should_run_vision:
-            # Check a portion of context for table markers
-            context_check = context[:5000]
-            # Pipe density check: > 10 pipes suggests markdown table
-            if "Table" in context_check or context_check.count("|") > 10:
-                should_run_vision = True
-                trigger_reason = "table_content"
+            # 2. Check Visual Keywords in Query
+            if not should_run_vision:
+                combined_query = (original_query + " " + english_query).lower()
+                # Use keywords from config (updated with Vietnamese terms)
+                if any(
+                    kw in combined_query for kw in self.config.vision_table_figure_keywords
+                ):
+                    should_run_vision = True
+                    trigger_reason = "visual_keywords"
 
-        if not should_run_vision:
-            logger.info("Vision gating: OFF (no smart triggers matched)")
-            return None
+            # 3. Check Table Content/Markers in Context
+            if not should_run_vision:
+                # Check a portion of context for table markers
+                context_check = context[:5000]
+                # Pipe density check: > 10 pipes suggests markdown table
+                if "Table" in context_check or context_check.count("|") > 10:
+                    should_run_vision = True
+                    trigger_reason = "table_content"
+
+            if not should_run_vision:
+                logger.info("Vision gating: OFF (no smart triggers matched)")
+                return None
 
         strategy_meta = {"trigger": trigger_reason}
         logger.info(f"Vision gating: ON (trigger={trigger_reason})")
@@ -1825,10 +1848,27 @@ Response:"""
 
         if language == "vi":
             instruction = (
-                "Bạn là trợ lý kỹ thuật chính xác. Trả lời bằng Tiếng Việt."
-                " Hãy sử dụng cả ngữ cảnh văn bản và ảnh trang đính kèm để lập luận. "
-                "Luôn trích dẫn inline theo dạng [Doc X] hoặc [Doc X, p.Y]; khi nêu thông số cụ thể phải có số trang."
-                ' Giữ nguyên giá trị và đơn vị theo nguồn. Nếu ngữ cảnh/ảnh không chứa câu trả lời, trả lời: "Không tìm thấy trong ngữ cảnh được cung cấp." và KHÔNG chèn trích dẫn.'
+                "Bạn là Chuyên gia Kỹ thuật AI cao cấp của nhà máy Đạm Cà Mau (PVCFC). "
+                "Nhiệm vụ: Tổng hợp câu trả lời chính xác nhất từ dữ liệu đa phương thức (Văn bản & Hình ảnh/Biểu đồ).\n\n"
+                
+                "QUY TRÌNH TƯ DUY & XỬ LÝ DỮ LIỆU (CORE REASONING):\n"
+                "1. ĐỐI CHIẾU & ƯU TIÊN (Cross-Verification):\n"
+                "   - Không chỉ đọc văn bản, hãy quan sát kỹ các Ảnh đính kèm (Biểu đồ, Bản vẽ P&ID, Bảng số liệu).\n"
+                "   - XUNG ĐỘT DỮ LIỆU: Nếu mô tả trong văn bản chung chung khác biệt với số liệu cụ thể trên Biểu đồ/Bản vẽ, hãy ƯU TIÊN SỐ LIỆU TRÊN HÌNH ẢNH (vì độ chính xác cao hơn).\n"
+                "   - BỔ TRỢ: Kết hợp thông tin từ cả hai nguồn để có câu trả lời đầy đủ.\n"
+                
+                "2. KỸ NĂNG ĐỌC BẢN VẼ CHUYÊN SÂU:\n"
+                "   - Biểu đồ (Performance Curve): Xác định đúng trục tung/hoành. Tìm giao điểm chính xác của các đường đặc tính (ví dụ: đường 'Normal' vs 'Rated').\n"
+                "   - Bản vẽ (P&ID): Lần theo đường ống, xác định vị trí thiết bị và các kết nối logic.\n"
+                
+                "3. NGUYÊN TẮC TRUNG THỰC:\n"
+                "   - Giữ nguyên đơn vị đo lường gốc (ví dụ: M3/HR, BAR.A, KW).\n"
+                "   - Nếu hình ảnh mờ hoặc không thể đọc được số liệu: Hãy nói rõ 'Không thể xác định chính xác từ hình ảnh'. KHÔNG ĐƯỢC ĐOÁN MÒ.\n\n"
+                
+                "ĐỊNH DẠNG TRẢ LỜI:\n"
+                "- Trả lời trực diện, ngắn gọn.\n"
+                "- BẮT BUỘC trích dẫn inline: [Doc X] hoặc [Doc X, p.Y].\n"
+                "- Ghi chú nguồn dữ liệu cụ thể: '(theo biểu đồ tại [Doc X, p.Y])' hoặc '(theo bảng thông số tại [Doc Y])'."
             )
             mapping_text = "Bản đồ Doc: " + ", ".join(
                 mapping_lines
@@ -1842,10 +1882,27 @@ Response:"""
             )
         else:
             instruction = (
-                "You are a precise technical assistant. Answer in the user's language. "
-                "Use BOTH the provided text context and the attached page images for reasoning. "
-                "ALWAYS include inline citations [Doc X] or [Doc X, p.Y]; include page numbers when citing specific values. "
-                'Keep exact values and units from the source. If the answer is not in the provided context/images, say: "Not found in the provided context." with no citations.'
+                "You are the Senior AI Technical Expert at PVCFC. "
+                "Task: Synthesize the most accurate answer using multimodal data (Text & Images/Charts).\n\n"
+                
+                "CORE REASONING PROCESS:\n"
+                "1. CROSS-VERIFICATION & PRIORITY:\n"
+                "   - Do not rely solely on text; strictly analyze attached Images (Performance Curves, P&IDs, Tables).\n"
+                "   - CONFLICT RESOLUTION: If text descriptions conflict with specific data points on a Chart/Drawing, YOU MUST PRIORITIZE THE IMAGE DATA.\n"
+                "   - COMPLEMENTARY: Combine insights from both sources for a complete answer.\n"
+                
+                "2. TECHNICAL READING SKILLS:\n"
+                "   - Performance Curves: Carefully trace X/Y axes. Identify intersection points of specific characteristic lines (e.g., 'Normal' vs 'Rated').\n"
+                "   - P&ID/Drawings: Trace piping lines and equipment connections logically.\n"
+                
+                "3. STRICT HONESTY:\n"
+                "   - Preserve original units (e.g., M3/HR, BAR.A).\n"
+                "   - If image data is illegible: State 'Cannot clearly determine from the image'. DO NOT GUESS or hallucinate values.\n\n"
+                
+                "FORMAT:\n"
+                "- Provide direct, concise answers.\n"
+                "- MANDATORY Citations: [Doc X] or [Doc X, p.Y] inline.\n"
+                "- Specify data source: '(per chart in [Doc X, p.Y])' or '(per table in [Doc Y])'."
             )
             mapping_text = "Doc mapping: " + ", ".join(
                 mapping_lines

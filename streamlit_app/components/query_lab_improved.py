@@ -347,7 +347,7 @@ def render_pdf_page(
         }
 
         with st.spinner("Loading PDF page..."):
-            response = requests.get(render_url, params=params, timeout=30)
+            response = requests.get(render_url, params=params, timeout=60)
 
             if response.status_code == 200:
                 # Log successful render
@@ -443,7 +443,7 @@ def call_ask_api(
         logger.log_api_request(endpoint="/ask", method="POST", payload=payload)
 
         start_time = time.time()
-        response = requests.post(url, json=payload, timeout=180)
+        response = requests.post(url, json=payload, timeout=300)
         total_latency = (time.time() - start_time) * 1000  # Convert to ms
 
         if response.status_code == 200:
@@ -489,9 +489,9 @@ def call_ask_api(
         logger.log_error(
             "API request timeout",
             exception=e,
-            context={"timeout": 180, "api_base_url": api_base_url},
+            context={"timeout": 300, "api_base_url": api_base_url},
         )
-        return {"success": False, "error": "Request timed out after 180 seconds"}
+        return {"success": False, "error": "Request timed out after 300 seconds"}
     except Exception as e:
         logger.log_error(
             "Unexpected API error",

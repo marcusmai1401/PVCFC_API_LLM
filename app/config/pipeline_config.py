@@ -395,12 +395,13 @@ class PipelineConfig:
         if not (0.0 <= self.BM25_B <= 1.0):
             raise ValueError("BM25_B must be between 0.0 and 1.0")
 
-        # Check paths exist (det and cls models must exist)
-        if not self.DET_MODEL_DIR.exists():
-            raise ValueError(f"Detection model not found: {self.DET_MODEL_DIR}")
-
-        if not self.CLS_MODEL_DIR.exists():
-            raise ValueError(f"Classifier model not found: {self.CLS_MODEL_DIR}")
+        # NOTE: PaddleOCR model validation disabled since system uses Google Cloud Vision API
+        # The DET_MODEL_DIR and CLS_MODEL_DIR paths are kept for legacy compatibility
+        # but are not required for current Google Cloud Vision-based OCR pipeline
+        # if not self.DET_MODEL_DIR.exists():
+        #     raise ValueError(f"Detection model not found: {self.DET_MODEL_DIR}")
+        # if not self.CLS_MODEL_DIR.exists():
+        #     raise ValueError(f"Classifier model not found: {self.CLS_MODEL_DIR}")
 
         return True
 

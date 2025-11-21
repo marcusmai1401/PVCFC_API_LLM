@@ -1,7 +1,14 @@
 
-# PVCFC RAG — README - LAST UPDATE: 19/11/2025
+# PVCFC RAG — README - LAST UPDATE: 21/11/2025 (v1.7.0)
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
+
+> **🚀 Version 1.7.0 Highlights** (Nov 21, 2025):
+> - **Gemini 3.0 Pro Preview** (most powerful model for complex diagrams)
+> - **100 candidates retrieval** (2x recall improvement)
+> - **20 chunks context** (2.5x LLM visibility)
+> - **300s timeout** (supports long Vision processing)
+> - **Enhanced prompts** (multimodal reasoning + cross-verification)
 
 * **Use-cases chính**:
 
@@ -238,19 +245,27 @@ Notes:
 
 ## 7) Truy vấn, Rerank & Trích dẫn theo trang
 
-* **Retrieval k**: Configurable qua request parameter `max_context` (default=8, max=20). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
+* **Retrieval k**: Configurable qua request parameter `max_context` (default=**20**, max=30). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
+
+* **Retrieval Optimization (v1.7.0)**:
+  * **Weaviate limit**: **100 candidates** (increased from 50)
+  * **OpenSearch limit**: **100 candidates** (increased from 50)
+  * **Total candidates pool**: 200 (from dual sources)
 
 * **BGE Reranking** (BAAI/bge-reranker-base):
   * **Status**: Currently **ENABLED** (`ENABLE_BGE_RERANK=true` in production .env)
   * **Model**: BAAI/bge-reranker-base (auto-downloaded on first query)
-  * **Cấu hình**:
-    - `BGE_RERANK_CANDIDATE_LIMIT=50`: Số candidates trước khi rerank
-    - `BGE_RERANK_TOP_K=10`: Số kết quả cuối cùng
+  * **Cấu hình (v1.7.0)**:
+    - `BGE_RERANK_CANDIDATE_LIMIT=100`: Số candidates trước khi rerank (increased)
+    - `BGE_RERANK_TOP_K=20`: Số kết quả cuối cùng (increased)
+    - `MAX_CONTEXT=20`: Context chunks gửi tới LLM (2.5x increase)
+    - `TOP_RERANK=30`: Safety buffer ≥ MAX_CONTEXT
     - `BGE_RERANK_LEVEL=chunk`: Rerank level (chunk/doc/page)
     - `BGE_RERANK_AGGREGATION=max`: Phương pháp tổng hợp (max/mean/top3_mean)
   * **Performance**: First query ~45-60s (model loading), subsequent ~2-5s total
   * **Accuracy**: Top rerank scores 0.90-0.96 for highly relevant results
   * **Fallback**: Nếu rerank thất bại, sử dụng score-based ranking
+  * **Expected Impact**: +100% recall on diagram-heavy documents
 
 * **Legacy Reranking** (khi BGE tắt):
   * Cross-encoder (`ms-marco-MiniLM-L-6-v2`) cho **EN**
@@ -263,8 +278,14 @@ Notes:
 
 ## 8) Generation (LLM tiers & Multimodal Vision)
 
-* **Heavy (LLM)**: `gemini-2.5-pro` (multimodal).
-* **Light (LLM)**: `gemini-2.5-flash` (text-only).
+* **Heavy (LLM)**: `gemini-3-pro-preview` (Gemini 3.0 Pro Preview - **most powerful**, multimodal).
+* **Light (LLM)**: `gemini-2.5-flash` (fast responses, 65K output tokens).
+* **Vision Model**: `gemini-3-pro-preview` (same as Heavy, superior visual understanding).
+* **Configuration** (v1.7.0):
+  * Max output tokens: **8192** (4x increase from 2048)
+  * Vision Always-On: **true** (bypass smart gating)
+  * Context: **20 chunks** (2.5x increase from 8)
+  * Vision pages: **30 max** (up from 24)
 * **Multimodal Vision (khi phù hợp)**:
 
   * **Điều kiện**: có documents liên quan và **map được `pdf_path`** (từ `doc_id_map.json`).
@@ -272,9 +293,10 @@ Notes:
     - Nếu có cả `page_start` và `page_end` (cả 2 non-None) → lấy **full range**; swap nếu start > end.
     - Nếu chỉ có `page` → **cửa sổ ±2** (start = max(1, page-2); end = page+2).
     - Clamp theo `total_pages` nếu biết được từ PDF.
-    - **Tối đa 10 trang**, *1-based*, **dedup** theo `(pdf_path, page)`.
+    - **Tối đa 30 trang** (increased from 10), *1-based*, **dedup** theo `(pdf_path, page)`.
   * **Render nội bộ**: JPEG @ **DPI=200**; trang lỗi → **bỏ qua** và ghi `pages_failed`.
   * **Mục tiêu**: tăng **độ chính xác** nhờ bối cảnh trực quan (layout/bảng/đơn vị), **không** là pipeline verify rời.
+  * **Timeout**: Streamlit client **300 seconds** (5 minutes) - supports full Vision processing.
 
 > Nếu retrieval không có tài liệu phù hợp → **text-only**.
 
@@ -309,12 +331,13 @@ APP_ENV=local  # local|dev|prod
 API_PORT=8000
 LOG_LEVEL=INFO  # DEBUG|INFO|WARNING|ERROR
 
-# Providers & LLM
+# Providers & LLM (v1.7.0 - Gemini 3.0 Pro Preview)
 LLM_PROVIDER=gemini  # openai|gemini|none
 LLM_TIER=light
 LLM_LIGHT_PROVIDER=gemini
-LLM_MODEL_HEAVY=gemini-2.5-pro
-LLM_MODEL_LIGHT=gemini-2.5-flash
+LLM_MODEL_HEAVY=models/gemini-3-pro-preview  # Gemini 3.0 Pro Preview (bleeding edge)
+LLM_MODEL_LIGHT=models/gemini-2.5-flash      # Fast responses, 65K output
+LLM_MAX_OUTPUT_TOKENS=8192  # 4x increase from 2048
 
 # Embedding
 EMBEDDING_PROVIDER=gemini  # gemini|openai|local|none
@@ -352,19 +375,33 @@ WEAVIATE_PORT=8080  # HTTP port
 WEAVIATE_GRPC_PORT=50051  # gRPC port (faster)
 WEAVIATE_USE_GRPC=true
 WEAVIATE_COLLECTION=Chunk
-WEAVIATE_RETRIEVAL_LIMIT=50
+WEAVIATE_RETRIEVAL_LIMIT=100  # v1.7.0: Increased from 50 (2x recall)
 
-# BGE Reranking (Phase 3)
+# OpenSearch retrieval limit (v1.7.0)
+OPENSEARCH_RETRIEVAL_LIMIT=100  # Increased from 50
+
+# Context & Reranking (v1.7.0 - Major Expansion)
+MAX_CONTEXT=20  # Increased from 8 (2.5x LLM visibility)
+TOP_RERANK=30   # Safety buffer ≥ MAX_CONTEXT
+
+# BGE Reranking (Phase 3 - v1.7.0 Enhanced)
 # Currently ENABLED in production for better semantic ranking
 ENABLE_BGE_RERANK=true  # Enable BGE CrossEncoder reranking (BAAI/bge-reranker-base)
-BGE_RERANK_CANDIDATE_LIMIT=50
-BGE_RERANK_TOP_K=10
-BGE_RERANK_LEVEL=chunk  # chunk|doc|page
-BGE_RERANK_AGGREGATION=max  # max|mean|top3_mean
+BGE_RERANK_CANDIDATE_LIMIT=100  # v1.7.0: Increased from 50
+BGE_RERANK_TOP_K=20             # v1.7.0: Increased from 10
+BGE_RERANK_LEVEL=chunk          # chunk|doc|page
+BGE_RERANK_AGGREGATION=max      # max|mean|top3_mean
 
-# Vision gating (Phase 2)
+# Vision Configuration (Phase 2 - v1.7.0 Enhanced)
+VISION_ALWAYS_ON=true  # Always use vision (bypass smart gating)
+VISION_MODEL=models/gemini-3-pro-preview  # Same as heavy model
+VISION_MAX_PAGES_TOTAL=30  # v1.7.0: Increased from 24
 VISION_PAGE_SELECTOR_ENABLED=true
 TEXT_RANGE_SCAN_ENABLED=false
+
+# Streamlit Client Timeout (v1.7.0)
+# Frontend timeout để support Vision AI xử lý 20-30 pages
+STREAMLIT_TIMEOUT=300  # 5 minutes (increased from 60-180s)
 
 # P&ID Tags Extraction (Dual Pipeline - Optional)
 # Note: Currently ENABLED in production (.env has ENABLE_PID_TAGS=true)

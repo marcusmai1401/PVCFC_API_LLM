@@ -625,8 +625,8 @@ def call_api(
         payload["conversation_id"] = conversation_id
 
     try:
-        # INCREASE TIMEOUT: Changed from 30s to 120s for long RAG processing
-        response = requests.post(endpoint, json=payload, timeout=120)
+        # INCREASE TIMEOUT: Changed to 300s for Vision AI processing (20-30 pages)
+        response = requests.post(endpoint, json=payload, timeout=300)
 
         if response.status_code == 200:
             return {"success": True, "data": response.json()}
@@ -637,7 +637,7 @@ def call_api(
             }
 
     except requests.exceptions.Timeout:
-        return {"success": False, "error": "Request timeout (30s)"}
+        return {"success": False, "error": "Request timeout (300s)"}
     except requests.exceptions.ConnectionError:
         return {"success": False, "error": "Cannot connect to API"}
     except Exception as e:

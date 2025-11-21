@@ -151,15 +151,25 @@ class QueryTransformer:
                 from app.services.llm_client import get_llm_client
 
                 translator = get_llm_client(tier="light")
+                # Smart Query Expansion: Context-aware keyword injection for better recall
                 translation_prompt = (
-                    f"Translate the following user query to English for technical document retrieval. "
-                    f"Preserve key terms and units.\n\nQuery: {query}\n\nEnglish:"
+                    f"Translate the following user query to English for technical document retrieval.\n"
+                    f"EXPANSION STRATEGY (Apply based on query intent):\n"
+                    f"- IF query asks for QUANTITATIVE DATA (capacity, pressure, flow, dimensions, efficiency...): "
+                    f"APPEND keywords: 'datasheet', 'performance curve', 'specification', 'technical data', 'drawing'.\n"
+                    f"- IF query asks for PROCESS/LOCATION (connection, flow path, location...): "
+                    f"APPEND keywords: 'P&ID', 'piping diagram', 'layout', 'schematic'.\n"
+                    f"- IF query asks for PROCEDURES (how to start, maintenance, steps...): "
+                    f"APPEND keywords: 'manual', 'procedure', 'instruction', 'guideline'.\n"
+                    f"- OTHERWISE: Keep translation literal.\n\n"
+                    f"Original Query: {query}\n"
+                    f"English Translation (with expansion):"
                 )
                 translation = translator.generate(
                     prompt=translation_prompt,
-                    system_prompt="You are a precise technical translator. Output only the translated text.",
+                    system_prompt="You are a precise technical translator with expertise in query expansion for document retrieval. Output only the translated text with relevant keywords appended.",
                     temperature=0.0,
-                    max_tokens=200,
+                    max_tokens=4096,
                 )
                 if translation and getattr(translation, "content", None):
                     content = (translation.content or "").strip()
@@ -398,7 +408,7 @@ class QueryTransformer:
                     return []
 
                 response = client.generate(
-                    prompt=prompt, temperature=0.7, max_tokens=200
+                    prompt=prompt, temperature=0.7, max_tokens=1024
                 )
 
                 # Guard against empty/None responses

@@ -35,8 +35,8 @@ class TechnicalDocConfig(HybridModernConfig):
         super().__init__()
 
         # Boost BM25 for keyword matching (equipment models, specs)
-        self.opensearch_limit = 100  # Get more BM25 candidates
-        self.weaviate_limit = 50  # Less semantic candidates
+        self.opensearch_limit = 100  # BM25 candidates (already optimized)
+        self.weaviate_limit = 100  # Increased to 100 for better recall on diagram-heavy docs
 
         # IMPORTANT: Always enable BGE rerank for technical docs
         # - This is required to correctly rank performance curves vs manuals

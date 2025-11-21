@@ -223,7 +223,7 @@ class PageLayoutBuilder:
 
     def _ocr_fallback(self, page: fitz.Page) -> Tuple[List[TextSpan], Optional[float]]:
         """
-        OCR fallback for raster pages using PP-OCRv5
+        OCR fallback for raster pages using Google Cloud Vision API
 
         Args:
             page: PyMuPDF page object
@@ -232,72 +232,72 @@ class PageLayoutBuilder:
             (spans, average_confidence)
         """
         try:
-            import io
+            from google.cloud import vision
 
-            import numpy as np
-            from PIL import Image
+            # Initialize Vision API client
+            client = vision.ImageAnnotatorClient()
 
-            from app.ingestion.paddle_ocr_config import get_paddleocr_instance
+            # Render page to image (300 DPI for good quality)
+            mat = fitz.Matrix(300 / 72, 300 / 72)  # 300 DPI zoom
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.pil_tobytes(format="PNG")
 
-            # Get OCR instance
-            ocr = get_paddleocr_instance()
-            if ocr is None:
-                logger.warning("OCR not available, returning empty spans")
+            # Perform OCR
+            image = vision.Image(content=img_bytes)
+            response = client.text_detection(image=image)
+
+            if response.error.message:
+                logger.warning(f"Vision API error: {response.error.message}")
                 return [], None
 
-            # Render page to image
-            pix = page.get_pixmap(dpi=300)
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-            img_array = np.array(img)
-
-            # Run OCR
-            result = ocr.ocr(img_array, cls=True)
-
-            if not result or not result[0]:
+            if not response.text_annotations:
                 return [], None
 
             spans = []
             confidences = []
             span_id = 0
 
-            for line in result[0]:
-                if not line:
+            # Skip first annotation (full text), process individual text blocks
+            for annotation in response.text_annotations[1:]:
+                if not annotation.description.strip():
                     continue
 
-                bbox_coords, (text, confidence) = line
-
-                # Convert bbox from image coords to page coords
-                # bbox_coords is [[x0,y0], [x1,y1], [x2,y2], [x3,y3]]
-                if len(bbox_coords) == 4:
-                    xs = [p[0] for p in bbox_coords]
-                    ys = [p[1] for p in bbox_coords]
+                # Get bounding box
+                vertices = annotation.bounding_poly.vertices
+                if len(vertices) >= 2:
+                    xs = [v.x for v in vertices]
+                    ys = [v.y for v in vertices]
                     bbox = [min(xs), min(ys), max(xs), max(ys)]
 
                     # Scale from image coords (300 DPI) to page coords (72 DPI)
                     scale_factor = 72 / 300
                     bbox = [c * scale_factor for c in bbox]
 
-                    # Rough font size estimate from bbox height
+                    # Estimate font size from bbox height
                     font_size = (bbox[3] - bbox[1]) * 0.75
 
                     span = TextSpan(
-                        text=text,
+                        text=annotation.description,
                         bbox=bbox,
                         font_size=font_size,
                         rotation_deg=0.0,  # OCR doesn't preserve rotation easily
                         span_id=span_id,
                     )
                     spans.append(span)
-                    confidences.append(confidence)
+                    # Vision API doesn't provide per-word confidence, use 1.0
+                    confidences.append(1.0)
                     span_id += 1
 
             avg_confidence = (
                 sum(confidences) / len(confidences) if confidences else None
             )
 
+            logger.debug(f"OCR extracted {len(spans)} text spans via Google Cloud Vision")
             return spans, avg_confidence
 
+        except ImportError:
+            logger.warning("Google Cloud Vision API not available, returning empty spans")
+            return [], None
         except Exception as e:
             logger.error(f"OCR fallback failed: {e}")
             return [], None

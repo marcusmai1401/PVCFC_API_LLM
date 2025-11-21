@@ -23,7 +23,7 @@ from app.services.reranker import get_reranker_service
 class WeaviateSearchConfig:
     """Configuration for Weaviate search"""
 
-    retrieval_limit: int = 50  # Number of results from Weaviate before reranking
+    retrieval_limit: int = 100  # Number of results from Weaviate before reranking (increased for better recall)
     top_k_final: int = 10  # Final number of results after BGE reranking
     enable_bge_rerank: bool = True  # Enable BGE reranking
     bge_rerank_level: str = "chunk"  # chunk, doc, or page
@@ -323,7 +323,7 @@ class WeaviateRetriever:
         self,
         query: str,
         tag_filter: List[str] = None,
-        limit: int = 50,
+        limit: int = 100,
         config_override: Optional[WeaviateSearchConfig] = None,
     ) -> List[RetrievalResult]:
         """

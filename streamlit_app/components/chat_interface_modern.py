@@ -283,8 +283,8 @@ def call_api(
             "conversation_id": conversation_id,
             "max_context": 5,
         }
-        # Use a decent timeout
-        resp = requests.post(endpoint, json=payload, timeout=60)
+        # Use a decent timeout (300s for Vision AI with 20-30 pages)
+        resp = requests.post(endpoint, json=payload, timeout=300)
         if resp.status_code == 200:
             return {"success": True, "data": resp.json()}
         else:

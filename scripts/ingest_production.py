@@ -266,7 +266,21 @@ def run_indexing(chunks_dir: Path, index_output_dir: Path):
         batch_num = i // batch_size + 1
 
         logger.info(f"  Embedding batch {batch_num}/{total_batches}")
+        
+        # Log memory usage if psutil is available
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            mem_info = process.memory_info()
+            logger.debug(f"  Memory usage: {mem_info.rss / 1024 / 1024:.2f} MB")
+        except ImportError:
+            pass
+
+        t0 = time.time()
         batch_embeddings = embedding_service.embed_texts(batch_texts)
+        dt = time.time() - t0
+        logger.info(f"  ✓ Batch {batch_num} done in {dt:.2f}s")
+        
         embeddings_list.append(batch_embeddings)
 
     import numpy as np
@@ -300,7 +314,32 @@ def run_indexing(chunks_dir: Path, index_output_dir: Path):
         }
         actions.append(action)
 
-    success, failed = bulk(client, actions, chunk_size=500, raise_on_error=False)
+    # Bulk index in chunks to avoid timeouts and better tracking
+    chunk_size = 500
+    total_actions = len(actions)
+    total_success = 0
+    total_failed = []
+    
+    logger.info(f"Indexing {total_actions} chunks to OpenSearch in batches of {chunk_size}...")
+    
+    for i in range(0, total_actions, chunk_size):
+        batch_actions = actions[i : i + chunk_size]
+        batch_num = i // chunk_size + 1
+        total_batches = (total_actions + chunk_size - 1) // chunk_size
+        
+        logger.info(f"  Indexing batch {batch_num}/{total_batches} ({len(batch_actions)} docs)")
+        
+        try:
+            s, f = bulk(client, batch_actions, chunk_size=chunk_size, raise_on_error=False, request_timeout=60)
+            total_success += s
+            if f:
+                total_failed.extend(f)
+                logger.warning(f"  ⚠️  {len(f)} failed in this batch")
+        except Exception as e:
+            logger.error(f"  ❌ Batch {batch_num} failed: {e}")
+            
+    success = total_success
+    failed = total_failed
     logger.success(f"✓ Indexed {success:,} chunks to OpenSearch")
     if failed:
         logger.warning(f"⚠️  Failed to index {len(failed)} chunks")

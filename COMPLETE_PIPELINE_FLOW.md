@@ -1,8 +1,8 @@
 # Complete Pipeline Flow - From Raw Data to User Query
 
 **PVCFC RAG System - End-to-End Data Flow**
-**Date:** 2025-11-19
-**Version:** 1.6.0 (Level 2 + OCR Enhancement + Hybrid CAD Detection + Parent-Child Chunking)
+**Date:** 2025-11-21
+**Version:** 1.7.0 (Gemini 3.0 Pro + Retrieval Optimization + Context Expansion + Parent-Child Chunking)
 
 ---
 

@@ -29,7 +29,7 @@ except Exception:
                 "language": params.get("language", "vi"),
                 "execution_mode": params.get("execution_mode", "production"),
             }
-            resp = requests.post(url, json=payload, timeout=180)
+            resp = requests.post(url, json=payload, timeout=300)
             if resp.ok:
                 data = resp.json()
                 return {"success": True, "data": data}
