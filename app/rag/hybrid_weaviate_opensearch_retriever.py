@@ -13,7 +13,7 @@ This is the production retriever replacing legacy FAISS + BM25 offline.
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -53,14 +53,14 @@ class HybridModernConfig:
         """
         # Load retrieval limits from settings (ENV override)
         try:
-            if hasattr(settings, 'weaviate_retrieval_limit'):
+            if hasattr(settings, "weaviate_retrieval_limit"):
                 self.weaviate_limit = settings.weaviate_retrieval_limit
-            if hasattr(settings, 'opensearch_retrieval_limit'):
+            if hasattr(settings, "opensearch_retrieval_limit"):
                 self.opensearch_limit = settings.opensearch_retrieval_limit
-            if hasattr(settings, 'bge_rerank_candidate_limit'):
+            if hasattr(settings, "bge_rerank_candidate_limit"):
                 # Update top_rrf to match candidate limit
                 self.top_rrf = settings.bge_rerank_candidate_limit
-            if hasattr(settings, 'bge_rerank_top_k'):
+            if hasattr(settings, "bge_rerank_top_k"):
                 # Override final top_k from settings
                 self.bge_top_k = settings.bge_rerank_top_k
         except Exception as e:
@@ -104,6 +104,7 @@ class HybridWeaviateOpenSearchRetriever:
         # Weaviate retriever
         weaviate_config = WeaviateSearchConfig(
             retrieval_limit=self.config.weaviate_limit,
+            top_k_final=self.config.weaviate_limit,  # ⚠️ ADDED: Return full limit to Fusion
             enable_bge_rerank=False,  # We'll do BGE at hybrid level
         )
         self.weaviate_retriever = WeaviateRetriever(config=weaviate_config)
@@ -426,18 +427,44 @@ class HybridWeaviateOpenSearchRetriever:
                 for r in fused_results
             ]
 
+        # Step 4.5: Apply exact match guardrails BEFORE BGE
+        # This ensures exact matches are identified in the full candidate list
+        # and protected from being filtered out by BGE's top_k truncation
+        # Safety Quota: max 20 exact matches to reserve slots for semantic search
+        logger.info(f"→ Checking for exact code matches in candidate list")
+        exact_matches, remaining_candidates = self._extract_exact_matches(
+            query=enhanced["original"],
+            results=fused_results,
+            limit=20,  # Safety quota: max 20 exact matches
+        )
+
         # Step 5: BGE Reranking (final)
         if config.enable_bge_rerank and settings.enable_bge_rerank:
-            logger.info(f"→ Applying BGE reranking (final)")
+            logger.info(f"→ Applying BGE reranking to remaining candidates")
             try:
-                final_results = self._apply_bge_reranking(
-                    query=enhanced["original"], results=fused_results, top_k=top_k
-                )
+                # Rerank only the non-exact-match candidates
+                if remaining_candidates:
+                    bge_results = self._apply_bge_reranking(
+                        query=enhanced["original"],
+                        results=remaining_candidates,
+                        top_k=top_k
+                        - len(exact_matches),  # Reserve slots for exact matches
+                    )
+                else:
+                    bge_results = []
+
+                # Combine: exact matches first, then BGE-reranked results
+                final_results = exact_matches + bge_results
+                final_results = final_results[:top_k]  # Ensure we don't exceed top_k
+
             except Exception as e:
-                logger.error(f"  BGE reranking failed: {e}, using boosted results")
-                final_results = fused_results[:top_k]
+                logger.error(
+                    f"  BGE reranking failed: {e}, using candidates with exact matches"
+                )
+                final_results = (exact_matches + remaining_candidates)[:top_k]
         else:
-            final_results = fused_results[:top_k]
+            # No BGE: just combine exact matches + remaining candidates
+            final_results = (exact_matches + remaining_candidates)[:top_k]
 
         # Sanitize pages before returning
         final_results = self._sanitize_pages(final_results)
@@ -525,6 +552,132 @@ class HybridWeaviateOpenSearchRetriever:
             results.append(result)
 
         return results
+
+    def _detect_special_codes(self, query: str) -> List[str]:
+        """
+        Detect special codes in query (equipment codes, drawing codes, part numbers).
+
+        Pattern matches:
+        - Equipment codes: HCD025, E-04217, KT06101
+        - Drawing codes: LS006343, ABC-1234
+        - Part numbers: 2+ uppercase letters followed by optional hyphen and 4+ digits
+
+        Args:
+            query: Search query string
+
+        Returns:
+            List of detected codes (deduplicated, uppercase)
+        """
+        # Pattern for equipment/drawing codes:
+        # - Format 1: 2+ uppercase letters + optional hyphen + 3+ digits (HCD025, LS006343, KT06101)
+        # - Format 2: 1 uppercase letter + hyphen + 4+ digits (E-04217)
+        # Using alternation to handle both formats
+        pattern = r"[A-Z]{2,}[-]?\d{3,}|[A-Z]-\d{4,}"
+
+        # Normalize to ASCII (remove accents from Vietnamese characters)
+        # This allows [A-Z] to match all ASCII uppercase letters
+        import unicodedata
+
+        normalized = unicodedata.normalize("NFD", query.upper())
+        ascii_query = normalized.encode("ascii", "ignore").decode("ascii")
+
+        # Extract codes from ASCII-normalized query
+        codes = re.findall(pattern, ascii_query)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_codes = []
+        for code in codes:
+            if code not in seen:
+                seen.add(code)
+                unique_codes.append(code)
+
+        return unique_codes
+
+    def _extract_exact_matches(
+        self, query: str, results: List[RetrievalResult], limit: int = 20
+    ) -> Tuple[List[RetrievalResult], List[RetrievalResult]]:
+        """
+        Extract exact code matches from candidate list with SAFETY QUOTA enforcement.
+
+        Problem: BGE reranker may filter out exact matches if they have low semantic scores.
+        Additionally, header/footer flooding can fill top_k with noise.
+
+        Solution:
+        1. Identify ALL exact matches in full candidate list
+        2. SORT by original RRF/BM25 score (descending)
+        3. TRUNCATE to top {limit} exact matches only
+        4. Reserve remaining slots for BGE semantic search
+
+        Safety Quota: Ensures at least (top_k - limit) slots for semantic results.
+
+        Args:
+            query: Original query string
+            results: Full candidate list (fused results before BGE)
+            limit: Maximum exact matches to keep (default: 20)
+
+        Returns:
+            Tuple of (exact_matches[:limit], all_remaining_candidates)
+        """
+        # Detect special codes in query
+        query_codes = self._detect_special_codes(query)
+
+        if not query_codes:
+            # No codes detected, all results go to "remaining"
+            logger.debug("No special codes detected in query")
+            return [], results
+
+        logger.info(f"🎯 Exact Match Guardrails: Detected codes {query_codes}")
+
+        # Classify results: exact matches vs remaining
+        exact_matches = []
+        remaining_candidates = []
+
+        for result in results:
+            # Check if chunk text contains any query codes (case-insensitive)
+            text_upper = result.text.upper()
+            has_exact_match = any(code in text_upper for code in query_codes)
+
+            if has_exact_match:
+                # Keep original RRF/BM25 score for sorting (DON'T boost yet)
+                exact_matches.append(result)
+                logger.debug(
+                    f"  ✓ Exact match found: {result.chunk_id[:40]}... (score: {result.score:.3f})"
+                )
+            else:
+                remaining_candidates.append(result)
+
+        # SAFETY QUOTA: Sort exact matches by original score and truncate
+        if exact_matches:
+            # Sort by original RRF/BM25 score (descending) - best matches first
+            exact_matches.sort(key=lambda x: x.score, reverse=True)
+
+            # Apply safety limit
+            before_truncate = len(exact_matches)
+            exact_matches_top = exact_matches[:limit]
+            exact_matches_dropped = exact_matches[limit:]
+
+            # Boost ONLY the top-limited exact matches to 1.0
+            for result in exact_matches_top:
+                original_score = result.score
+                result.score = 1.0  # Force to maximum
+                logger.debug(
+                    f"  ⚡ Top exact match: {result.chunk_id[:40]}... "
+                    f"(score: {original_score:.3f} → 1.0)"
+                )
+
+            # Return dropped exact matches to remaining pool (with original scores)
+            remaining_candidates.extend(exact_matches_dropped)
+
+            logger.info(
+                f"  🛡️ Safety Quota: {len(exact_matches_top)}/{before_truncate} exact matches kept "
+                f"(limit={limit}, dropped={len(exact_matches_dropped)} to semantic pool)"
+            )
+
+            return exact_matches_top, remaining_candidates
+
+        # No exact matches found
+        return [], remaining_candidates
 
     def _reciprocal_rank_fusion(
         self, results: List[RetrievalResult], k: int = 60, top_n: int = 60

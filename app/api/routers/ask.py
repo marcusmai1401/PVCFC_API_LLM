@@ -548,8 +548,9 @@ async def ask_question(
                 )
 
                 # Build context text from retrieved docs
+                # Use max_context chunks to ensure we don't aggressively trim relevant info
                 context_text = "\n---\n".join(
-                    [doc.text for doc in reranked_results[:8]]
+                    [doc.text for doc in reranked_results[: request.max_context]]
                 )
 
                 # Trim history to fit token budget

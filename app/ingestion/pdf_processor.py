@@ -6,6 +6,7 @@ import hashlib
 import json
 import pickle
 import re
+import threading
 import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -15,6 +16,17 @@ from typing import Any, Dict, List, Optional, Tuple
 import fitz  # PyMuPDF
 import torch
 from loguru import logger
+
+# =============================================================================
+# GLOBAL SINGLETON FOR REAL-ESRGAN MODEL (Thread Safety Fix)
+# =============================================================================
+# Problem: Each PDFProcessor instance was loading its own Real-ESRGAN model,
+# causing CUDA OOM when running with workers > 1.
+# Solution: Single shared model instance with thread-safe access.
+# =============================================================================
+_esrgan_shared_model = None  # Global singleton for Real-ESRGAN
+_esrgan_model_lock = threading.Lock()  # Lock for thread-safe model loading
+_esrgan_inference_lock = threading.Lock()  # Lock for thread-safe GPU inference
 
 # Import table extraction
 try:
@@ -385,52 +397,69 @@ class PDFProcessor:
         """
         Enhance image using Real-ESRGAN 2x upscaling
 
+        THREAD SAFETY FIX: Uses global singleton model with double-checked locking.
+        This prevents CUDA OOM when running with multiple workers.
+
         Args:
             img_bytes: Original PNG image bytes
 
         Returns:
             Enhanced PNG image bytes (2x resolution)
         """
+        global _esrgan_shared_model
+
         try:
             import cv2
             import numpy as np
             from basicsr.archs.rrdbnet_arch import RRDBNet
             from realesrgan import RealESRGANer
 
-            # Initialize model (lazy loading, cached after first use)
-            if not hasattr(self, "_esrgan_model"):
-                logger.info("Loading Real-ESRGAN model (first time only)...")
-                model = RRDBNet(
-                    num_in_ch=3,
-                    num_out_ch=3,
-                    num_feat=64,
-                    num_block=6,
-                    num_grow_ch=32,
-                    scale=4,
-                )
+            # THREAD-SAFE MODEL INITIALIZATION (Double-Checked Locking Pattern)
+            # Only one thread can load the model; others wait and reuse
+            if _esrgan_shared_model is None:
+                with _esrgan_model_lock:
+                    # Double-check after acquiring lock (another thread may have loaded it)
+                    if _esrgan_shared_model is None:
+                        logger.info(
+                            "Loading Real-ESRGAN model (global singleton, first time only)..."
+                        )
+                        model = RRDBNet(
+                            num_in_ch=3,
+                            num_out_ch=3,
+                            num_feat=64,
+                            num_block=6,
+                            num_grow_ch=32,
+                            scale=4,
+                        )
 
-                model_path = (
-                    Path(__file__).parent.parent.parent
-                    / "RealESRGAN_x4plus_anime_6B.pth"
-                )
+                        model_path = (
+                            Path(__file__).parent.parent.parent
+                            / "RealESRGAN_x4plus_anime_6B.pth"
+                        )
 
-                if not model_path.exists():
-                    logger.error(f"Real-ESRGAN model not found at: {model_path}")
-                    return img_bytes
+                        if not model_path.exists():
+                            logger.error(
+                                f"Real-ESRGAN model not found at: {model_path}"
+                            )
+                            return img_bytes
 
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                        device = "cuda" if torch.cuda.is_available() else "cpu"
 
-                self._esrgan_model = RealESRGANer(
-                    scale=4,
-                    model_path=str(model_path),
-                    model=model,
-                    tile=400,  # Process in tiles to avoid OOM
-                    tile_pad=10,
-                    pre_pad=0,
-                    half=True if device == "cuda" else False,  # Use FP16 on GPU only
-                    device=device,
-                )
-                logger.info(f"Real-ESRGAN loaded on {device}")
+                        _esrgan_shared_model = RealESRGANer(
+                            scale=4,
+                            model_path=str(model_path),
+                            model=model,
+                            tile=400,  # Process in tiles to avoid OOM
+                            tile_pad=10,
+                            pre_pad=0,
+                            half=True
+                            if device == "cuda"
+                            else False,  # Use FP16 on GPU only
+                            device=device,
+                        )
+                        logger.info(
+                            f"Real-ESRGAN loaded on {device} (shared across all workers)"
+                        )
 
             # Decode image
             nparr = np.frombuffer(img_bytes, np.uint8)
@@ -456,10 +485,14 @@ class PDFProcessor:
                 )
                 return img_bytes
 
-            # Enhance (2x upscale only to keep size manageable for Vision API)
+            # THREAD-SAFE GPU INFERENCE
+            # Acquire lock to prevent multiple threads from running GPU operations simultaneously
+            # This prevents CUDA race conditions and OOM from concurrent model.enhance() calls
             orig_size = f"{img.shape[1]}x{img.shape[0]}"
             logger.debug(f"Enhancing image: {orig_size} -> 2x")
-            enhanced, _ = self._esrgan_model.enhance(img, outscale=2)
+
+            with _esrgan_inference_lock:
+                enhanced, _ = _esrgan_shared_model.enhance(img, outscale=2)
 
             # Encode back to PNG
             _, buffer = cv2.imencode(".png", enhanced)

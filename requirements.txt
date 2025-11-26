@@ -40,6 +40,7 @@ tenacity==8.2.3  # Retry logic
 transformers==4.36.0  # For cross-encoder reranking
 torch>=2.7.0  # Required for transformers and Real-ESRGAN
 torchvision>=0.22.0  # Required for Real-ESRGAN
+FlagEmbedding>=1.2.0  # Fast BGE reranker with CUDA support
 
 # Phase 4 - Weaviate vector database
 weaviate-client>=4.17.0  # Weaviate Python client with v4 API support

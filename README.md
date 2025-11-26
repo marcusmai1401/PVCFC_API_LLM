@@ -1,14 +1,17 @@
 
-# PVCFC RAG — README - LAST UPDATE: 21/11/2025 (v1.7.0)
+# PVCFC RAG — README - LAST UPDATE: 24/11/2025 (v1.7.1)
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
-> **🚀 Version 1.7.0 Highlights** (Nov 21, 2025):
+> **🚀 Version 1.7.1 Highlights** (Nov 24, 2025):
+> - **🛡️ Safety Quota** (prevents exact match flooding, max 20 codes)
+> - **📍 Page metadata fix** (accurate citations for page 31+, page-aware chunking)
+> - **🔧 4 Critical Bug Fixes** (TagNormalizer perf, GPU singleton, resource leak, recursion limit)
+> - **200 OpenSearch candidates** (better code recall + noise filtering)
 > - **Gemini 3.0 Pro Preview** (most powerful model for complex diagrams)
 > - **100 candidates retrieval** (2x recall improvement)
-> - **20 chunks context** (2.5x LLM visibility)
+> - **50 chunks context** (6.25x LLM visibility from baseline, up from 8)
 > - **300s timeout** (supports long Vision processing)
-> - **Enhanced prompts** (multimodal reasoning + cross-verification)
 
 * **Use-cases chính**:
 
@@ -36,8 +39,8 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 * **Quét đệ quy** toàn bộ **PDF** dưới root `D:\Data_Raw` (ổ rời), **không phụ thuộc cấu trúc thư mục**.
 * **OCR khi cần** (PDF scan), ngôn ngữ `vie+eng`.
-* **Dedup 100% nội dung**: trùng nội dung chỉ **01 bản đại diện** vào index; near-duplicate **giữ cả hai**.
-* **Truy vấn kết hợp**: BM25 (từ khóa) ∪ Weaviate (ngữ nghĩa) + BGE rerank.
+* **Dedup (v1.7.1)**: ingest **không còn gộp/skip** tài liệu trùng; mọi PDF (kể cả bản copy) vẫn được xử lý và index. Dedup logic chỉ dùng cho **thống kê/audit** hoặc scripts offline khi cần.
+* **Truy vấn kết hợp**: BM25 (từ khóa, 200 candidates) ∪ Weaviate (ngữ nghĩa, 100 candidates) + BGE rerank (50 top-k) + Safety Quota (max 20 exact matches) → MAX_CONTEXT=50 chunks to LLM.
 * **Câu trả lời có trích dẫn**: tối thiểu `doc_id + page` (1-based). Có `pdf_path` nếu map được.
 * **Báo cáo**: tạo **bản báo cáo tạm** từ ngôn từ AI, xuất định dạng cơ bản (Markdown/Docx) — sẽ tinh chỉnh mẫu sau.
 * **Metadata**: suy luận/điền **equipment_id**, **doc_type** (và trường mở rộng) dựa vào path + nội dung.
@@ -86,7 +89,7 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 **Offline (Build):**
 
 1. **Ingest**: đọc PDF (vector/scan), **OCR LUÔN ENABLED** (< 40 chars/page, không có Real-ESRGAN) → chuẩn hoá văn bản → **chunk** + metadata.
-2. **Dedup**: `content_hash` để gộp **trùng nội dung** (đại diện: *vector > scan > size > mtime > path ngắn*).
+2. **Dedup (quan sát, tuỳ chọn)**: v1.7.1 **không** còn gộp/skip theo `content_hash` trong ingest; `content_hash` chỉ dùng cho phân tích/audit hoặc các batch script (ví dụ `scripts/dedupe_chunks.py`).
 3. **Index**:
    * **BM25**: chỉ mục từ khóa (nhẹ, dễ bảo trì).
    * **Weaviate**: vector database (embedding 768D), production-grade với gRPC.
@@ -157,10 +160,10 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
   * Indexes: `D:\PVCFC_Artifacts\index_production`
   * Cache: `D:\PVCFC_Artifacts\cache`
 * **OCR LUÔN ENABLED**: Google Cloud Vision API. Per-page thresholds: CAD-like < 1700 chars (+ Real-ESRGAN 2x), non-CAD-like < 40 chars (không ESRGAN). Hỗ trợ `vie+eng`; Adaptive DPI (144-216).
-* **Dedup**:
+* **Dedup (v1.7.1)**:
 
-  * `file_hash = SHA256(file_bytes)` → trùng **file y hệt**.
-  * `content_hash = SHA1(normalized_text)` → trùng **nội dung**; **chỉ đại diện** vào index.
+  * `file_hash = SHA256(file_bytes)` và `content_hash = SHA1(normalized_text)` được tính để phục vụ **thống kê/audit**, nhưng ingest **không dùng** chúng để skip hay gộp tài liệu.
+  * Dedup nếu cần sẽ được thực hiện bằng các script offline (ví dụ `scripts/dedupe_chunks.py`, `scripts/dedupe_tags.py`) trên artifacts đã build, không ảnh hưởng tới ingest online.
 * **Quarantine (log, không di chuyển file)**: `{ARTIFACTS_DIR}/ingestion_production/quarantine.jsonl` ghi `corrupt|password|ocr_failed|read_error`.
 * **doc_id_map.json**: `{ARTIFACTS_DIR}/ingestion_production/doc_id_map.json` ánh xạ `doc_id → pdf_path` để **enrich citation** và **render trang**.
 
@@ -168,20 +171,18 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 
 ## 5) Chunking & Metadata
 
-* **Chunking Strategy (Phase 3)**: Parent-Child Hierarchical Chunking
-  * **Parent Chunks**: Large semantic blocks for LLM context
-    * Size: `parent_chunk_size=1800` chars
-    * Overlap: `parent_overlap=200` chars
-    * Purpose: Complete semantic context for generation
-  * **Child Chunks**: Small dense blocks for precise retrieval
-    * Size: `child_chunk_size=400` chars
-    * Overlap: `child_overlap=50` chars
+* **Chunking Strategy (Phase 3)**: Structure-based Hierarchical Chunking
+  * **Parent Chunks**: Markdown Headings (Context)
+    * Derived from document structure (#, ##)
+    * Purpose: Provide semantic context for child chunks
+  * **Child Chunks**: Section Content (Retrieval)
+    * Split by sentence window or paragraphs
     * Purpose: Precise keyword/semantic matching
   * **How it works**:
     * Retrieval searches child chunks (high precision)
-    * Generation receives parent text (complete context)
-    * Parent text stored directly in child metadata (no joins)
-  * **Implementation**: `ParentChildChunker` class in `app/ingestion/text_chunker.py`
+    * Child chunks link to parent via `parent_id`
+    * **Precise Page Mapping**: Uses character-index mapping to fix page offset bugs
+  * **Implementation**: `HierarchicalChunker` class in `app/rag/chunkers/hierarchical_chunker.py`
 * **Metadata tối thiểu**: `doc_id`, `page / page_start / page_end`, `source_format (vector|scan)`.
 * **Phase 3 Metadata**: `parent_text`, `parent_id`, `chunk_type`, `is_parent`, `parent_index`, `parent_char_count`
 * **Taxonomy (mở)**:
@@ -245,21 +246,22 @@ Notes:
 
 ## 7) Truy vấn, Rerank & Trích dẫn theo trang
 
-* **Retrieval k**: Configurable qua request parameter `max_context` (default=**20**, max=30). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
+* **Retrieval k**: Configurable qua request parameter `max_context` (default=**50**, max=100). Hybrid search lấy nhiều candidates từ BM25 và Weaviate, sau đó rerank và chọn top-k.
 
-* **Retrieval Optimization (v1.7.0)**:
-  * **Weaviate limit**: **100 candidates** (increased from 50)
-  * **OpenSearch limit**: **100 candidates** (increased from 50)
-  * **Total candidates pool**: 200 (from dual sources)
+* **Retrieval Optimization (v1.7.0 + v1.7.1)**:
+  * **Weaviate limit**: **100 candidates** (WEAVIATE_RETRIEVAL_LIMIT=100, increased from 50)
+  * **OpenSearch limit**: **200 candidates** (OPENSEARCH_RETRIEVAL_LIMIT=200 v1.7.1 – trước đó 100, ban đầu 50)
+  * **Total fused pool cho BGE**: ~100 kết quả (từ tối đa 100 semantic + 200 BM25 raw, cắt bằng RRF)
+  * **Safety Quota**: Max 20 exact matches (v1.7.1), prevents header/footer flooding
 
 * **BGE Reranking** (BAAI/bge-reranker-base):
   * **Status**: Currently **ENABLED** (`ENABLE_BGE_RERANK=true` in production .env)
   * **Model**: BAAI/bge-reranker-base (auto-downloaded on first query)
-  * **Cấu hình (v1.7.0)**:
-    - `BGE_RERANK_CANDIDATE_LIMIT=100`: Số candidates trước khi rerank (increased)
-    - `BGE_RERANK_TOP_K=20`: Số kết quả cuối cùng (increased)
-    - `MAX_CONTEXT=20`: Context chunks gửi tới LLM (2.5x increase)
-    - `TOP_RERANK=30`: Safety buffer ≥ MAX_CONTEXT
+  * **Cấu hình (v1.7.0+)**:
+    - `BGE_RERANK_CANDIDATE_LIMIT=100`: Số candidates trước khi rerank (increased from 50)
+    - `BGE_RERANK_TOP_K=50`: Số kết quả sau BGE rerank (increased from 20)
+    - `MAX_CONTEXT=50`: Context chunks gửi tới LLM (6.25x increase from baseline 8)
+    - `TOP_RERANK=60`: Safety buffer ≥ MAX_CONTEXT
     - `BGE_RERANK_LEVEL=chunk`: Rerank level (chunk/doc/page)
     - `BGE_RERANK_AGGREGATION=max`: Phương pháp tổng hợp (max/mean/top3_mean)
   * **Performance**: First query ~45-60s (model loading), subsequent ~2-5s total
@@ -281,11 +283,11 @@ Notes:
 * **Heavy (LLM)**: `gemini-3-pro-preview` (Gemini 3.0 Pro Preview - **most powerful**, multimodal).
 * **Light (LLM)**: `gemini-2.5-flash` (fast responses, 65K output tokens).
 * **Vision Model**: `gemini-3-pro-preview` (same as Heavy, superior visual understanding).
-* **Configuration** (v1.7.0):
-  * Max output tokens: **8192** (4x increase from 2048)
-  * Vision Always-On: **true** (bypass smart gating)
-  * Context: **20 chunks** (2.5x increase from 8)
-  * Vision pages: **30 max** (up from 24)
+* **Configuration** (v1.7.0+):
+  * Max output tokens: **8192** (LLM_MAX_OUTPUT_TOKENS, 4x increase from 2048)
+  * Vision Always-On: **true** (VISION_ALWAYS_ON=true, bypass smart gating)
+  * Context: **50 chunks** (MAX_CONTEXT=50, 6.25x increase from baseline 8)
+  * Vision pages: **30 max** (VISION_MAX_PAGES_TOTAL=30, up from 24)
 * **Multimodal Vision (khi phù hợp)**:
 
   * **Điều kiện**: có documents liên quan và **map được `pdf_path`** (từ `doc_id_map.json`).
@@ -293,10 +295,10 @@ Notes:
     - Nếu có cả `page_start` và `page_end` (cả 2 non-None) → lấy **full range**; swap nếu start > end.
     - Nếu chỉ có `page` → **cửa sổ ±2** (start = max(1, page-2); end = page+2).
     - Clamp theo `total_pages` nếu biết được từ PDF.
-    - **Tối đa 30 trang** (increased from 10), *1-based*, **dedup** theo `(pdf_path, page)`.
+    - **Tối đa 30 trang** (VISION_MAX_PAGES_TOTAL=30, increased from 10), *1-based*, **dedup** theo `(pdf_path, page)`.
   * **Render nội bộ**: JPEG @ **DPI=200**; trang lỗi → **bỏ qua** và ghi `pages_failed`.
   * **Mục tiêu**: tăng **độ chính xác** nhờ bối cảnh trực quan (layout/bảng/đơn vị), **không** là pipeline verify rời.
-  * **Timeout**: Streamlit client **300 seconds** (5 minutes) - supports full Vision processing.
+  * **Timeout**: Streamlit client **300 seconds** (5 minutes, v1.7.0) - supports full Vision processing with up to 30 pages.
 
 > Nếu retrieval không có tài liệu phù hợp → **text-only**.
 
@@ -377,18 +379,18 @@ WEAVIATE_USE_GRPC=true
 WEAVIATE_COLLECTION=Chunk
 WEAVIATE_RETRIEVAL_LIMIT=100  # v1.7.0: Increased from 50 (2x recall)
 
-# OpenSearch retrieval limit (v1.7.0)
-OPENSEARCH_RETRIEVAL_LIMIT=100  # Increased from 50
+# OpenSearch retrieval limit (v1.7.1 - deep code search + Safety Quota)
+OPENSEARCH_RETRIEVAL_LIMIT=200  # v1.7.1: increased from 100 (originally 50)
 
 # Context & Reranking (v1.7.0 - Major Expansion)
-MAX_CONTEXT=20  # Increased from 8 (2.5x LLM visibility)
-TOP_RERANK=30   # Safety buffer ≥ MAX_CONTEXT
+MAX_CONTEXT=50  # Increased from 8 (6.25x LLM visibility)
+TOP_RERANK=60   # Safety buffer ≥ MAX_CONTEXT
 
 # BGE Reranking (Phase 3 - v1.7.0 Enhanced)
 # Currently ENABLED in production for better semantic ranking
 ENABLE_BGE_RERANK=true  # Enable BGE CrossEncoder reranking (BAAI/bge-reranker-base)
 BGE_RERANK_CANDIDATE_LIMIT=100  # v1.7.0: Increased from 50
-BGE_RERANK_TOP_K=20             # v1.7.0: Increased from 10
+BGE_RERANK_TOP_K=50             # v1.7.0: Increased from 20 (matches MAX_CONTEXT)
 BGE_RERANK_LEVEL=chunk          # chunk|doc|page
 BGE_RERANK_AGGREGATION=max      # max|mean|top3_mean
 

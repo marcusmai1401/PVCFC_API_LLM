@@ -149,7 +149,7 @@ class OpenSearchBM25Retriever:
                                         "title",  # Document title, default boost
                                     ],
                                     "type": "best_fields",
-                                    "minimum_should_match": "75%",
+                                    "operator": "OR",  # ⚠️ FIXED: Explicit OR (was implicit AND via 75%)
                                     "boost": 1.0,
                                 }
                             },
@@ -166,7 +166,7 @@ class OpenSearchBM25Retriever:
                                                     "title",
                                                 ],
                                                 "type": "best_fields",
-                                                "minimum_should_match": "75%",
+                                                "operator": "OR",  # ⚠️ FIXED: Explicit OR for tag entities
                                             }
                                         },
                                         {"term": {"is_tag_entity": True}},

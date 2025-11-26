@@ -1,8 +1,8 @@
 # Complete Pipeline Flow - From Raw Data to User Query
 
 **PVCFC RAG System - End-to-End Data Flow**
-**Date:** 2025-11-21
-**Version:** 1.7.0 (Gemini 3.0 Pro + Retrieval Optimization + Context Expansion + Parent-Child Chunking)
+**Date:** 2025-11-24
+**Version:** 1.7.1 (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + Parent-Child Chunking + 4 Critical Bug Fixes)
 
 ---
 
@@ -95,7 +95,7 @@ python tools/ingest.py \
 
 ---
 
-### Step 1.1: File Discovery & Deduplication
+### Step 1.1: File Discovery (v1.7.1)
 
 ```
 Scan D:\Data_Raw\
@@ -103,16 +103,16 @@ Scan D:\Data_Raw\
 For each PDF file:
     ↓
     1.1a: Calculate file hash (SHA256)
-         → Skip if exact duplicate (same file_hash)
+         → Dùng cho logging & báo cáo (dedup_report.json), **không skip file** theo mặc định.
     ↓
     1.1b: Store file in processing queue
 ```
 
 **Example:**
 - `01. P&ID Ammonia.pdf` → hash: `a3f5b2...`
-- `01. P&ID Ammonia Copy.pdf` → hash: `a3f5b2...` → **SKIP** (duplicate)
+- `01. P&ID Ammonia Copy.pdf` → hash: `a3f5b2...` → **VẪN ĐƯỢC PROCESS** (dedup chỉ dùng cho thống kê/offline)
 
-**Output:** List of unique PDF files to process
+**Output:** List of all PDF files to process (no ingest-time skipping in v1.7.1)
 
 ---
 
@@ -270,43 +270,20 @@ For each PDF:
          → Confirm: doc_type, revision number
          → Example: type="P&ID", revision="Rev12"
     ↓
-    1.4c: Convert to Markdown
-         → Format: # Page X\n\ntext content...
-         → Preserve structure
-    ↓
-    1.4d: Create Chunks (PHASE 3 - Parent-Child Strategy) ⭐
-         → Strategy: Parent-Child Hierarchical Chunking
-         → Uses ParentChildChunker class
-         ↓
-         Step 1: Create Parent Chunks
-         → Size: ~1800 chars (large semantic blocks)
-         → Overlap: 200 chars
-         → Purpose: Complete context for LLM
-         ↓
-         Step 2: Create Child Chunks (for each parent)
-         → Size: ~400 chars (small dense blocks)
-         → Overlap: 50 chars
-         → Purpose: Precise retrieval matching
-         ↓
-         Step 3: Embed Parent in Child
-         → Store parent_text directly in child.metadata
-         → No database joins needed
+         → Use character-index mapping to assign precise page numbers
+         → Fixes page 31+ offset bug
          ↓
          → Each CHILD chunk has:
             - chunk_id: unique identifier
-            - text: child text (~400 chars) - INDEXED for retrieval
-            - metadata.parent_text: parent text (~1800 chars) - FOR LLM
-            - metadata.parent_id: parent chunk ID
+            - text: content text - INDEXED for retrieval
+            - parent_id: ID of the heading chunk
             - metadata.chunk_type: "child"
-            - metadata.is_parent: False
-            - metadata.parent_index: position
-            - metadata.parent_char_count: parent length
+            - metadata.page: precise page number from index map
          ↓
-         → Example from Page 113:
-            Parent 1: "29 SG 2201A ... [1800 chars]"
-              → Child 1.1: "29 SG 2201A ... [400 chars]" + parent_text=Parent 1
-              → Child 1.2: "... overlap ... [400 chars]" + parent_text=Parent 1
-              → Child 1.3: "... overlap ... [400 chars]" + parent_text=Parent 1
+         → Example:
+            Parent: "# 2. System Description"
+              → Child 1: "The system consists of..." (linked to Parent)
+              → Child 2: "Key components include..." (linked to Parent)
 ```
 
 **Output:**
@@ -624,7 +601,7 @@ Optional: Specify document: "Ammonia"
   "query": "04 TT 2020",
   "query_type": "pid",
   "doc_id": "Ammonia",
-  "max_context": 8,
+  "max_context": 50,
   "language": "vi"
 }
 ```
@@ -749,9 +726,9 @@ Step A3: Branch A - Spatial Proximity Search (Level 2)
 Step A4: Branch B - Chunks Search (Parallel)
     ↓
     Standard hybrid search:
-    - Weaviate vector search (50 results)
-    - OpenSearch BM25 search (50 results)
-    - RRF fusion
+    - Weaviate vector search (Top 100 results, `WEAVIATE_RETRIEVAL_LIMIT=100`)
+    - OpenSearch BM25 search (Top 200 results, `OPENSEARCH_RETRIEVAL_LIMIT=200`)
+    - RRF fusion + BGE rerank (Top 50 results: `BGE_RERANK_TOP_K=50`, actual context: `MAX_CONTEXT=50`)
     ↓
     Returns: Chunks mentioning "04 TT 2020" semantically
     ↓
@@ -770,7 +747,7 @@ Step A6: Reranking (Optional)
     ↓
     BGE CrossEncoder reranking
     ↓
-    Top 8 results selected
+    Top `max_context` results selected (default **50**, configurable 1-100)
     ↓
 Step A7: Return Results
     ↓
@@ -867,13 +844,13 @@ Step B2: Parallel Retrieval
     ├─ Query OpenSearch rag_chunks index
     ├─ Match keywords: "ammonia", "synthesis", "process"
     ├─ BM25 scoring
-    └─ Top 50 results
+    └─ Top 200 results (v1.7.1 - OPENSEARCH_RETRIEVAL_LIMIT=200)
 
     Branch 2: Vector Semantic Search
     ├─ Query → Gemini embedding (768-dim vector)
     ├─ Query Weaviate for similar vectors
     ├─ Cosine similarity scoring
-    └─ Top 50 results
+    └─ Top 100 results (v1.7.0 - WEAVIATE_RETRIEVAL_LIMIT=100)
     ↓
 Step B3: RRF Fusion
     ↓
@@ -883,12 +860,23 @@ Step B3: RRF Fusion
     ↓
     Sort by RRF score
     ↓
-Step B4: Reranking
+Step B4: Reranking + Safety Quota
     ↓
-    BGE CrossEncoder reranking
+    1) Exact Match Guardrails (Safety Quota v1.7.1)
+       • Detect special codes in query (KT06101, LS006343, E-04217...)
+       • Extract ALL exact-match chunks from fused results
+       • Sort by original BM25/RRF score (quality-first)
+       • Keep **max 20** exact matches, boost score → 1.0
+       • Đưa phần dư (21+) trở lại pool cho BGE rerank (semantic cứu các chunk nội dung điểm thấp)
     ↓
-    Top 8 context chunks selected
+    2) BGE CrossEncoder reranking
+       • Input: remaining candidates (sau khi tách exact matches)
+       • Candidate pool: tối đa `BGE_RERANK_CANDIDATE_LIMIT=100`
+       • Output: `BGE_RERANK_TOP_K=20` semantic-best chunks
     ↓
+    3) Context selection
+       • Merge: 20 exact matches (max) + BGE results → total pool cắt theo `MAX_CONTEXT=50`
+       • Thực tế: tối đa **50 context chunks** được gửi vào LLM (v1.7.0+)
 Step B5: Return Results
     ↓
     Results: Relevant chunks from manuals/datasheets
@@ -937,7 +925,7 @@ Step 3.3a: Context Preparation
     Context 2 (Page 113, Ammonia P&ID):
     The temperature transmitter monitors inlet temperature...
 
-    [... up to 8 contexts]
+    [... up to 50 contexts (MAX_CONTEXT=50, configurable)]
     """
     ↓
 Step 3.3b: LLM Generation
@@ -1038,7 +1026,7 @@ Step 3.3d: Return Final Answer
 3. Vector search: semantic similarity
 4. RRF fusion of both
 5. Rerank top candidates
-6. Generate answer from top 8 chunks
+6. Generate answer từ top `max_context` chunks (default **50**, up to 100 configurable)
 ```
 
 **Response time:** ~2-3 seconds

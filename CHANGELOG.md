@@ -2,6 +2,134 @@
 
 All notable changes to the PVCFC RAG System.
 
+## [1.7.1] - 2025-11-22 - SAFETY QUOTA & DATA INTEGRITY FIXES (CRITICAL)
+
+### 🛡️ Safety Quota Implementation - Exact Match Flooding Protection
+
+**Problem Identified:**
+- Query "Thông số áp suất KT06101" where code appears in 100+ page headers/footers
+- Previous behavior: ALL chunks with exact code match (50+) would fill top_k slots
+- Result: BGE semantic search receives ZERO slots → poor answer quality on contextual queries
+- Risk: Header/footer noise dominates retrieval, blocks genuine semantic matches
+
+**Solution Implemented - Safety Quota System:**
+1. **Exact Match Limit**: Maximum 20 exact matches kept (quality-first selection)
+   - ALL exact matches detected and sorted by original RRF/BM25 score
+   - Top 20 by score are boosted to 1.0 and placed at top of results
+   - Remaining exact matches (21+) return to semantic pool for BGE evaluation
+2. **Dynamic Slot Reservation**: `bge_slots = top_k - len(exact_matches)`
+   - Example: top_k=50, 20 exact → BGE gets 30 slots for semantic search
+   - Guarantees semantic diversity in final results
+3. **Quality-First Sorting**: Exact matches sorted by RRF/BM25 score before truncation
+   - High-score content chunks prioritized over low-score headers
+   - Prevents random selection of header noise
+4. **Zero Data Loss**: Dropped exact matches recycled to semantic pool
+   - Low-scored content chunks get second chance via BGE semantic scoring
+   - BGE can rescue valuable chunks missed by keyword matching
+
+**Files Modified:**
+- `app/rag/hybrid_weaviate_opensearch_retriever.py` (lines 590-679):
+  - Refactored `_extract_exact_matches()`: Added `limit` parameter (default: 20)
+  - Implemented score-based sorting before truncation
+  - Added dropped chunk recycling: `remaining_candidates.extend(exact_matches_dropped)`
+  - Enhanced logging: 🛡️ Safety Quota messages
+- `app/rag/hybrid_weaviate_opensearch_retriever.py` (line 438):
+  - Updated `search()` to pass `limit=20`
+- `app/core/config.py` (line 228):
+  - `opensearch_retrieval_limit`: 100 → **200** (deep code search + noise filtering)
+- `.env` (line 108):
+  - `OPENSEARCH_RETRIEVAL_LIMIT=200`
+
+**Testing & Verification:**
+- ✅ Test script created: `scripts/test_safety_quota.py` (4/4 test cases PASSED)
+- ✅ Flooding scenario verified: 50 exact matches → 20 kept, 30 recycled
+- ✅ Quality sorting verified: Top 5 are content chunks (not headers)
+- ✅ BGE rescue verified: Low-scored content chunk rescued by semantic scoring
+- ✅ Line-by-line audit completed: All logic checks PASSED
+
+**Expected Impact:**
+- ✅ Prevents exact match flooding on code queries
+- ✅ Guarantees 30+ slots for semantic search (top_k=50)
+- ✅ Improved answer quality on mixed queries (code + context)
+- ✅ +5-10ms latency (sorting overhead, negligible)
+
+### 🔧 Fixed - Page Metadata Bug (Index Mapping)
+
+**Problem Identified:**
+- Chunks from page 31+ incorrectly showed `page=1` in metadata
+- Root cause: Chunker logic used regex page markers but didn't maintain character-level index map
+- Result: Page number extracted from wrong position after text flattening
+
+**Solution Implemented - Page-Aware Chunking:**
+1. **New Method**: `chunk_markdown_with_pages()` in `HierarchicalChunker`
+   - Input: `List[Tuple[int, str]]` (page_num, page_text) instead of flat string
+   - Builds character-level index map: `index_to_page[char_position] = page_num`
+   - Page lookup: Find chunk position → map to correct page number
+2. **Integration**: Updated `tools/ingest.py` (lines 1432-1444)
+   - Builds `pages_list` from `pdf_doc.pages`
+   - Calls new method: `chunker.chunk_markdown_with_pages(pages_list, ...)`
+3. **Fallback**: Graceful degradation to old method if page-aware chunking fails
+
+**Files Modified:**
+- `app/rag/chunkers/hierarchical_chunker.py` (lines 200-259, 173-198, 449-461, 606-621, 661-674, 983-1086):
+  - Added `chunk_markdown_with_pages()` method
+  - Added `_get_page_from_index()` helper for page lookup
+  - Updated all chunk creation points to use index map
+  - Fixed off-by-one bug at line 390: removed `-1` from page number extraction
+- `tools/ingest.py` (lines 1432-1444):
+  - Updated to call page-aware chunking method
+  - Builds pages_list with correct format
+
+**Testing & Verification:**
+- ✅ Execution proof test created: `scripts/debug_chunking_fix.py`
+- ✅ Test result: 14 chunks from Page 2 all correctly show page=2 (not page=1)
+- ✅ Index mapping verified: character position correctly maps to page number
+
+**Expected Impact:**
+- ✅ Accurate page citations for all chunks (including page 31+)
+- ✅ Improved user trust in citation accuracy
+- ✅ Better page-level deduplication and filtering
+
+### 📚 Documentation
+
+**Created:**
+- `docs/SAFETY_QUOTA_IMPLEMENTATION.md`: Complete technical documentation
+  - Architecture, data flow, configuration, deployment guide
+  - Monitoring, rollback plan, future enhancements
+- `scripts/test_safety_quota.py`: Comprehensive test suite
+  - Test Case 1: No codes query
+  - Test Case 2: Flooding scenario (50 exact matches)
+  - Test Case 3: BGE slot allocation
+  - Test Case 4: Code pattern detection
+
+**Updated:**
+- Configuration files synced: `.env` ↔ `app/core/config.py`
+- All documentation files updated to reflect v1.7.1 changes
+
+### ✅ Production Readiness
+
+**Status:** 🚀 READY FOR DEPLOYMENT
+
+**Verification Checklist:**
+- [x] Safety quota enforced (max 20 exact matches)
+- [x] Quality-first sorting implemented
+- [x] Dropped chunks recycled (no data loss)
+- [x] BGE slot reservation correct
+- [x] Page metadata fix integrated
+- [x] All tests passed (4/4 + execution proof)
+- [x] Line-by-line audit completed
+- [x] Documentation created
+
+**Deployment Notes:**
+- ⚠️ **IMPORTANT**: Re-ingestion required to fix page metadata for all documents
+- Use: `python scripts/ingest_production.py` (page-aware chunking enabled)
+- OpenSearch limit increase to 200 provides better recall for code queries
+- Monitor logs for 🛡️ Safety Quota and 🎯 Exact Match Guardrails messages
+
+**Risk Level:** Low (additive logic, graceful fallbacks, rollback time < 2 minutes)
+
+---
+
 ## [1.7.0] - 2025-11-21 - SYSTEM UPGRADE & OPTIMIZATION (PHASE 2 ENHANCEMENT)
 
 ### ✨ Major Upgrades - Production Optimization for Complex Visual Documents

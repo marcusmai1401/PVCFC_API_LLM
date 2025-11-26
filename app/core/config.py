@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     )
     llm_max_output_tokens: int = Field(
         default=8192,
-        description="Maximum output tokens for LLM generation (affects both light and heavy tiers)"
+        description="Maximum output tokens for LLM generation (affects both light and heavy tiers)",
     )
 
     # Cấu hình Embedding (provider/model). Cho phép alias qua EMBEDDING_LLM
@@ -55,11 +55,11 @@ class Settings(BaseSettings):
     # Phase 2 - Retrieval & Context
     # ========================================
     max_context: int = Field(
-        default=20,
+        default=50,
         description="Maximum number of context chunks to send to LLM for generation (increased for Gemini 3.0 Pro)",
     )
     top_rerank: int = Field(
-        default=30,
+        default=60,
         description="Number of top candidates to keep after reranking (must be >= MAX_CONTEXT)",
     )
 
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
         description="Number of candidates to retrieve before BGE reranking (increased to 100 for better recall)",
     )
     bge_rerank_top_k: int = Field(
-        default=20,
+        default=50,
         description="Final number of results after BGE reranking (increased to match MAX_CONTEXT)",
     )
     bge_rerank_level: Literal["chunk", "doc", "page"] = Field(
@@ -225,8 +225,8 @@ class Settings(BaseSettings):
         description="BM25 b parameter (length normalization)",
     )
     opensearch_retrieval_limit: int = Field(
-        default=100,
-        description="Number of results to retrieve from OpenSearch before reranking (increased to 100 for better recall)",
+        default=200,
+        description="Number of results to retrieve from OpenSearch before reranking (200 for deep code search + header/footer filtering)",
     )
 
     # ========================================

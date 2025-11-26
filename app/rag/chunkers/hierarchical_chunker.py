@@ -165,6 +165,101 @@ class HierarchicalChunker:
         else:
             self.tokenizer = None
 
+        # Index mapping for page-aware chunking
+        self._index_to_page_map: Optional[List[int]] = None
+        self._has_page_map: bool = False
+        self._full_text: Optional[str] = None  # Full markdown for index lookup
+
+    def _get_page_from_index(self, text: str) -> Optional[int]:
+        """
+        Get page number from text position using index map.
+
+        Args:
+            text: The chunk text
+
+        Returns:
+            Page number if index map available, None otherwise
+        """
+        if not self._has_page_map or not self._index_to_page_map or not self._full_text:
+            return None
+
+        # Find where this chunk starts in the full text
+        try:
+            start_index = self._full_text.find(
+                text[:100]
+            )  # Use first 100 chars for lookup
+            if start_index == -1:
+                return None
+
+            # Look up page from index map
+            if 0 <= start_index < len(self._index_to_page_map):
+                return self._index_to_page_map[start_index]
+        except Exception as e:
+            logger.warning(f"Failed to get page from index map: {e}")
+
+        return None
+
+    def chunk_markdown_with_pages(
+        self,
+        pages: List[Tuple[int, str]],
+        doc_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Chunk]:
+        """
+        Chunk markdown document with page-aware index mapping.
+
+        This is the CORRECT method to fix page metadata bugs.
+        Instead of relying on regex to extract page markers from text,
+        we build an index map from character positions to page numbers.
+
+        Args:
+            pages: List of (page_num, text) tuples
+            doc_id: Document identifier
+            metadata: Optional document metadata
+
+        Returns:
+            List of chunks with accurate page metadata
+        """
+        # Build combined text and index map
+        combined_text = []
+        index_to_page = []  # Maps global char index -> page_num
+        current_index = 0
+
+        for page_num, page_text in pages:
+            # Add page marker for backward compatibility
+            page_content = f"<!-- Page {page_num} -->\n{page_text}"
+            combined_text.append(page_content)
+
+            # Build index map for this page's content
+            page_length = len(page_content)
+            for _ in range(page_length):
+                index_to_page.append(page_num)
+
+            current_index += page_length
+            # Add separator between pages
+            separator = "\n\n"
+            combined_text.append(separator)
+            for _ in range(len(separator)):
+                index_to_page.append(page_num)  # Separator belongs to current page
+
+        # Combine into single text
+        markdown = "".join(combined_text)
+
+        # Store index map and full text in instance for use during chunking
+        self._index_to_page_map = index_to_page
+        self._full_text = markdown
+        self._has_page_map = True
+
+        # Call regular chunking (will use index map if available)
+        chunks = self.chunk_markdown(markdown, doc_id, metadata)
+
+        # Clean up
+        self._index_to_page_map = None
+        self._full_text = None
+        self._has_page_map = False
+
+        return chunks
+
     def chunk_markdown(
         self, markdown: str, doc_id: str, metadata: Optional[Dict[str, Any]] = None
     ) -> List[Chunk]:
@@ -294,7 +389,9 @@ class HierarchicalChunker:
 
                     match = re.search(r"Page (\d+)", line)
                     if match:
-                        page_num = int(match.group(1)) - 1
+                        page_num = int(
+                            match.group(1)
+                        )  # NO -1! Marker is already correct page num
                         if not current_section["page_start"]:
                             current_section["page_start"] = page_num
                         current_section["page_end"] = page_num
@@ -353,15 +450,18 @@ class HierarchicalChunker:
         if size <= self.max_chunk_size:
             chunk_id = self._generate_chunk_id(doc_id, chunk_index)
 
-            # CRITICAL FIX: Extract page number from chunk content
-            content_page = extract_page_from_content(content)
+            # CRITICAL FIX: Use index map if available, fallback to regex
+            content_page = self._get_page_from_index(content)
+            if content_page is None:
+                content_page = extract_page_from_content(content)
+
             chunk_metadata = metadata.copy()
             if content_page is not None:
                 chunk_metadata["page"] = content_page
                 actual_page_start = content_page
                 actual_page_end = content_page
                 logger.debug(
-                    f"Extracted page {content_page} from section chunk content"
+                    f"Assigned page {content_page} to section chunk (method: {'index_map' if self._has_page_map else 'regex'})"
                 )
             else:
                 actual_page_start = section["page_start"]
@@ -399,6 +499,9 @@ class HierarchicalChunker:
 
         return chunks
 
+    # Maximum recursion depth for _split_content to prevent infinite loops
+    _MAX_SPLIT_RECURSION_DEPTH = 50
+
     def _split_content(
         self,
         content: str,
@@ -410,11 +513,22 @@ class HierarchicalChunker:
         level: int,
         parent_id: Optional[str],
         metadata: Dict[str, Any],
+        _recursion_depth: int = 0,  # Internal parameter to track recursion
     ) -> List[Chunk]:
         """
         Split content into chunks with overlap.
 
         NEW: Prioritizes single-page chunks by splitting at page boundaries first.
+
+        CRITICAL FIX (2025-11-26): This method had an infinite recursion bug.
+        Root cause: extract_all_pages_from_content() detects 3 marker formats:
+          - <!-- Page X --> (HTML comment)
+          - [Page X] (brackets)
+          - ^Page X: (line-start)
+        But the split only used <!-- Page X --> pattern. Content with mixed
+        formats would never terminate because non-HTML markers weren't split out.
+
+        Fix: Strip ALL page markers before recursive calls AND add depth limit.
 
         Args:
             content: Text content
@@ -426,22 +540,32 @@ class HierarchicalChunker:
             level: Hierarchy level
             parent_id: Parent chunk ID
             metadata: Chunk metadata
+            _recursion_depth: Internal recursion depth tracker (do not set manually)
 
         Returns:
             List of chunks
         """
         chunks = []
 
-        # STEP 1: Check if content spans multiple pages
-        all_pages = extract_all_pages_from_content(content)
+        # SAFETY: Check recursion depth to prevent infinite loops
+        if _recursion_depth > self._MAX_SPLIT_RECURSION_DEPTH:
+            logger.warning(
+                f"Max recursion depth ({self._MAX_SPLIT_RECURSION_DEPTH}) reached in _split_content. "
+                f"Falling back to paragraph splitting for remaining content ({len(content)} chars)."
+            )
+            # Fall through to paragraph splitting (STEP 2) by setting all_pages to single page
+            all_pages = [page_start] if page_start else []
+        else:
+            # STEP 1: Check if content spans multiple pages
+            all_pages = extract_all_pages_from_content(content)
 
         # If content spans multiple pages, split by page boundaries FIRST
         if len(all_pages) > 1:
             logger.debug(
-                f"Content spans {len(all_pages)} pages, splitting by page boundaries"
+                f"Content spans {len(all_pages)} pages, splitting by page boundaries (depth={_recursion_depth})"
             )
 
-            # Split content by page markers
+            # Split content by page markers (HTML comment format only)
             page_pattern = re.compile(r"(<!--\s*Page\s+\d+\s*-->)")
             parts = page_pattern.split(content)
 
@@ -459,7 +583,8 @@ class HierarchicalChunker:
                         page_contents[current_page] = "\n".join(current_text)
                     # Start new page
                     current_page = int(page_match.group(1))
-                    current_text = [part]  # Keep the marker
+                    # FIX: Don't keep the marker in content to avoid re-detection
+                    current_text = []  # Was: [part] which caused infinite recursion
                 else:
                     current_text.append(part)
 
@@ -473,6 +598,10 @@ class HierarchicalChunker:
                 if not page_text.strip():
                     continue
 
+                # FIX: Strip ALL page marker formats before recursion to prevent
+                # infinite loops caused by mixed marker formats (e.g., "Page 2:" line-start)
+                page_text = self._strip_all_page_markers(page_text)
+
                 # Recursively call _split_content for this page's content
                 # This ensures single-page chunks
                 page_chunks = self._split_content(
@@ -485,6 +614,7 @@ class HierarchicalChunker:
                     level=level,
                     parent_id=parent_id,
                     metadata=metadata,
+                    _recursion_depth=_recursion_depth + 1,  # Track depth
                 )
                 chunks.extend(page_chunks)
 
@@ -510,16 +640,21 @@ class HierarchicalChunker:
                 chunk_text = "\n\n".join(current_chunk_text)
                 chunk_id = self._generate_chunk_id(doc_id, chunk_index + len(chunks))
 
-                # CRITICAL FIX: Extract page number from chunk content
-                # This ensures metadata.page matches the actual content page
-                content_page = extract_page_from_content(chunk_text)
+                # CRITICAL FIX: Use index map if available, fallback to regex
+                # Index map is more accurate than regex (doesn't require marker in chunk)
+                content_page = self._get_page_from_index(chunk_text)
+                if content_page is None:
+                    # Fallback to regex extraction
+                    content_page = extract_page_from_content(chunk_text)
+
                 chunk_metadata = metadata.copy()
                 if content_page is not None:
                     chunk_metadata["page"] = content_page
-                    # Update page_start/page_end to match content
                     actual_page_start = content_page
                     actual_page_end = content_page
-                    logger.debug(f"Extracted page {content_page} from chunk content")
+                    logger.debug(
+                        f"Assigned page {content_page} to chunk (method: {'index_map' if self._has_page_map else 'regex'})"
+                    )
                 else:
                     actual_page_start = page_start
                     actual_page_end = page_end
@@ -562,14 +697,19 @@ class HierarchicalChunker:
             chunk_text = "\n\n".join(current_chunk_text)
             chunk_id = self._generate_chunk_id(doc_id, chunk_index + len(chunks))
 
-            # CRITICAL FIX: Extract page number from chunk content
-            content_page = extract_page_from_content(chunk_text)
+            # CRITICAL FIX: Use index map if available, fallback to regex
+            content_page = self._get_page_from_index(chunk_text)
+            if content_page is None:
+                content_page = extract_page_from_content(chunk_text)
+
             chunk_metadata = metadata.copy()
             if content_page is not None:
                 chunk_metadata["page"] = content_page
                 actual_page_start = content_page
                 actual_page_end = content_page
-                logger.debug(f"Extracted page {content_page} from final chunk content")
+                logger.debug(
+                    f"Assigned page {content_page} to final chunk (method: {'index_map' if self._has_page_map else 'regex'})"
+                )
             else:
                 actual_page_start = page_start
                 actual_page_end = page_end
@@ -688,6 +828,40 @@ class HierarchicalChunker:
         """Generate unique chunk ID"""
         return f"{doc_id}_chunk_{chunk_index:04d}"
 
+    def _strip_all_page_markers(self, text: str) -> str:
+        """
+        Strip ALL page marker formats from text.
+
+        CRITICAL: This method was added to fix an infinite recursion bug.
+        The bug occurred because extract_all_pages_from_content() detects 3 formats:
+          - <!-- Page X --> (HTML comment)
+          - [Page X] (brackets)
+          - ^Page X: (line-start pattern)
+
+        But _split_content() only split on HTML comment markers, leaving other
+        formats in the content which caused infinite re-detection.
+
+        Args:
+            text: Text potentially containing page markers
+
+        Returns:
+            Text with all page markers stripped
+        """
+        if not text:
+            return text
+
+        # Strip HTML comment markers: <!-- Page X -->
+        text = re.sub(r"<!--\s*Page\s+\d+\s*-->", "", text)
+
+        # Strip bracket markers: [Page X]
+        text = re.sub(r"\[\s*Page\s+\d+\s*\]", "", text)
+
+        # Strip line-start markers: ^Page X: or ^Page X- (be careful not to strip mid-sentence)
+        # Only strip if at the very start of a line and followed by : or -
+        text = re.sub(r"^\s*Page\s+\d+\s*[:\-]\s*", "", text, flags=re.MULTILINE)
+
+        return text
+
     def _chunk_section_with_parent(
         self,
         section: Dict[str, Any],
@@ -794,7 +968,9 @@ class HierarchicalChunker:
         page_pattern = re.compile(r"<!-- Page (\d+) -->")
         page_matches = page_pattern.findall(text)
         if page_matches:
-            page_nums = [int(p) - 1 for p in page_matches]
+            # CRITICAL FIX: Do NOT subtract 1! Page markers are already 1-based.
+            # Page 1 in PDF should remain Page 1 in metadata.
+            page_nums = [int(p) for p in page_matches]
             page_start = min(page_nums)
             page_end = max(page_nums)
 
@@ -877,12 +1053,26 @@ class HierarchicalChunker:
                     else ""
                 )
                 parent_text = section["heading"] + ("\n\n" + summary if summary else "")
+
+                # Use index map if available, fallback to section page
+                page_from_index = self._get_page_from_index(parent_text)
+                actual_page_start = (
+                    page_from_index
+                    if page_from_index is not None
+                    else section["page_start"]
+                )
+                actual_page_end = (
+                    page_from_index
+                    if page_from_index is not None
+                    else section["page_end"]
+                )
+
                 parent_chunk = Chunk(
                     chunk_id=parent_chunk_id,
                     text=parent_text,
                     doc_id=doc_id,
-                    page_start=section["page_start"],
-                    page_end=section["page_end"],
+                    page_start=actual_page_start,
+                    page_end=actual_page_end,
                     char_count=len(parent_text),
                     token_count=len(self.tokenizer.encode(parent_text))
                     if self.use_token_count and self.tokenizer
@@ -918,12 +1108,26 @@ class HierarchicalChunker:
                 if current_sentences and current_size + sent_size > self.max_chunk_size:
                     # flush current chunk
                     chunk_text = " ".join(current_sentences)
+
+                    # Use index map if available, fallback to section page
+                    page_from_index = self._get_page_from_index(chunk_text)
+                    actual_page_start = (
+                        page_from_index
+                        if page_from_index is not None
+                        else section["page_start"]
+                    )
+                    actual_page_end = (
+                        page_from_index
+                        if page_from_index is not None
+                        else section["page_end"]
+                    )
+
                     c = Chunk(
                         chunk_id=self._generate_chunk_id(doc_id, chunk_index),
                         text=chunk_text,
                         doc_id=doc_id,
-                        page_start=section["page_start"],
-                        page_end=section["page_end"],
+                        page_start=actual_page_start,
+                        page_end=actual_page_end,
                         char_count=len(chunk_text),
                         token_count=current_size if self.use_token_count else 0,
                         chunk_index=chunk_index,
@@ -958,12 +1162,26 @@ class HierarchicalChunker:
             # flush remaining
             if current_sentences:
                 chunk_text = " ".join(current_sentences)
+
+                # Use index map if available, fallback to section page
+                page_from_index = self._get_page_from_index(chunk_text)
+                actual_page_start = (
+                    page_from_index
+                    if page_from_index is not None
+                    else section["page_start"]
+                )
+                actual_page_end = (
+                    page_from_index
+                    if page_from_index is not None
+                    else section["page_end"]
+                )
+
                 c = Chunk(
                     chunk_id=self._generate_chunk_id(doc_id, chunk_index),
                     text=chunk_text,
                     doc_id=doc_id,
-                    page_start=section["page_start"],
-                    page_end=section["page_end"],
+                    page_start=actual_page_start,
+                    page_end=actual_page_end,
                     char_count=len(chunk_text),
                     token_count=current_size if self.use_token_count else 0,
                     chunk_index=chunk_index,

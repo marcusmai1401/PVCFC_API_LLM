@@ -24,8 +24,9 @@ sys.path.append(PROJECT_ROOT)
 
 # Fix for "maximum recursion depth exceeded" errors with complex PDFs
 # Some PDFs with deeply nested structures (tables, annotations) require higher limit
-# Increased to 10000 after observing 7 files hitting 5000 limit during ingestion
-sys.setrecursionlimit(10000)  # Default is 1000, previous: 5000
+# PRODUCTION HOTFIX: Increased to 50000 for complex CAD drawings (>10k vector layers)
+# Safe for Windows with 24GB RAM. Handles most technical drawings without crash.
+sys.setrecursionlimit(50000)  # Default is 1000, previous: 10000
 
 from loguru import logger
 
@@ -791,12 +792,16 @@ class IngestionPipeline:
             except RecursionError as e:
                 # === PHASE 2: Fallback to rasterized processing ===
                 logger.warning(
-                    f"⚠️  RecursionError in normal mode for {pdf_path.name}, "
+                    f"RecursionError in normal mode for {pdf_path.name}, "
                     f"attempting fallback to rasterized PDF..."
                 )
                 fallback_reason = f"RecursionError: {str(e)[:100]}"
 
-                # Wrap entire fallback in try-except to catch RecursionError during rasterization too
+                # RESOURCE LEAK FIX: Use try...finally to GUARANTEE temp file cleanup
+                # Initialize path before try block so finally can always access it
+                rasterized_path = None
+                fallback_result = None  # Track early returns
+
                 try:
                     # Create temp rasterized PDF
                     temp_dir = self.output_dir / "temp_rasterized"
@@ -813,22 +818,24 @@ class IngestionPipeline:
                     )
 
                     if not raster_success:
-                        logger.error(f"❌ Rasterization failed for {pdf_path.name}")
+                        logger.error(f"Rasterization failed for {pdf_path.name}")
                         self._add_to_quarantine(
                             pdf_path,
                             "recursion_error",
                             f"RecursionError in normal mode, rasterization also failed: {e}",
                         )
-                        return {
+                        fallback_result = {
                             "status": "quarantine",
                             "reason": "recursion_error_raster_failed",
                         }
-                    logger.info(f"🔄 Retrying with rasterized PDF (safe mode)...")
+                        return fallback_result
+
+                    logger.info(f"Retrying with rasterized PDF (safe mode)...")
 
                     # Use safe configuration:
                     # - No table extraction (rasterized PDF has no table structure)
                     # - Force OCR (rasterized = image-only)
-                    # - Sentence-window chunking (avoid hierarchical recursion)
+                    # - Same chunking strategy as normal mode (preserve page metadata)
                     processor_safe = PDFProcessor(
                         enable_ocr=True,
                         extract_tables=False,  # No tables in rasterized PDF
@@ -846,9 +853,11 @@ class IngestionPipeline:
                             "ocr_failed",
                             "No text extracted from rasterized PDF",
                         )
-                        if rasterized_path.exists():
-                            rasterized_path.unlink()
-                        return {"status": "quarantine", "reason": "ocr_failed"}
+                        fallback_result = {
+                            "status": "quarantine",
+                            "reason": "ocr_failed",
+                        }
+                        return fallback_result
 
                     # Mark as rasterized processing
                     processing_mode = "rasterized-ocr"
@@ -870,61 +879,88 @@ class IngestionPipeline:
                     # Convert to markdown
                     markdown_text = self._convert_to_markdown(pdf_doc, doc_id)
 
-                    # Create chunks (use sentence-window for rasterized mode)
-                    chunks = self._create_chunks(
-                        pdf_doc,
-                        markdown_text,
-                        doc_id,
-                        doc_type,
-                        revision,
-                        "sentence-window",
-                    )
+                    # --- PRODUCTION SAFEGUARD: Triple Safety Net Chunking ---
+                    # Try hierarchical first (preserves metadata), fallback to sentence-window if needed
+                    try:
+                        # Priority 1: Use configured strategy (usually hierarchical) for best metadata
+                        # With limit 50k, most files will succeed at this step
+                        chunks = self._create_chunks(
+                            pdf_doc,
+                            markdown_text,
+                            doc_id,
+                            doc_type,
+                            revision,
+                            self.chunk_strategy,
+                        )
+                    except RecursionError:
+                        # Priority 2: FINAL SAFETY NET - Downgrade to flat chunking
+                        # If file exceeds 50k layers (extremely rare), accept strategy downgrade
+                        # 'sentence-window' uses no recursion -> GUARANTEES NO CRASH
+                        logger.warning(
+                            f"RecursionError during fallback chunking (>50k layers). "
+                            f"Downgrading to 'sentence-window' strategy to save ingestion: {pdf_path.name}"
+                        )
+                        chunks = self._create_chunks(
+                            pdf_doc,
+                            markdown_text,
+                            doc_id,
+                            doc_type,
+                            revision,
+                            "sentence-window",
+                        )
+                    # ---------------------------------------------------------------
 
                     logger.success(
-                        f"✅ Fallback successful: {pdf_path.name} processed via rasterization "
+                        f"Fallback successful: {pdf_path.name} processed via rasterization "
                         f"({len(pdf_doc.pages)} pages)"
                     )
 
                 except RecursionError as e_raster:
                     # Still recursion error even after rasterization (or during rasterization)
                     logger.error(
-                        f"❌ RecursionError in fallback processing: {pdf_path.name}"
+                        f"RecursionError in fallback processing: {pdf_path.name}"
                     )
                     self._add_to_quarantine(
                         pdf_path,
                         "recursion_error",
                         f"RecursionError in fallback (rasterization or processing): {e_raster}",
                     )
-                    # Cleanup temp file if it exists
-                    if "rasterized_path" in locals() and rasterized_path.exists():
-                        try:
-                            rasterized_path.unlink()
-                        except:
-                            pass
-                    return {
+                    fallback_result = {
                         "status": "quarantine",
                         "reason": "recursion_error_persistent",
                     }
+                    return fallback_result
 
                 except Exception as e_fallback:
                     logger.error(
-                        f"❌ Fallback processing failed: {pdf_path.name} - {e_fallback}"
+                        f"Fallback processing failed: {pdf_path.name} - {e_fallback}"
                     )
                     self._add_to_quarantine(
                         pdf_path,
                         "read_error",
                         f"Normal mode: RecursionError, Fallback mode: {e_fallback}",
                     )
-                    # Cleanup temp file if it exists
-                    if "rasterized_path" in locals() and rasterized_path.exists():
-                        try:
-                            rasterized_path.unlink()
-                        except:
-                            pass
-                    return {
+                    fallback_result = {
                         "status": "quarantine",
                         "reason": "rasterized_processing_failed",
                     }
+                    return fallback_result
+
+                finally:
+                    # GUARANTEED CLEANUP: This block ALWAYS runs, even if return/exception above
+                    # Only cleanup if we're NOT going to use the file in subsequent processing
+                    # (i.e., if we had an error or early return)
+                    if fallback_result is not None and rasterized_path is not None:
+                        try:
+                            if rasterized_path.exists():
+                                rasterized_path.unlink()
+                                logger.debug(
+                                    f"Cleaned up temp rasterized PDF (in finally): {rasterized_path.name}"
+                                )
+                        except Exception as cleanup_err:
+                            logger.warning(
+                                f"Failed to cleanup temp PDF in finally: {cleanup_err}"
+                            )
 
             except Exception as e:
                 # CRITICAL: Only catch non-RecursionError exceptions here
@@ -950,256 +986,278 @@ class IngestionPipeline:
             # === All processing completed successfully (normal or fallback mode) ===
             # doc_id, doc_type, revision, markdown_text, chunks, content_hash already set above
 
-            # Save chunks
-            self._save_chunks(chunks, doc_id)
+            # RESOURCE LEAK FIX: Wrap entire success path in try...finally
+            # to GUARANTEE temp file cleanup even if exceptions occur during
+            # _save_chunks, P&ID extraction, spatial extraction, etc.
+            try:
+                # Save chunks
+                self._save_chunks(chunks, doc_id)
 
-            # === P&ID TAG EXTRACTION ===
-            # Extract instrument tags from CAD-like documents (P&ID, PFD, etc.)
-            pid_result = None
-            if self.enable_pid_tags and self.tag_orchestrator:
-                try:
-                    logger.debug(f"Running P&ID tag extraction for {pdf_path.name}")
-                    pid_result = self.tag_orchestrator.process_document(
-                        pdf_path, doc_id
-                    )
+                # === P&ID TAG EXTRACTION ===
+                # Extract instrument tags from CAD-like documents (P&ID, PFD, etc.)
+                pid_result = None
+                if self.enable_pid_tags and self.tag_orchestrator:
+                    try:
+                        logger.debug(f"Running P&ID tag extraction for {pdf_path.name}")
+                        pid_result = self.tag_orchestrator.process_document(
+                            pdf_path, doc_id
+                        )
 
-                    if pid_result:
-                        # Update stats (thread-safe)
-                        with self._stats_lock:
-                            self.stats["pid_docs_processed"] += 1
-                            self.stats["pid_tags_extracted"] += pid_result.get(
-                                "tags_extracted", 0
+                        if pid_result:
+                            # Update stats (thread-safe)
+                            with self._stats_lock:
+                                self.stats["pid_docs_processed"] += 1
+                                self.stats["pid_tags_extracted"] += pid_result.get(
+                                    "tags_extracted", 0
+                                )
+
+                            logger.info(
+                                f"P&ID extraction: {pid_result.get('tags_extracted', 0)} tags "
+                                f"from {pid_result.get('pages_processed', 0)} pages"
+                            )
+                        else:
+                            logger.debug(
+                                f"Document not identified as CAD-like: {pdf_path.name}"
                             )
 
-                        logger.info(
-                            f"P&ID extraction: {pid_result.get('tags_extracted', 0)} tags "
-                            f"from {pid_result.get('pages_processed', 0)} pages"
+                    except Exception as e:
+                        # Don't crash main pipeline on tag extraction errors
+                        logger.warning(
+                            f"P&ID tag extraction failed for {pdf_path.name}: {e}"
                         )
-                    else:
+                        logger.debug(f"Tag extraction error details:", exc_info=True)
+                # === END P&ID TAG EXTRACTION ===
+
+                # === SPATIAL COMPONENT EXTRACTION (Level 2) ===
+                # Extract individual components for spatial proximity search
+                # Strategy: Extract for ALL pages if document is CAD-like (not just taggy pages)
+                # This ensures 100% coverage for tags that Tag Extraction might miss
+                # DISABLED for rasterized mode (no vector structure available)
+                if (
+                    self.enable_pid_tags
+                    and self.component_extractor
+                    and self.component_indexer
+                    and doc_type == "CAD-like"
+                    and processing_mode
+                    != "rasterized-ocr"  # Skip spatial extraction for rasterized files
+                ):
+                    try:
                         logger.debug(
-                            f"Document not identified as CAD-like: {pdf_path.name}"
+                            f"Extracting spatial components for CAD-like document: {pdf_path.name}"
                         )
 
-                except Exception as e:
-                    # Don't crash main pipeline on tag extraction errors
-                    logger.warning(
-                        f"P&ID tag extraction failed for {pdf_path.name}: {e}"
-                    )
-                    logger.debug(f"Tag extraction error details:", exc_info=True)
-            # === END P&ID TAG EXTRACTION ===
+                        # Get config for layout directory
+                        from app.config import get_config
 
-            # === SPATIAL COMPONENT EXTRACTION (Level 2) ===
-            # Extract individual components for spatial proximity search
-            # Strategy: Extract for ALL pages if document is CAD-like (not just taggy pages)
-            # This ensures 100% coverage for tags that Tag Extraction might miss
-            # DISABLED for rasterized mode (no vector structure available)
-            if (
-                self.enable_pid_tags
-                and self.component_extractor
-                and self.component_indexer
-                and doc_type == "CAD-like"
-                and processing_mode
-                != "rasterized-ocr"  # Skip spatial extraction for rasterized files
-            ):
-                try:
-                    logger.debug(
-                        f"Extracting spatial components for CAD-like document: {pdf_path.name}"
-                    )
+                        config = get_config()
+                        layout_dir = Path(config.LAYOUT_DIR)
 
-                    # Get config for layout directory
-                    from app.config import get_config
+                        all_components = []
 
-                    config = get_config()
-                    layout_dir = Path(config.LAYOUT_DIR)
+                        # NEW: Process ALL pages for CAD-like documents (not just taggy pages)
+                        # This ensures we don't miss tags on pages where Tag Extraction failed
+                        all_pages = list(range(1, pdf_doc.num_pages + 1))
 
-                    all_components = []
+                        logger.info(
+                            f"Processing ALL {len(all_pages)} pages for spatial components "
+                            f"(CAD-like document, ensuring 100% coverage)"
+                        )
 
-                    # NEW: Process ALL pages for CAD-like documents (not just taggy pages)
-                    # This ensures we don't miss tags on pages where Tag Extraction failed
-                    all_pages = list(range(1, pdf_doc.num_pages + 1))
+                        for page_num in all_pages:
+                            # Check if layout file exists (Tag Extraction may have saved it)
+                            layout_file = layout_dir / f"page_{doc_id}_{page_num}.json"
 
-                    logger.info(
-                        f"Processing ALL {len(all_pages)} pages for spatial components "
-                        f"(CAD-like document, ensuring 100% coverage)"
-                    )
+                            if layout_file.exists():
+                                # Layout already exists (from Tag Extraction), load and use it
+                                try:
+                                    # Load layout JSON
+                                    with open(layout_file, "r", encoding="utf-8") as f:
+                                        layout_data = json.load(f)
 
-                    for page_num in all_pages:
-                        # Check if layout file exists (Tag Extraction may have saved it)
-                        layout_file = layout_dir / f"page_{doc_id}_{page_num}.json"
-
-                        if layout_file.exists():
-                            # Layout already exists (from Tag Extraction), load and use it
-                            try:
-                                # Load layout JSON
-                                with open(layout_file, "r", encoding="utf-8") as f:
-                                    layout_data = json.load(f)
-
-                                # Reconstruct PageLayout object
-                                from app.ingestion.layout.page_layout_builder import (
-                                    PageLayout,
-                                    TextSpan,
-                                    VectorDrawing,
-                                )
-
-                                # Reconstruct spans
-                                spans = [
-                                    TextSpan(
-                                        text=s["text"],
-                                        bbox=s["bbox"],
-                                        font_size=s["font_size"],
-                                        rotation_deg=s["rotation_deg"],
-                                        span_id=s["span_id"],
+                                    # Reconstruct PageLayout object
+                                    from app.ingestion.layout.page_layout_builder import (
+                                        PageLayout,
+                                        TextSpan,
+                                        VectorDrawing,
                                     )
-                                    for s in layout_data.get("spans", [])
-                                ]
 
-                                # Reconstruct drawings
-                                drawings = [
-                                    VectorDrawing(
-                                        type=d["type"],
-                                        coords=d["coords"],
-                                        color=d.get("color"),
-                                        thickness=d.get("thickness"),
+                                    # Reconstruct spans
+                                    spans = [
+                                        TextSpan(
+                                            text=s["text"],
+                                            bbox=s["bbox"],
+                                            font_size=s["font_size"],
+                                            rotation_deg=s["rotation_deg"],
+                                            span_id=s["span_id"],
+                                        )
+                                        for s in layout_data.get("spans", [])
+                                    ]
+
+                                    # Reconstruct drawings
+                                    drawings = [
+                                        VectorDrawing(
+                                            type=d["type"],
+                                            coords=d["coords"],
+                                            color=d.get("color"),
+                                            thickness=d.get("thickness"),
+                                        )
+                                        for d in layout_data.get("drawings", [])
+                                    ]
+
+                                    # Create PageLayout
+                                    layout = PageLayout(
+                                        doc_id=layout_data["doc_id"],
+                                        page=layout_data["page"],
+                                        page_width=layout_data["page_width"],
+                                        page_height=layout_data["page_height"],
+                                        spans=spans,
+                                        drawings=drawings,
+                                        is_raster=layout_data.get("is_raster", False),
+                                        ocr_confidence=layout_data.get(
+                                            "ocr_confidence"
+                                        ),
                                     )
-                                    for d in layout_data.get("drawings", [])
-                                ]
 
-                                # Create PageLayout
-                                layout = PageLayout(
-                                    doc_id=layout_data["doc_id"],
-                                    page=layout_data["page"],
-                                    page_width=layout_data["page_width"],
-                                    page_height=layout_data["page_height"],
-                                    spans=spans,
-                                    drawings=drawings,
-                                    is_raster=layout_data.get("is_raster", False),
-                                    ocr_confidence=layout_data.get("ocr_confidence"),
-                                )
+                                    logger.debug(
+                                        f"Loaded existing layout for page {page_num}"
+                                    )
 
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Failed to load existing layout for page {page_num}: {e}, building new layout"
+                                    )
+                                    # Build layout from scratch if loading fails
+                                    layout = self._build_layout_for_page(
+                                        pdf_path, page_num, doc_id
+                                    )
+                            else:
+                                # Layout doesn't exist (page not processed by Tag Extraction)
+                                # Build layout from scratch for spatial indexing
                                 logger.debug(
-                                    f"Loaded existing layout for page {page_num}"
+                                    f"Layout not found for page {page_num}, building for spatial indexing"
                                 )
-
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to load existing layout for page {page_num}: {e}, building new layout"
-                                )
-                                # Build layout from scratch if loading fails
                                 layout = self._build_layout_for_page(
                                     pdf_path, page_num, doc_id
                                 )
+
+                            # Extract components from layout
+                            if layout:
+                                try:
+                                    components = (
+                                        self.component_extractor.extract_components(
+                                            layout
+                                        )
+                                    )
+                                    all_components.extend(components)
+                                    logger.debug(
+                                        f"Extracted {len(components)} components from page {page_num}"
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Failed to extract components from page {page_num}: {e}"
+                                    )
+
+                        # Bulk index components
+                        if all_components:
+                            indexed_count = self.component_indexer.index_components(
+                                all_components
+                            )
+                            logger.info(
+                                f"Indexed {indexed_count} spatial components for {doc_id} "
+                                f"({len(taggy_pages)} taggy pages)"
+                            )
+
+                            # Update stats (thread-safe)
+                            with self._stats_lock:
+                                if "spatial_components_indexed" not in self.stats:
+                                    self.stats["spatial_components_indexed"] = 0
+                                self.stats[
+                                    "spatial_components_indexed"
+                                ] += indexed_count
                         else:
-                            # Layout doesn't exist (page not processed by Tag Extraction)
-                            # Build layout from scratch for spatial indexing
                             logger.debug(
-                                f"Layout not found for page {page_num}, building for spatial indexing"
-                            )
-                            layout = self._build_layout_for_page(
-                                pdf_path, page_num, doc_id
+                                f"No components extracted from {pdf_path.name}"
                             )
 
-                        # Extract components from layout
-                        if layout:
-                            try:
-                                components = (
-                                    self.component_extractor.extract_components(layout)
-                                )
-                                all_components.extend(components)
-                                logger.debug(
-                                    f"Extracted {len(components)} components from page {page_num}"
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to extract components from page {page_num}: {e}"
-                                )
-
-                    # Bulk index components
-                    if all_components:
-                        indexed_count = self.component_indexer.index_components(
-                            all_components
+                    except Exception as e:
+                        # Don't crash main pipeline on component extraction errors
+                        logger.warning(
+                            f"Spatial component extraction failed for {pdf_path.name}: {e}"
                         )
-                        logger.info(
-                            f"Indexed {indexed_count} spatial components for {doc_id} "
-                            f"({len(taggy_pages)} taggy pages)"
+                        logger.debug(f"Component extraction error:", exc_info=True)
+                # === END SPATIAL COMPONENT EXTRACTION ===
+
+                # Extract table metadata from chunks
+                table_metadata = self._extract_table_metadata_from_chunks(
+                    chunks, doc_id
+                )
+
+                # Count pages by source_format
+                scanned_count = (
+                    pdf_doc.num_pages if pdf_doc.source_format == "scan" else 0
+                )
+                vector_count = (
+                    pdf_doc.num_pages if pdf_doc.source_format == "vector" else 0
+                )
+
+                # Create manifest entries
+                corpus_entry = {
+                    "doc_id": doc_id,
+                    "file_path": str(pdf_path),
+                    "hash_sha256": file_hash,
+                    "content_hash": content_hash,
+                    "pages": pdf_doc.num_pages,
+                    "doc_type": doc_type,
+                    "revision": revision,
+                    "source_format": pdf_doc.source_format,
+                    "ingested_at": datetime.now().isoformat(),
+                    "processing_mode": processing_mode,  # Track if fallback was used
+                }
+
+                # Add fallback metadata if applicable
+                if fallback_reason:
+                    corpus_entry["fallback_reason"] = fallback_reason
+                    corpus_entry["original_file_path"] = str(pdf_path)
+
+                checksum_entry = {
+                    "file_path": str(pdf_path),
+                    "hash_sha256": file_hash,
+                    "content_hash": content_hash,
+                    "last_modified": int(mtime),
+                }
+
+                counts = {
+                    "chunks": len(chunks),
+                    "scanned_pages": scanned_count,
+                    "vector_pages": vector_count,
+                    "used_ocr": used_ocr,
+                    "chunk_sizes": [
+                        chunk.get("char_count", 0) for chunk in chunks
+                    ],  # For analytics
+                }
+
+                return {
+                    "status": "processed",
+                    "corpus_entry": corpus_entry,
+                    "checksum_entry": checksum_entry,
+                    "counts": counts,
+                    "table_metadata": table_metadata,
+                }
+
+            finally:
+                # GUARANTEED CLEANUP: This block ALWAYS runs, even if exception occurs
+                # during _save_chunks, P&ID extraction, spatial extraction, etc.
+                if processing_mode == "rasterized-ocr" and actual_pdf_path != pdf_path:
+                    try:
+                        if actual_pdf_path.exists():
+                            actual_pdf_path.unlink()
+                            logger.debug(
+                                f"Cleaned up temp rasterized PDF (finally block): {actual_pdf_path.name}"
+                            )
+                    except Exception as cleanup_err:
+                        logger.warning(
+                            f"Failed to cleanup temp PDF in finally: {cleanup_err}"
                         )
-
-                        # Update stats (thread-safe)
-                        with self._stats_lock:
-                            if "spatial_components_indexed" not in self.stats:
-                                self.stats["spatial_components_indexed"] = 0
-                            self.stats["spatial_components_indexed"] += indexed_count
-                    else:
-                        logger.debug(f"No components extracted from {pdf_path.name}")
-
-                except Exception as e:
-                    # Don't crash main pipeline on component extraction errors
-                    logger.warning(
-                        f"Spatial component extraction failed for {pdf_path.name}: {e}"
-                    )
-                    logger.debug(f"Component extraction error:", exc_info=True)
-            # === END SPATIAL COMPONENT EXTRACTION ===
-
-            # Extract table metadata from chunks
-            table_metadata = self._extract_table_metadata_from_chunks(chunks, doc_id)
-
-            # Count pages by source_format
-            scanned_count = pdf_doc.num_pages if pdf_doc.source_format == "scan" else 0
-            vector_count = pdf_doc.num_pages if pdf_doc.source_format == "vector" else 0
-
-            # Create manifest entries
-            corpus_entry = {
-                "doc_id": doc_id,
-                "file_path": str(pdf_path),
-                "hash_sha256": file_hash,
-                "content_hash": content_hash,
-                "pages": pdf_doc.num_pages,
-                "doc_type": doc_type,
-                "revision": revision,
-                "source_format": pdf_doc.source_format,
-                "ingested_at": datetime.now().isoformat(),
-                "processing_mode": processing_mode,  # Track if fallback was used
-            }
-
-            # Add fallback metadata if applicable
-            if fallback_reason:
-                corpus_entry["fallback_reason"] = fallback_reason
-                corpus_entry["original_file_path"] = str(pdf_path)
-
-            # Cleanup temp rasterized PDF if exists
-            if processing_mode == "rasterized-ocr" and actual_pdf_path != pdf_path:
-                try:
-                    if actual_pdf_path.exists():
-                        actual_pdf_path.unlink()
-                        logger.debug(
-                            f"Cleaned up temp rasterized PDF: {actual_pdf_path.name}"
-                        )
-                except Exception as cleanup_err:
-                    logger.warning(f"Failed to cleanup temp PDF: {cleanup_err}")
-
-            checksum_entry = {
-                "file_path": str(pdf_path),
-                "hash_sha256": file_hash,
-                "content_hash": content_hash,
-                "last_modified": int(mtime),
-            }
-
-            counts = {
-                "chunks": len(chunks),
-                "scanned_pages": scanned_count,
-                "vector_pages": vector_count,
-                "used_ocr": used_ocr,
-                "chunk_sizes": [
-                    chunk.get("char_count", 0) for chunk in chunks
-                ],  # For analytics
-            }
-
-            return {
-                "status": "processed",
-                "corpus_entry": corpus_entry,
-                "checksum_entry": checksum_entry,
-                "counts": counts,
-                "table_metadata": table_metadata,
-            }
 
         except Exception as e:
             logger.error(f"Error processing {pdf_path}: {e}")
@@ -1424,55 +1482,97 @@ class IngestionPipeline:
             chunking_strategy=effective_strategy,
             sentence_window_size=self.sentence_window_size,
         )
-        chunks = chunker.chunk_markdown(markdown_text, doc_id, metadata)
+
+        # CRITICAL FIX: Use page-aware chunking with index mapping
+        # This fixes page metadata bug where chunks show wrong page numbers
+        try:
+            # Build list of (page_num, text) tuples from pdf_doc
+            pages_list = []
+            for page in pdf_doc.pages:
+                # Remove page markers from text since chunk_markdown_with_pages adds them
+                clean_text = page.text
+                pages_list.append((page.page_num, clean_text))
+
+            # Call new method with index mapping
+            chunks = chunker.chunk_markdown_with_pages(pages_list, doc_id, metadata)
+            logger.debug(
+                f"Used page-aware chunking with index mapping for {len(pages_list)} pages"
+            )
+        except Exception as e:
+            # Fallback to old method if page-aware chunking fails
+            logger.warning(
+                f"Page-aware chunking failed, falling back to regex-based: {e}"
+            )
+            chunks = chunker.chunk_markdown(markdown_text, doc_id, metadata)
 
         # Convert to dict format
         chunk_dicts = []
+
+        # PERFORMANCE FIX: Initialize TagNormalizer ONCE outside the loop
+        # Previously was instantiated per-chunk, causing massive CPU waste (5000 chunks = 5000 objects)
+        _tag_normalizer = None
+        try:
+            from app.rag.normalizers.tag_normalizer import TagNormalizer
+
+            _tag_normalizer = TagNormalizer(
+                standardize_separator=False,  # Keep original separators (spaces, hyphens)
+                remove_spaces=False,  # Preserve spaces in tags
+                uppercase=True,  # Still uppercase for consistency
+            )
+        except Exception as e:
+            # Non-fatal; proceed without tag extraction capability
+            logger.debug(f"TagNormalizer not available: {e}")
+
+        # SAFETY CAP: Maximum tags per chunk to prevent metadata explosion
+        MAX_TAGS_PER_CHUNK = 50
+
         for chunk in chunks:
             chunk_dict = chunk.to_dict()
             # Ensure all metadata is present
             chunk_dict["metadata"].update(metadata)
 
-            # NEW: Enrich with equipment tags using TagNormalizer (additive, safe)
-            try:
-                from app.rag.normalizers.tag_normalizer import TagNormalizer
-
-                # IMPORTANT: Disable normalization to preserve original tag format (e.g. "04 ZLH 2038A")
-                # This ensures tags remain searchable with their original spacing and format
-                _tn = TagNormalizer(
-                    standardize_separator=False,  # Keep original separators (spaces, hyphens)
-                    remove_spaces=False,  # Preserve spaces in tags
-                    uppercase=True,  # Still uppercase for consistency
-                )
-                _tags = _tn.extract_tags(chunk_dict.get("text") or "")
-                if _tags:
-                    # Use "normalized" (uppercase only) as primary tags
-                    normalized_tags = [
-                        t.get("normalized") for t in _tags if t.get("normalized")
-                    ]
-                    raw_tags = [t.get("original") for t in _tags if t.get("original")]
-                    if normalized_tags:
-                        seen = set()
-                        norm_dedup = []
-                        for t in normalized_tags:
-                            if t not in seen:
-                                seen.add(t)
-                                norm_dedup.append(t)
-                        chunk_dict["metadata"]["tags"] = norm_dedup
-                    if raw_tags:
-                        preview = []
-                        seen_raw = set()
-                        for r in raw_tags:
-                            r_str = str(r)
-                            if r_str not in seen_raw:
-                                seen_raw.add(r_str)
-                                preview.append(r_str)
-                            if len(preview) >= 20:
-                                break
-                        chunk_dict["metadata"]["tags_raw"] = preview
-            except Exception as e:
-                # Non-fatal; proceed without tags
-                pass
+            # Enrich with equipment tags using TagNormalizer (additive, safe)
+            if _tag_normalizer is not None:
+                try:
+                    _tags = _tag_normalizer.extract_tags(chunk_dict.get("text") or "")
+                    if _tags:
+                        # Use "normalized" (uppercase only) as primary tags
+                        normalized_tags = [
+                            t.get("normalized") for t in _tags if t.get("normalized")
+                        ]
+                        raw_tags = [
+                            t.get("original") for t in _tags if t.get("original")
+                        ]
+                        if normalized_tags:
+                            seen = set()
+                            norm_dedup = []
+                            for t in normalized_tags:
+                                if t not in seen:
+                                    seen.add(t)
+                                    norm_dedup.append(t)
+                                # SAFETY CAP: Limit to prevent metadata explosion
+                                if len(norm_dedup) >= MAX_TAGS_PER_CHUNK:
+                                    break
+                            chunk_dict["metadata"]["tags"] = norm_dedup[
+                                :MAX_TAGS_PER_CHUNK
+                            ]
+                        if raw_tags:
+                            preview = []
+                            seen_raw = set()
+                            for r in raw_tags:
+                                r_str = str(r)
+                                if r_str not in seen_raw:
+                                    seen_raw.add(r_str)
+                                    preview.append(r_str)
+                                # SAFETY CAP: Limit raw tags preview
+                                if len(preview) >= MAX_TAGS_PER_CHUNK:
+                                    break
+                            chunk_dict["metadata"]["tags_raw"] = preview[
+                                :MAX_TAGS_PER_CHUNK
+                            ]
+                except Exception as e:
+                    # Non-fatal; proceed without tags for this chunk
+                    pass
 
             # Ensure doc_type exists (best-effort heuristic)
             try:

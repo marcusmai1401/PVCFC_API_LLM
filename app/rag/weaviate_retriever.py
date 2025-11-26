@@ -24,8 +24,12 @@ class WeaviateSearchConfig:
     """Configuration for Weaviate search"""
 
     retrieval_limit: int = 100  # Number of results from Weaviate before reranking (increased for better recall)
-    top_k_final: int = 10  # Final number of results after BGE reranking
-    enable_bge_rerank: bool = True  # Enable BGE reranking
+    top_k_final: int = (
+        100  # ⚠️ FIXED: Return full retrieval_limit for Hybrid Fusion (was 10)
+    )
+    enable_bge_rerank: bool = (
+        False  # ⚠️ FIXED: Disable BGE at Weaviate level (Hybrid does it)
+    )
     bge_rerank_level: str = "chunk"  # chunk, doc, or page
     bge_aggregation: str = "max"  # max, mean, or top3_mean
     alpha: float = 0.7  # Hybrid search alpha (0=keyword, 1=semantic)

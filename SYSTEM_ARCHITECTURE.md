@@ -1,8 +1,8 @@
 # SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 1.7.0
-**Last Updated**: 2025-11-21
-**Document**: Complete Pipeline & Architecture (Gemini 3.0 Pro + Retrieval Optimization + Context Expansion + Parent-Child Chunking + 300s Client Timeout)
+**Version**: 1.7.1
+**Last Updated**: 2025-11-24
+**Document**: Complete Pipeline & Architecture (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + Parent-Child Chunking + 300s Client Timeout + 4 Critical Bug Fixes)
 
 ---
 
@@ -151,13 +151,13 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │    ↓                        │   │    ↓                                │
 │ 3. Extract Tables           │   │ 3. Extract Tables                   │
 │    ↓                        │   │    ↓                                │
-│ 4. Parent-Child Chunking    │   │ 4. Parent-Child Chunking            │
-│    (P:1800/200, C:400/50)⭐  │   │    (P:1800/200, C:400/50)⭐          │
+│ 4. Hierarchical Chunking      │   │ 4. Hierarchical Chunking            │
+│    (Structure-based)⭐       │   │    (Structure-based)⭐              │
 │    ↓                        │   │    ↓                                │
 │ 5. Tag extraction (light)   │   │ 5. ⭐ Page Layout Builder           │
 │    from text                │   │    • Bbox + font + rotation         │
 │    ↓                        │   │    • Vector drawings                │
-│ 6. Dedup (file hash only)   │   │    ↓                                │
+│ 6. (v1.7.1) Dedup logic available nhưng **không còn chặn ingest** (file_hash/content_hash chỉ phục vụ báo cáo) │   │    ↓                                │
 │    ↓                        │   │ 6. ⭐ Tag Extractor                 │
 │ OUTPUT:                     │   │    • CODE-anchored assembly         │
 │ • chunks.jsonl              │   │    • Triplets: UNIT-PREFIX-SUFFIX   │
@@ -168,7 +168,7 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │                             │   │    ↓                                │
 │                             │   │ 8. Tag extraction (light) from text │
 │                             │   │    ↓                                │
-│                             │   │ 9. Dedup (file hash only)           │
+│                             │   │ 9. (v1.7.1) Dedup logic available nhưng **không chặn ingest** (file_hash chỉ dùng cho audit/offline) │
 │                             │   │    ↓                                │
 │                             │   │ OUTPUT:                             │
 │                             │   │ • chunks.jsonl (ALSO!)              │
@@ -233,13 +233,13 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 │    │ Weaviate + BM25     │  │   │    ┌──────────┐  ┌──────────────┐  │
 │    │ (rag_chunks only)   │  │   │    │ Branch A │  │  Branch B    │  │
 │    │                     │  │   │    │ Tags     │  │  Chunks      │  │
-│    │ • BM25-heavy (100)  │  │   │    │ Index ⭐ │  │  Index       │  │
-│    │ • Semantic (50)     │  │   │    └────┬─────┘  └──────┬───────┘  │
-│    │ • No tag routing    │  │   │         │               │          │
-│    └─────────┬───────────┘  │   │    OpenSearch                Weaviate+BM25   │
-│              ↓              │   │    pvcfc_pid_spatial_        rag_chunks       │
-│                            │   │    components (Level 2)                       │
-│ 3. RRF Fusion               │   │         │               │          │
+    │    │ • BM25-heavy (100)  │  │   │    │ Index ⭐ │  │  Index       │  │
+    │    │ • Semantic (100)    │  │   │    └────┬─────┘  └──────┬───────┘  │
+    │    │ • No tag routing    │  │   │         │               │          │
+    │    └─────────┬───────────┘  │   │    OpenSearch                Weaviate+BM25   │
+    │              ↓              │   │    pvcfc_pid_spatial_        rag_chunks       │
+    │                            │   │    components (Level 2)                       │
+    │ 3. RRF Fusion               │   │         │               │          │
 │    (Standard weights)       │   │         └───────┬───────┘          │
 │    ↓                        │   │                 ↓                  │
 │ 4. Equipment Boost (×1.5)   │   │ 3. ⭐ Adaptive RRF Fusion           │
@@ -301,11 +301,12 @@ RAW PDF FILES
     • Parent: ~1800 chars (overlap 200) - for LLM context
     • Child: ~400 chars (overlap 50) - for retrieval
     • Child chunks store parent_text directly (no joins)
-    • Keep page metadata
+    • Keep page metadata (v1.7.1 FIX: Page-aware chunking with index mapping, eliminates page 31+ bug)
     ↓
 [3] DEDUPLICATION
-    • Current mode: content-based deduplication is disabled; only exact file duplicates (by file hash) are skipped.
-    • Note: The previous content_hash (SHA1 of normalized content) based dedup logic is retained in code but inactive by default for version coexistence.
+    • Current mode (v1.7.1): cả dedup theo file_hash **và** content-based dedup **đều đang tắt** trong ingestion online; mọi PDF (kể cả bản trùng) đều được xử lý và index.
+    • Dedup logic (`_calculate_content_hash`, `content_hash_map`, `duplicate_groups`) hiện chỉ là hạ tầng cho **quan sát/audit** hoặc batch/offline scripts (ví dụ `scripts/dedupe_chunks.py`); ingestion online mặc định **không ghi** `dedup_report.json` và không dùng chúng để chặn ingest.
+    • (v1.7.1 FIX): TagNormalizer moved outside loop (5000x speedup), recursion limit 50000, GPU singleton with thread locks, resource leak fixed with outer finally block
     ↓
 [4] INDEXING
     ├── Weaviate: Vector embeddings (768D) → Collection "Chunk"
@@ -389,7 +390,7 @@ RAW PDF FILES
           - cadlike_score, tags_found_total, p50/p90, ocr_ratio, warnings
         ↓
 OUTPUT:
-    • chunks.jsonl (deduplicated chunks)
+    • chunks.jsonl (raw chunks, **không dedup ở ingest v1.7.1**)
     • doc_id_map.json (doc_id → pdf_path mapping)
     • Weaviate collection "Chunk" (vectors)
     • OpenSearch index "rag_chunks" (keywords)
@@ -433,10 +434,10 @@ USER QUERY: "What is E04217 max pressure?"
     ↓
 [2] ADAPTIVE HYBRID RETRIEVAL (Parallel)
     ├── Weaviate Search (semantic)
-    │   • Embed query → 768D vector
+    │   • Embed query → 768D vector (Gemini embedding-001)
     │   • near_vector search
     │   • [NEW] Tag filter (if P&ID enabled + tags detected)
-    │   • Top 50 results
+    │   • Top 100 results (v1.7.0 - WEAVIATE_RETRIEVAL_LIMIT=100)
     │   • Weight: varies by query type (0.3-1.0)
     │
     └── OpenSearch BM25 (keyword)
@@ -446,7 +447,7 @@ USER QUERY: "What is E04217 max pressure?"
           - Metadata exact: × 10.0
           - Text phrase: × 5.0
           - Fuzzy match: × 2.0-3.0
-        • Top 50 results
+        • Top 200 results (v1.7.1 - OPENSEARCH_RETRIEVAL_LIMIT=200, deep code search + header filtering)
         • Weight: varies by query type (0.3-1.0)
     ↓
 [3] ADAPTIVE RRF FUSION (NEW: Query-type aware)
@@ -463,11 +464,23 @@ USER QUERY: "What is E04217 max pressure?"
     • Boost tag-parameter proximity (<100 chars): × 3.0
     • Parameters: pressure, temperature, flow, bar, psi, °C, etc.
     ↓
+[3.6] EXACT MATCH GUARDRAILS (v1.7.1 - Safety Quota) 🛡️
+    • Detect special codes in query (equipment codes, drawing codes)
+    • Extract ALL exact matches from fused results
+    • Sort by original RRF/BM25 score (quality-first)
+    • Truncate to Top 20 exact matches
+    • Boost top 20 to score 1.0 → Place at top of results
+    • Recycle dropped matches (21+) to semantic pool for BGE
+    • Reserve BGE slots: top_k - len(exact_matches)
+    • Example: top_k=50, 20 exact → BGE gets 30 slots
+    • Prevents header/footer flooding, guarantees semantic diversity
+    ↓
 [4] BGE RERANKING (Optional - Currently ENABLED)
     • BAAI/bge-reranker-base CrossEncoder
-    • Score each (query, doc) pair
+    • Score each (query, doc) pair on remaining candidates (after exact match extraction)
     • Re-sort by semantic relevance
-    • Top-k selection (k=10 default)
+    • Top-k selection: BGE_RERANK_TOP_K=50 (v1.7.0)
+    • Final context: MAX_CONTEXT=50 chunks sent to LLM (v1.7.0+)
     ↓
 [4.5] CACHE UPDATE
     • Store results in cache for future identical queries
@@ -479,13 +492,17 @@ USER QUERY: "What is E04217 max pressure?"
     │
     ├── Vision Generation (if applicable)
     │   • Render PDF pages to JPEG (DPI=200)
-    │   • Send to Gemini 2.5 Pro (multimodal)
+    │   • Max pages: VISION_MAX_PAGES_TOTAL=30 (v1.7.0)
+    │   • Send to Gemini 3.0 Pro Preview (models/gemini-3-pro-preview - bleeding edge)
     │   • Extract answer + citations
+    │   • Timeout: 300s (Streamlit client supports long Vision processing)
     │
     └── Text Generation
-        • Context = concatenated chunks
+        • Context = concatenated chunks (up to 50)
         • Model selection by tier:
-          - Production mode (default): Gemini 2.5 Pro
+          - Heavy (default production): Gemini 3.0 Pro Preview (models/gemini-3-pro-preview)
+          - Light (dev/test): Gemini 2.5 Flash (models/gemini-2.5-flash)
+        • Max output tokens: 8192 (LLM_MAX_OUTPUT_TOKENS)
           - Light mode: Gemini 2.5 Flash
         • Extract answer + citations
     ↓
@@ -682,48 +699,42 @@ content_hash = hashlib.sha1(normalized.encode()).hexdigest()
 
 ## 4. PHASE 2: INDEXING & STORAGE
 
-### 4.1 Chunking Strategy (PARENT-CHILD HIERARCHICAL - PHASE 3) ⭐
+### 4.1 Chunking Strategy (HIERARCHICAL - PHASE 3) ⭐
 
 ```python
-# Phase 3: Parent-Child Hierarchical Chunking
-# Solves context fragmentation problem
-from app.ingestion.text_chunker import ParentChildChunker
+# Phase 3: Structure-based Hierarchical Chunking
+# Preserves document structure and context
+from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 
-chunker = ParentChildChunker(
-    parent_chunk_size=1800,   # Large semantic blocks for LLM context
-    parent_overlap=200,       # Overlap between parent chunks
-    child_chunk_size=400,     # Small dense blocks for retrieval
-    child_overlap=50,         # Overlap between child chunks
-    min_chunk_size=100        # Minimum viable chunk size
+chunker = HierarchicalChunker(
+    chunking_strategy="hierarchical"  # Structure-based
 )
 
-# Parent-Child process:
-# 1. Create parent chunks from full text (~1800 chars each)
-# 2. For each parent, create N child chunks (~400 chars each)
-# 3. Store parent_text directly in child metadata (Option A - no joins)
-# 4. Index ONLY child chunks (parents not indexed separately)
-# 5. Retrieval: Search child chunks (precision)
-# 6. Generation: Use parent text from child.metadata (completeness)
+# Hierarchical process:
+# 1. Parse Markdown structure (Headings #, ##)
+# 2. Create Parent Chunks from Headings (Context)
+# 3. Create Child Chunks from Section Content (Retrieval)
+# 4. Link Child to Parent via parent_id
+# 5. Page-Awareness: Use character-index mapping for precise page numbers
 
-child_chunks = chunker.chunk_text(
-    text=full_document_text,
+chunks = chunker.chunk_markdown_with_pages(
+    pages=[(1, "text...")],
     doc_id=doc_id,
-    metadata={"doc_type": "manual", "page": 1}
+    metadata={"doc_type": "manual"}
 )
 
 # Each child chunk has:
-# - text: child text (~400 chars) - INDEXED for retrieval
-# - metadata.parent_text: parent text (~1800 chars) - FOR LLM context
-# - metadata.parent_id: parent chunk identifier
+# - text: content text - INDEXED for retrieval
+# - parent_id: ID of the heading chunk (context)
 # - metadata.chunk_type: "child"
-# - metadata.is_parent: False
-# - metadata.parent_index: position of parent in document
-# - metadata.parent_char_count: length of parent text
+# - metadata.page: precise page number from index map
 ```
 
-> **Phase 3 Chunking Note**: System now uses **Parent-Child Hierarchical Chunking** (not simple semantic chunking). This solves context fragmentation by retrieving via small precise child chunks but sending complete parent context to LLM. Parent text is stored directly in child metadata for fast access (no database joins).
+> **Phase 3 Chunking Note**: System uses **Hierarchical Chunking** based on document structure (Headings -> Content). This ensures that retrieved chunks (children) always have a semantic link to their section header (parent), providing better context for the LLM than simple size-based splitting. It also implements **precise page mapping** to fix citation errors.
 
 ### 4.2 Deduplication
+
+> **Important (v1.7.1)**: Bước này minh hoạ **dedup offline** dựa trên `content_hash`. Ingestion online hiện **không chạy** bước dedup; tất cả chunks được ghi thẳng vào `chunks.jsonl`. Nếu cần dedup, hãy chạy batch/scripts riêng sử dụng logic tương tự.
 
 ```python
 # Group by content_hash
