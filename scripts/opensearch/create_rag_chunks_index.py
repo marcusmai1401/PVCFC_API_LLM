@@ -104,6 +104,22 @@ INDEX_BODY = {
             "equipment_id": {"type": "keyword"},
             "language": {"type": "keyword"},
             "year": {"type": "integer"},
+            # Classification metadata (v2.0 - Intelligent Auto-Classification)
+            "category": {
+                "type": "keyword",
+                "doc_values": True,
+            },
+            "classification_status": {
+                "type": "keyword",  # classified | needs_review | pending
+                "doc_values": True,
+            },
+            "classification_confidence": {
+                "type": "float",
+            },
+            "classification_method": {
+                "type": "keyword",  # cadlike_gate | ai_classifier | manual
+                "doc_values": True,
+            },
         }
     },
 }

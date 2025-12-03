@@ -24,16 +24,22 @@ st.set_page_config(
 # Import Components
 try:
     from streamlit_app.components.chat_interface_modern import render_chat_interface
+    from streamlit_app.components.classification_browser import render as render_classification_browser
+    from streamlit_app.components.deep_search import render as render_deep_search
     from streamlit_app.components.doc_browser import render_doc_browser
     from streamlit_app.components.home import render_home
     from streamlit_app.components.pdf_viewer_embedded import render_embedded_pdf_viewer
+    from streamlit_app.components.pdf_viewer_modal import render_pdf_viewer_modal
     from streamlit_app.components.split_layout import render_split_view
 except ImportError:
     # Fallback for direct running
     from components.chat_interface_modern import render_chat_interface
+    from components.classification_browser import render as render_classification_browser
+    from components.deep_search import render as render_deep_search
     from components.doc_browser import render_doc_browser
     from components.home import render_home
     from components.pdf_viewer_embedded import render_embedded_pdf_viewer
+    from components.pdf_viewer_modal import render_pdf_viewer_modal
     from components.split_layout import render_split_view
 
 
@@ -82,7 +88,9 @@ def render_sidebar():
         nav_items = [
             {"id": "home", "icon": "🏠", "label": "Overview"},
             {"id": "chat", "icon": "💬", "label": "AI Assistant"},
+            {"id": "deep_search", "icon": "🔍", "label": "Deep Search"},
             {"id": "documents", "icon": "📂", "label": "Repository"},
+            {"id": "explorer", "icon": "🗂️", "label": "Document Explorer"},
         ]
 
         for item in nav_items:
@@ -149,14 +157,29 @@ def main():
     def content_docs():
         render_doc_browser()
 
+    def content_explorer():
+        render_classification_browser()
+
+    def content_deep_search():
+        render_deep_search()
+
     # Route
     if page == "home":
         # Home always full width
         content_home()
     elif page == "chat":
         render_split_view(content_chat, render_embedded_pdf_viewer)
+    elif page == "deep_search":
+        # Deep Search with PDF viewer integration
+        render_split_view(content_deep_search, render_embedded_pdf_viewer)
     elif page == "documents":
         render_split_view(content_docs, render_embedded_pdf_viewer)
+    elif page == "explorer":
+        # Document Explorer with 4-category taxonomy
+        render_split_view(content_explorer, render_embedded_pdf_viewer)
+    
+    # Render PDF modal if open (for document preview)
+    render_pdf_viewer_modal()
 
 
 if __name__ == "__main__":

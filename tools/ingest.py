@@ -79,6 +79,19 @@ from app.ingestion.cadlike_gate import get_cadlike_gate
 # NOTE: PaddleOCR is deprecated in favor of Google Cloud Vision API
 # from app.ingestion.paddle_ocr_config import get_ocr_status
 from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
+
+# Classification Pipeline for 4-category taxonomy (v2.0)
+try:
+    from app.classification.pipeline import (
+        ClassificationPipeline,
+        get_classification_pipeline,
+        PipelineResult,
+    )
+    from app.classification.classifier import ClassificationResult
+    CLASSIFICATION_AVAILABLE = True
+except ImportError:
+    CLASSIFICATION_AVAILABLE = False
+    logger.warning("Classification pipeline not available")
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 from app.storage.manifest_writer import ManifestWriter
 from app.storage.version_manager import VersionManager
@@ -123,6 +136,7 @@ class IngestionPipeline:
         version_description: str = "",
         version_tags: Optional[List[str]] = None,
         enable_pid_tags: bool = False,
+        enable_classification: bool = True,  # NEW: Enable 4-category classification
     ):
         """
         Initialize ingestion pipeline
@@ -182,8 +196,24 @@ class IngestionPipeline:
         # P&ID tag extraction settings
         self.enable_pid_tags = enable_pid_tags and PID_TAGS_AVAILABLE
 
+        # Classification settings (4-category taxonomy)
+        self.enable_classification = enable_classification and CLASSIFICATION_AVAILABLE
+
         # Initialize CADLikeGate for document classification
         self._cadlike_gate = get_cadlike_gate()
+        
+        # Initialize Classification Pipeline (if enabled)
+        self._classification_pipeline = None
+        if self.enable_classification:
+            try:
+                self._classification_pipeline = get_classification_pipeline(
+                    use_cadlike_gate=True,
+                    cad_score_threshold=0.55
+                )
+                logger.info("✅ Classification pipeline enabled (4-category taxonomy)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize classification pipeline: {e}")
+                self.enable_classification = False
 
         # Initialize P&ID tag extraction orchestrator (if enabled)
         self.tag_orchestrator = None
@@ -247,6 +277,10 @@ class IngestionPipeline:
             "total_chunks": 0,
             "pid_docs_processed": 0,  # P&ID documents processed
             "pid_tags_extracted": 0,  # Total P&ID tags extracted
+            # Classification stats (4-category taxonomy)
+            "classification_count": 0,  # Documents classified
+            "classification_guardrail_triggered": 0,  # P&ID guardrail triggers
+            "classification_needs_review": 0,  # Low confidence classifications
             "start_time": None,
             "end_time": None,
         }
@@ -325,6 +359,7 @@ class IngestionPipeline:
         )
         logger.info(f"Parser: {self.parser}")
         logger.info(f"Chunk strategy: {self.chunk_strategy}")
+        logger.info(f"Classification: {self.enable_classification} (4-category taxonomy)")
         logger.info(f"Run ID: {self.run_id}")
         logger.info("=" * 80)
 
@@ -455,6 +490,12 @@ class IngestionPipeline:
         if self.enable_pid_tags:
             logger.info(f"P&ID documents processed: {self.stats['pid_docs_processed']}")
             logger.info(f"P&ID tags extracted: {self.stats['pid_tags_extracted']}")
+        
+        # Classification stats (4-category taxonomy)
+        if self.enable_classification:
+            logger.info(f"Documents classified: {self.stats['classification_count']}")
+            logger.info(f"P&ID guardrail triggered: {self.stats['classification_guardrail_triggered']}")
+            logger.info(f"Needs review: {self.stats['classification_needs_review']}")
 
         # Chunk size analytics
         if "chunk_sizes" in self.stats and self.stats["chunk_sizes"]:
@@ -770,8 +811,14 @@ class IngestionPipeline:
                 # Generate doc_id
                 doc_id = self._generate_doc_id(pdf_path, pdf_doc)
 
-                # Detect document type and revision
+                # Detect document type and revision (CAD-like vs non-CAD-like)
                 doc_type, revision = self._classify_document(pdf_path, pdf_doc)
+                
+                # === 4-CATEGORY CLASSIFICATION (v2.0) ===
+                # Run classification pipeline for taxonomy-based classification
+                classification_result = None
+                if self.enable_classification and self._classification_pipeline:
+                    classification_result = self._run_classification(pdf_path, doc_id)
 
                 # Save processed document
                 self._save_processed_document(pdf_doc, doc_id)
@@ -779,7 +826,7 @@ class IngestionPipeline:
                 # Convert to markdown
                 markdown_text = self._convert_to_markdown(pdf_doc, doc_id)
 
-                # Create chunks
+                # Create chunks (with classification metadata)
                 chunks = self._create_chunks(
                     pdf_doc,
                     markdown_text,
@@ -787,6 +834,7 @@ class IngestionPipeline:
                     doc_type,
                     revision,
                     self.chunk_strategy,
+                    classification_result,
                 )
 
             except RecursionError as e:
@@ -870,8 +918,15 @@ class IngestionPipeline:
                     # Generate doc_id
                     doc_id = self._generate_doc_id(pdf_path, pdf_doc)
 
-                    # Detect document type and revision
+                    # Detect document type and revision (CAD-like vs non-CAD-like)
                     doc_type, revision = self._classify_document(pdf_path, pdf_doc)
+                    
+                    # === 4-CATEGORY CLASSIFICATION (v2.0) ===
+                    # Run classification pipeline for taxonomy-based classification
+                    # Note: Use original pdf_path for classification, not rasterized
+                    classification_result = None
+                    if self.enable_classification and self._classification_pipeline:
+                        classification_result = self._run_classification(pdf_path, doc_id)
 
                     # Save processed document
                     self._save_processed_document(pdf_doc, doc_id)
@@ -891,6 +946,7 @@ class IngestionPipeline:
                             doc_type,
                             revision,
                             self.chunk_strategy,
+                            classification_result,
                         )
                     except RecursionError:
                         # Priority 2: FINAL SAFETY NET - Downgrade to flat chunking
@@ -907,6 +963,7 @@ class IngestionPipeline:
                             doc_type,
                             revision,
                             "sentence-window",
+                            classification_result,
                         )
                     # ---------------------------------------------------------------
 
@@ -1218,6 +1275,14 @@ class IngestionPipeline:
                 if fallback_reason:
                     corpus_entry["fallback_reason"] = fallback_reason
                     corpus_entry["original_file_path"] = str(pdf_path)
+                
+                # Add classification metadata (4-category taxonomy)
+                if classification_result:
+                    corpus_entry["category"] = classification_result.get("category")
+                    corpus_entry["classification_doc_type"] = classification_result.get("doc_type")
+                    corpus_entry["classification_status"] = classification_result.get("status")
+                    corpus_entry["classification_confidence"] = classification_result.get("confidence")
+                    corpus_entry["classification_method"] = classification_result.get("method")
 
                 checksum_entry = {
                     "file_path": str(pdf_path),
@@ -1340,6 +1405,92 @@ class IngestionPipeline:
 
         return None
 
+    def _run_classification(
+        self, pdf_path: Path, doc_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run 4-category classification pipeline on a PDF document.
+        
+        This method integrates the ClassificationPipeline to classify documents
+        into the 4-category taxonomy (ENGINEERING_DESIGN, VENDOR_EQUIPMENT,
+        OPERATIONS_MAINTENANCE, SAFETY_MANAGEMENT, or UNCATEGORIZED).
+        
+        Args:
+            pdf_path: Path to PDF file
+            doc_id: Document ID for logging
+            
+        Returns:
+            Classification result dict with keys:
+            - category: Category name (e.g., "ENGINEERING_DESIGN")
+            - doc_type: Document type within category (e.g., "P&ID")
+            - confidence: Confidence score (0.0-1.0)
+            - status: Classification status ("classified" or "needs_review")
+            - method: Classification method ("cadlike_gate" or "ai_classifier")
+            
+            Returns None if classification fails or is disabled.
+        """
+        if not self.enable_classification or not self._classification_pipeline:
+            return None
+        
+        try:
+            logger.debug(f"Running 4-category classification for {pdf_path.name}")
+            
+            # Run classification pipeline
+            pipeline_result = self._classification_pipeline.classify_document(
+                pdf_path=pdf_path,
+                doc_metadata={"doc_id": doc_id}
+            )
+            
+            # Extract classification result
+            classification = pipeline_result.classification
+            
+            # Log classification decision
+            if pipeline_result.guardrail_triggered:
+                logger.info(
+                    f"📋 Classification (guardrail): {pdf_path.name} -> "
+                    f"{classification.category}/{classification.doc_type} "
+                    f"(CAD_score={pipeline_result.cad_score:.3f})"
+                )
+                with self._stats_lock:
+                    self.stats["classification_guardrail_triggered"] += 1
+            else:
+                logger.info(
+                    f"📋 Classification (AI): {pdf_path.name} -> "
+                    f"{classification.category}/{classification.doc_type} "
+                    f"(confidence={classification.confidence:.2f})"
+                )
+            
+            # Track needs_review status
+            if classification.status == "needs_review":
+                logger.warning(
+                    f"⚠️ Classification needs review: {pdf_path.name} "
+                    f"(confidence={classification.confidence:.2f})"
+                )
+                with self._stats_lock:
+                    self.stats["classification_needs_review"] += 1
+            
+            # Update classification count
+            with self._stats_lock:
+                self.stats["classification_count"] += 1
+            
+            # Return as dict for metadata storage
+            return classification.to_dict()
+            
+        except Exception as e:
+            logger.error(f"Classification failed for {pdf_path.name}: {e}")
+            logger.debug(f"Classification error details:", exc_info=True)
+            
+            # Return fallback result for failed classification
+            return {
+                "category": "UNCATEGORIZED",
+                "doc_type": "Unknown",
+                "confidence": 0.0,
+                "status": "needs_review",
+                "dominant_content": "unknown",
+                "reasoning": f"Classification error: {str(e)}",
+                "method": "error"
+            }
+
     def _save_processed_document(self, pdf_doc: PDFDocument, doc_id: str):
         """Save processed document as JSON"""
         output_file = self.output_dir / "documents" / f"{doc_id}_processed.json"
@@ -1452,11 +1603,13 @@ class IngestionPipeline:
         doc_type: str,
         revision: Optional[str],
         chunk_strategy_override: Optional[str] = None,
+        classification_result: Optional[Dict] = None,
     ) -> List[Dict]:
         """Create chunks from document
 
         Args:
             chunk_strategy_override: Override chunking strategy (for fallback modes)
+            classification_result: Classification result dict with category, doc_type, confidence, status
         """
         # Prepare metadata
         metadata = {
@@ -1467,6 +1620,14 @@ class IngestionPipeline:
             "title": pdf_doc.title,
             "author": pdf_doc.author,
         }
+        
+        # Add classification metadata (4-category taxonomy)
+        if classification_result:
+            metadata["category"] = classification_result.get("category")
+            metadata["classification_doc_type"] = classification_result.get("doc_type")
+            metadata["classification_status"] = classification_result.get("status")
+            metadata["classification_confidence"] = classification_result.get("confidence")
+            metadata["classification_method"] = classification_result.get("method")
 
         # Remove None values
         metadata = {k: v for k, v in metadata.items() if v is not None}
@@ -2048,6 +2209,20 @@ def main():
     )
 
     parser.add_argument(
+        "--enable-classification",
+        action="store_true",
+        default=True,
+        help="Enable 4-category document classification (default: True)",
+    )
+
+    parser.add_argument(
+        "--no-classification",
+        action="store_false",
+        dest="enable_classification",
+        help="Disable 4-category document classification",
+    )
+
+    parser.add_argument(
         "--profile",
         type=str,
         choices=["full", "fast", "minimal"],
@@ -2153,6 +2328,7 @@ def main():
         version_description=args.version_description,
         version_tags=args.version_tags,
         enable_pid_tags=args.enable_pid_tags,
+        enable_classification=args.enable_classification,
     )
 
     stats = pipeline.run()

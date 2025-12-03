@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.api.endpoints import pdf_renderer
 from app.api.routers import ask, config, health, locate, report, tags
+from app.api.routers import search, classification
 from app.core.config import settings
 from app.core.logging import LoggingMiddleware, setup_logging
 from app.core.metrics import get_metrics, get_metrics_content_type
@@ -337,6 +338,10 @@ def create_app() -> FastAPI:
 
     # PDF rendering endpoints
     app.include_router(pdf_renderer.router, tags=["PDF"])
+
+    # Deep Search and Classification endpoints (v2.0)
+    app.include_router(search.router, tags=["Deep Search"])
+    app.include_router(classification.router, tags=["Classification"])
 
     # Metrics endpoint (Prometheus format)
     @app.get("/metrics", tags=["Monitoring"], response_class=PlainTextResponse)

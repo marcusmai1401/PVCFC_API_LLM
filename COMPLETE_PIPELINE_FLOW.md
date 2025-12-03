@@ -1,8 +1,8 @@
 # Complete Pipeline Flow - From Raw Data to User Query
 
 **PVCFC RAG System - End-to-End Data Flow**
-**Date:** 2025-11-24
-**Version:** 1.7.1 (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + HierarchicalChunker + 4 Critical Bug Fixes)
+**Date:** 2025-12-04
+**Version:** 2.0.0 (Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + HierarchicalChunker)
 
 ---
 
@@ -30,7 +30,7 @@
 ┌─────────────────────────────────────────────────────────┐
 │             INGESTION PIPELINE                          │
 │  - OCR (Google Vision + Real-ESRGAN)                   │
-│  - Document Classification                              │
+│  - Intelligent Classification (v2.0)                    │
 │  - Chunking                                             │
 │  - Tag Extraction (P&ID only)                          │
 │  - Component Extraction (Level 2)                       │
@@ -40,27 +40,59 @@
 ┌──────────────────────────────────────────────────────────┐
 │             INDEXED DATA (3 SYSTEMS)                     │
 │  1. Weaviate: Vector embeddings (semantic search)       │
-│  2. OpenSearch rag_chunks: BM25 keyword search           │
+│  2. OpenSearch rag_chunks: BM25 + category/doc_type     │
 │  3. OpenSearch spatial_components: Geometric proximity   │
 └────────┬─────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────┐
-│   USER QUERY    │  UI: Chọn "P&ID" hoặc "Technical Doc"
+│   USER QUERY    │  UI: RAG Search / Deep Search / Document Explorer
 └────────┬────────┘
          │
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│             QUERY PROCESSING                            │
-│  Route based on query_type:                             │
-│  - P&ID: Spatial search + Chunks → RRF Fusion          │
-│  - Technical: BM25 + Vector → RRF Fusion                │
-└────────┬────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│   ANSWER        │  Generated with citations, page refs
-└─────────────────┘
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌────────┐  ┌─────────────────────────────────────────────┐
+│ RAG    │  │ DEEP DISCOVERY SEARCH (v2.0)                │
+│ Search │  │ - Keyword-based (no LLM/vector)             │
+│        │  │ - Returns ALL documents (up to 10,000)      │
+│        │  │ - Filter by category/doc_type               │
+└────┬───┘  └────────────────┬────────────────────────────┘
+     │                       │
+     ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐
+│   ANSWER        │    │   DOCUMENT LIST │
+│   + Citations   │    │   by Category   │
+└─────────────────┘    └─────────────────┘
+```
+
+### NEW v2.0: Intelligent Classification Flow
+
+```
+PDF Upload
+    │
+    ▼
+┌─────────────────────────┐
+│  Adaptive Page Sampler  │  ← Head-Body-Tail (10 pages max)
+└─────────────────────────┘
+    │
+    ▼
+┌─────────────────────────┐
+│    CADLikeGate Check    │  ← P&ID Guardrail
+└─────────────────────────┘
+    │
+    ├── score >= 0.55 ──► ENGINEERING_DESIGN / P&ID
+    │
+    └── score < 0.55
+            │
+            ▼
+    ┌─────────────────────────┐
+    │  Gemini 2.5 Flash AI    │  ← Multimodal Classification
+    └─────────────────────────┘
+            │
+            ├── confidence >= 0.5 ──► Assigned Category/DocType
+            │
+            └── confidence < 0.5 ──► UNCATEGORIZED + NEEDS_REVIEW
 ```
 
 ---

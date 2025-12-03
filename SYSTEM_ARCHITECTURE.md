@@ -1,8 +1,8 @@
 # SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 1.7.1
-**Last Updated**: 2025-11-24
-**Document**: Complete Pipeline & Architecture (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + HierarchicalChunker + 300s Client Timeout + 4 Critical Bug Fixes)
+**Version**: 2.0.0
+**Last Updated**: 2025-12-04
+**Document**: Complete Pipeline & Architecture (Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + HierarchicalChunker + 300s Client Timeout)
 
 ---
 
@@ -19,9 +19,23 @@
 9. [Phase 6: Answer Generation](#9-phase-6-answer-generation)
 10. [Phase 7: Response Building](#10-phase-7-response-building)
 11. [Phase 8: Multi-turn Conversation Management](#11-phase-8-multi-turn-conversation-management-new)
-12. [Components Deep Dive](#12-components-deep-dive)
-13. [Error Handling & Resilience](#13-error-handling--resilience)
-14. [Performance & Optimization](#14-performance--optimization)
+12. [Phase 9: Deep Discovery Search (NEW v2.0)](#12-phase-9-deep-discovery-search-new-v20)
+13. [Phase 10: Intelligent Classification (NEW v2.0)](#13-phase-10-intelligent-classification-new-v20)
+14. [Components Deep Dive](#14-components-deep-dive)
+15. [Error Handling & Resilience](#15-error-handling--resilience)
+16. [Performance & Optimization](#16-performance--optimization)
+
+---
+
+## 📁 DATA DIRECTORIES (QUAN TRỌNG)
+
+| Directory | Path | Purpose |
+|-----------|------|---------|
+| **Raw PDF Source** | `D:\Data_Raw` | Thư mục chứa các file PDF gốc để ingestion |
+| **Artifacts** | `D:\PVCFC_Artifacts` | Output của ingestion (chunks, tags, crops, logs) |
+| **Index Production** | `D:\PVCFC_Artifacts\index_production` | Weaviate + OpenSearch index data |
+
+> **Note**: Các script như `batch_reclassify.py`, `ingest.py` mặc định sử dụng `D:\Data_Raw` làm source directory.
 
 ---
 
@@ -35,6 +49,8 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 - ✅ **Production-ready**: Weaviate + OpenSearch, defensive programming
 - ✅ **Scalable**: Xử lý hàng nghìn tài liệu, hỗ trợ mở rộng
 - ✅ **Dual Pipeline**: Tự động phân loại và xử lý P&ID vs Technical Doc
+- ✅ **Deep Discovery Search (v2.0)**: Tìm TẤT CẢ documents chứa keyword - không giới hạn top_k
+- ✅ **Intelligent Classification (v2.0)**: Tự động phân loại tài liệu vào 4-category taxonomy
 
 ### 1.0 Dual Pipeline Architecture (⭐ QUAN TRỌNG)
 
@@ -107,6 +123,8 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 | **Embedding** | Gemini Embedding 001 (768D) | Text vectorization |
 || **Reranker** | BGE CrossEncoder (ENABLED) | Result reranking |
 | **OCR** | Google Cloud Vision API + Real-ESRGAN (2x upscaling) | Scanned PDF processing with enhanced image quality |
+| **Classification** | Gemini 2.5 Flash + CADLikeGate | Document auto-classification (v2.0) |
+| **Deep Search** | OpenSearch Aggregation | Exhaustive keyword search (v2.0) |
 | **UI** | Streamlit (300s timeout) | Testing & debugging |
 | **Monitoring** | Loguru + Metrics | Logging & observability |
 
@@ -3115,3 +3133,166 @@ async def list_all_tags(
 - [scripts/utilities/migrate_artifacts_to_d_drive.ps1](scripts/utilities/migrate_artifacts_to_d_drive.ps1) - Artifacts migration script
 - [scripts/utilities/README_ARTIFACTS_MIGRATION.md](scripts/utilities/README_ARTIFACTS_MIGRATION.md) - Migration guide
 - [ARTIFACTS_CLEANUP_RECOMMENDATIONS.md](ARTIFACTS_CLEANUP_RECOMMENDATIONS.md) - Cleanup guide
+
+
+---
+
+## 12. PHASE 9: DEEP DISCOVERY SEARCH (NEW v2.0)
+
+### 12.1 Tổng quan
+
+Deep Discovery Search là tính năng tìm kiếm keyword toàn diện, khác với RAG search:
+
+| Đặc điểm | RAG Search | Deep Discovery Search |
+|----------|------------|----------------------|
+| Phương pháp | Vector similarity + BM25 | Keyword match only |
+| Giới hạn kết quả | top_k (10-50) | Tất cả documents (max 10,000) |
+| Sử dụng LLM | Có | Không |
+| Mục đích | Trả lời câu hỏi | Tìm tất cả tài liệu chứa keyword |
+
+### 12.2 API Endpoint
+
+```
+GET /api/search/documents
+```
+
+**Parameters:**
+- `keyword` (required): Từ khóa tìm kiếm (1-200 ký tự)
+- `category` (optional): Lọc theo category
+- `doc_type` (optional): Lọc theo loại tài liệu
+- `max_results` (optional): Số lượng tối đa (default: 1000, max: 10000)
+
+### 12.3 OpenSearch Query Structure
+
+```json
+{
+  "size": 0,
+  "query": {
+    "bool": {
+      "must": [{"match": {"text": {"query": "KT06101", "operator": "and"}}}],
+      "filter": [{"term": {"category": "VENDOR_EQUIPMENT"}}]
+    }
+  },
+  "aggs": {
+    "unique_documents": {
+      "terms": {"field": "doc_id", "size": 10000},
+      "aggs": {
+        "doc_info": {"top_hits": {"size": 1, "_source": ["doc_id", "file_name", "category", "doc_type", "page", "text"]}},
+        "occurrence_count": {"value_count": {"field": "_id"}}
+      }
+    }
+  }
+}
+```
+
+### 12.4 Files
+
+- `app/services/deep_search.py` - DeepSearchService implementation
+- `app/api/routers/search.py` - API endpoint (prefix: `/api/search`)
+
+---
+
+## 13. PHASE 10: INTELLIGENT CLASSIFICATION (NEW v2.0)
+
+### 13.1 Document Taxonomy (4-Category System)
+
+```
+├── ENGINEERING_DESIGN
+│   ├── P&ID
+│   ├── Drawing
+│   └── Technical Data
+│
+├── VENDOR_EQUIPMENT
+│   ├── Datasheet
+│   ├── Material Partlist
+│   └── Vendor Manual
+│
+├── OPERATIONS_MAINTENANCE
+│   ├── Operation Instruction
+│   ├── Maintenance Instruction
+│   ├── Maintenance History
+│   └── Inventory
+│
+├── SAFETY_MANAGEMENT
+│   ├── MOC
+│   ├── RCA
+│   └── Pictures
+│
+└── UNCATEGORIZED
+    └── Unknown
+```
+
+### 13.2 Classification Pipeline
+
+```
+PDF Upload
+    │
+    ▼
+┌─────────────────────────┐
+│  Adaptive Page Sampler  │  ← Lấy mẫu 10 trang (Head-Body-Tail)
+└─────────────────────────┘
+    │
+    ▼
+┌─────────────────────────┐
+│    CADLikeGate Check    │  ← Guardrail cho P&ID
+└─────────────────────────┘
+    │
+    ├── CAD_score >= 0.55 ──► Force P&ID Classification
+    │
+    └── CAD_score < 0.55
+            │
+            ▼
+    ┌─────────────────────────┐
+    │  Gemini 2.5 Flash AI    │  ← Multimodal classification
+    └─────────────────────────┘
+            │
+            ├── confidence >= 0.5 ──► Store Classification
+            │
+            └── confidence < 0.5 ──► UNCATEGORIZED + NEEDS_REVIEW
+```
+
+### 13.3 Adaptive Page Sampling
+
+| Số trang PDF | Strategy | Pages sampled |
+|--------------|----------|---------------|
+| ≤ 10 pages | All | Tất cả trang |
+| > 10 pages | Head-Body-Tail | 10 trang |
+
+**Head-Body-Tail Strategy:**
+- **Head (3 pages)**: Trang 1, 2, 3 - Cover, TOC
+- **Body (5 pages)**: 5 trang phân bố đều ở giữa
+- **Tail (2 pages)**: Trang N-1, N - Appendix, signatures
+
+### 13.4 Metadata Schema
+
+**OpenSearch rag_chunks Index:**
+- `category` (keyword): ENGINEERING_DESIGN, VENDOR_EQUIPMENT, etc.
+- `doc_type` (keyword): P&ID, Datasheet, Vendor Manual, etc.
+- `classification_status` (keyword): classified, needs_review, pending
+- `classification_confidence` (float): 0.0 - 1.0
+- `classification_method` (keyword): cadlike_gate, ai_classifier, manual
+
+### 13.5 Batch Re-classification
+
+**Script:** `scripts/utilities/batch_reclassify.py`
+
+```powershell
+python scripts/utilities/batch_reclassify.py
+```
+
+**Results (77 documents):**
+- P&ID via CADLikeGate: 39 documents
+- AI Classified: 38 documents
+- Failures: 0
+- Chunks updated: 6,470
+
+### 13.6 Files
+
+- `app/classification/taxonomy.py` - DocumentTaxonomy class
+- `app/classification/sampler.py` - AdaptivePageSampler
+- `app/classification/classifier.py` - DocumentClassifier (Gemini AI)
+- `app/classification/pipeline.py` - ClassificationPipeline
+- `app/api/routers/classification.py` - Classification API endpoints
+- `scripts/utilities/batch_reclassify.py` - Batch re-classification script
+
+---

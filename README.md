@@ -1,23 +1,28 @@
 
-# PVCFC RAG — README - LAST UPDATE: 24/11/2025 (v1.7.1)
+# PVCFC RAG — README - LAST UPDATE: 04/12/2025 (v2.0.0)
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
-> **🚀 Version 1.7.1 Highlights** (Nov 24, 2025):
-> - **🛡️ Safety Quota** (prevents exact match flooding, max 20 codes)
-> - **📍 Page metadata fix** (accurate citations for page 31+, page-aware chunking)
-> - **🔧 4 Critical Bug Fixes** (TagNormalizer perf, GPU singleton, resource leak, recursion limit)
-> - **200 OpenSearch candidates** (better code recall + noise filtering)
-> - **Gemini 3.0 Pro Preview** (most powerful model for complex diagrams)
-> - **100 candidates retrieval** (2x recall improvement)
-> - **50 chunks context** (6.25x LLM visibility from baseline, up from 8)
-> - **300s timeout** (supports long Vision processing)
+> **🚀 Version 2.0.0 Highlights** (Dec 04, 2025):
+> - **🔍 Deep Discovery Search** - Tìm TẤT CẢ documents chứa keyword (không giới hạn top_k)
+> - **🏷️ Intelligent Auto-Classification** - Phân loại tự động với Gemini 2.5 Flash + CADLikeGate guardrail
+> - **📂 4-Category Taxonomy** - ENGINEERING_DESIGN, VENDOR_EQUIPMENT, OPERATIONS_MAINTENANCE, SAFETY_MANAGEMENT
+> - **🔄 Batch Re-classification** - Script classify lại 77 documents (39 P&ID, 38 AI classified)
+> - **🖥️ New UI** - Document Explorer tree view + Deep Search tab
+> - **📊 Metadata Schema** - category, doc_type, classification_status trong OpenSearch/Weaviate
+
+> **Previous v1.7.1 Features** (Nov 24, 2025):
+> - 🛡️ Safety Quota (max 20 exact matches)
+> - 📍 Page metadata fix (page-aware chunking)
+> - Gemini 3.0 Pro Preview + 50 chunks context
 
 * **Use-cases chính**:
 
   * **Tìm & trích xuất**: nhanh chóng tìm đúng *tài liệu và **trang*** nhắc tới nội dung câu hỏi.
   * **Hỏi-đáp có trích dẫn**: trả lời ngắn gọn, **đính kèm nguồn (doc_id + page)** để kiểm chứng.
-  * **💬 Hội thoại đa lượt (NEW)**: chat liên tục với ghi nhớ ngữ cảnh, tự động suy luận "nó", "thiết bị đó" từ câu hỏi trước.
+  * **💬 Hội thoại đa lượt**: chat liên tục với ghi nhớ ngữ cảnh, tự động suy luận "nó", "thiết bị đó" từ câu hỏi trước.
+  * **🔍 Deep Discovery Search (NEW v2.0)**: tìm TẤT CẢ documents chứa keyword - không giới hạn top_k, phục vụ audit và review toàn diện.
+  * **🏷️ Intelligent Classification (NEW v2.0)**: tự động phân loại tài liệu vào 4 categories với Gemini AI + CADLikeGate guardrail.
   * **Báo cáo tự động**: sinh báo cáo từ ngôn ngữ tự nhiên (AI), có danh mục trích dẫn.
   * **Metadata từ tín hiệu/thiết bị**: suy luận **equipment_id**, **doc_type**, vendor, revision… từ ngữ cảnh và nội dung tài liệu, **thay cho thao tác thủ công**.
 

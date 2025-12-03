@@ -2,6 +2,180 @@
 
 All notable changes to the PVCFC RAG System.
 
+## [2.0.0] - 2025-12-04 - INTELLIGENT CLASSIFICATION & DEEP DISCOVERY SEARCH
+
+### ✨ Major Features - Knowledge Management & Exhaustive Search
+
+**Overview:**
+Comprehensive upgrade focusing on document classification and keyword-based exhaustive search capabilities.
+
+### 🔍 Deep Discovery Search - Find ALL Documents
+
+**Problem Identified:**
+- RAG search limited by top_k (typically 10-50 results)
+- Users need to find ALL documents containing specific keywords (equipment tags, codes)
+- Auditors require comprehensive document reviews without missing any files
+
+**Solution Implemented:**
+1. **New API Endpoint**: `GET /api/search/documents`
+   - Keyword-based search using OpenSearch aggregation
+   - Returns ALL unique documents containing keyword (up to 10,000)
+   - No LLM or vector similarity - pure keyword matching
+   - Optional filters: category, doc_type
+   - Results grouped by category
+
+2. **OpenSearch Query Structure**:
+   - Uses `match` query with `operator: and`
+   - Aggregation by `doc_id` for unique documents
+   - Top hits for document metadata
+   - Occurrence count per document
+
+3. **Response Format**:
+   ```json
+   {
+     "query": "KT06101",
+     "total_documents": 5,
+     "results": [...],
+     "results_by_category": {
+       "VENDOR_EQUIPMENT": [...],
+       "ENGINEERING_DESIGN": [...]
+     }
+   }
+   ```
+
+**Files Created:**
+- `app/services/deep_search.py` - DeepSearchService implementation
+- `app/api/routers/search.py` - Deep Search API endpoint
+
+### 🏷️ Intelligent Auto-Classification - 4-Category Taxonomy
+
+**Problem Identified:**
+- Documents not categorized, making navigation difficult
+- Manual classification time-consuming and inconsistent
+- P&ID drawings risk being misclassified
+
+**Solution Implemented:**
+
+1. **4-Category Document Taxonomy**:
+   - ENGINEERING_DESIGN: P&ID, Drawing, Technical Data
+   - VENDOR_EQUIPMENT: Datasheet, Material Partlist, Vendor Manual
+   - OPERATIONS_MAINTENANCE: Operation/Maintenance Instruction, History, Inventory
+   - SAFETY_MANAGEMENT: MOC, RCA, Pictures
+   - UNCATEGORIZED: Unknown (needs review)
+
+2. **Classification Pipeline**:
+   - **Step 1**: CADLikeGate guardrail (score ≥ 0.55 → force P&ID)
+   - **Step 2**: Gemini 2.5 Flash AI classification (if not P&ID)
+   - **Step 3**: Low confidence fallback (< 0.5 → UNCATEGORIZED + NEEDS_REVIEW)
+
+3. **Adaptive Page Sampling**:
+   - Documents ≤ 10 pages: Sample all pages
+   - Documents > 10 pages: Head-Body-Tail strategy (10 pages)
+     - Head: pages 1, 2, 3 (cover, TOC)
+     - Body: 5 pages evenly distributed
+     - Tail: pages N-1, N (appendix, signatures)
+
+4. **Dominant Content Rule**:
+   - >50% text pages → classify as text-based doc
+   - >50% drawing pages → classify as drawing-based doc
+
+**Files Created:**
+- `app/classification/taxonomy.py` - DocumentTaxonomy class
+- `app/classification/sampler.py` - AdaptivePageSampler
+- `app/classification/classifier.py` - DocumentClassifier (Gemini AI)
+- `app/classification/pipeline.py` - ClassificationPipeline
+- `app/api/routers/classification.py` - Classification API endpoints
+
+### 📊 Metadata Schema Updates
+
+**OpenSearch rag_chunks Index:**
+- Added `category` field (keyword type)
+- Added `doc_type` field (keyword type)
+- Added `classification_status` field (classified/needs_review/pending)
+- Added `classification_confidence` field (float 0.0-1.0)
+- Added `classification_method` field (cadlike_gate/ai_classifier/manual)
+
+**Weaviate Chunk Collection:**
+- Added `category` property (filterable)
+- Added `doc_type` property (filterable)
+- Added `classification_status` property (filterable)
+
+### 🔄 Batch Re-classification
+
+**Script Created:** `scripts/utilities/batch_reclassify.py`
+- Classifies all existing documents in OpenSearch
+- Updates metadata in both OpenSearch and Weaviate
+- Checkpoint/resume capability
+- Rate limiting to avoid API overload
+
+**Results (77 documents):**
+- P&ID via CADLikeGate: 39 documents
+- AI Classified: 38 documents
+- Failures: 0
+- Chunks updated: 6,470
+
+### 🖥️ Streamlit UI Updates
+
+**Document Explorer:**
+- Tree view with 4 category groups
+- Expand categories → doc_types → files
+- Classification status badges
+- Re-classify button per document
+
+**Deep Search Tab:**
+- Separate tab from Chat RAG
+- Keyword search bar
+- Category/doc_type dropdown filters
+- Results grouped by category
+- View button opens PDF at keyword page
+
+### 🔧 Bug Fixes
+
+1. **API Endpoint Routing**: Fixed `/api/search/documents` 404 error
+   - Changed router prefix from `/search` to `/api/search`
+
+2. **OpenSearch Field Names**: Fixed field mapping
+   - Fields at root level (`doc_id`, `category`, `doc_type`, `page`)
+   - Not in `metadata` object as originally designed
+
+3. **Sort Field Error**: Fixed `metadata.page_number` unmapped error
+   - Added `unmapped_type: integer` to sort configuration
+   - Added fallback to `page` field
+
+4. **API Key Compatibility**: Fixed Gemini API key naming
+   - Classifier now accepts both `GOOGLE_API_KEY` and `GEMINI_API_KEY`
+
+### 📚 Documentation
+
+**Created:**
+- `docs/Searching_Tagname_README.md` - Comprehensive feature documentation
+- `.kiro/specs/intelligent-classification-deep-search/` - Full spec (requirements, design, tasks)
+
+**Updated:**
+- `SYSTEM_ARCHITECTURE.md` - Added Deep Search and Classification sections
+- `HUONG_DAN_INGESTION.md` - Added classification during ingestion
+- `COMPLETE_PIPELINE_FLOW.md` - Added classification flow
+- `README.md` - Added v2.0 features
+
+### ✅ Testing
+
+- **Total tests**: 156 passed
+- **Coverage**: API, Classification, Deep Search modules
+- **Property-based tests**: Taxonomy validation, sampling, guardrail enforcement
+
+### 🚀 Production Readiness
+
+**Status:** READY FOR DEPLOYMENT
+
+**Verification:**
+- [x] Deep Search endpoint working
+- [x] Classification pipeline integrated
+- [x] Batch re-classification completed
+- [x] UI components functional
+- [x] All tests passing
+
+---
+
 ## [1.7.1] - 2025-11-22 - SAFETY QUOTA & DATA INTEGRITY FIXES (CRITICAL)
 
 ### 🛡️ Safety Quota Implementation - Exact Match Flooding Protection

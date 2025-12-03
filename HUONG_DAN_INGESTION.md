@@ -2,9 +2,30 @@
 
 > **Tài liệu hướng dẫn đầy đủ về quy trình xử lý và lập chỉ mục tài liệu PDF cho hệ thống RAG**
 >
-> **Cập nhật:** 2025-11-19 (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix + HierarchicalChunker)
+> **Cập nhật:** 2025-12-04 (Deep Discovery Search + Intelligent Classification + Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix + HierarchicalChunker)
 > **Hệ điều hành:** Windows
 > **Shell:** PowerShell 5.1+
+
+---
+
+## 🆕 TÍNH NĂNG MỚI v2.0
+
+### Deep Discovery Search
+- **Endpoint**: `GET /api/search/documents`
+- Tìm TẤT CẢ documents chứa keyword (không giới hạn top_k)
+- Hỗ trợ filter theo category và doc_type
+- Kết quả grouped by category
+
+### Intelligent Auto-Classification
+- **4-Category Taxonomy**: ENGINEERING_DESIGN, VENDOR_EQUIPMENT, OPERATIONS_MAINTENANCE, SAFETY_MANAGEMENT
+- **CADLikeGate Guardrail**: P&ID không bao giờ bị misclassify (score >= 0.55)
+- **Gemini 2.5 Flash AI**: Multimodal classification cho non-P&ID documents
+- **Adaptive Page Sampling**: Head-Body-Tail strategy cho documents > 10 pages
+
+### Batch Re-classification
+- **Script**: `scripts/utilities/batch_reclassify.py`
+- Classify lại tất cả documents đã có trong hệ thống
+- Update metadata trong OpenSearch và Weaviate
 
 ---
 
@@ -502,6 +523,24 @@ $response = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ask" `
 
 Write-Host "Answer: $($response.answer)"
 Write-Host "Search method: Level 2 Spatial Search" -ForegroundColor Cyan
+```
+
+#### Deep Discovery Search (NEW v2.0):
+```powershell
+# Tìm TẤT CẢ documents chứa keyword "KT06101"
+$response = Invoke-RestMethod -Uri "http://localhost:8000/api/search/documents?keyword=KT06101&max_results=1000" -Method GET
+
+Write-Host "Total documents: $($response.total_documents)"
+Write-Host "Results by category:"
+$response.results_by_category | ConvertTo-Json -Depth 3
+```
+
+#### Batch Re-classification (NEW v2.0):
+```powershell
+# Classify lại tất cả documents đã có trong hệ thống
+python scripts/utilities/batch_reclassify.py
+
+# Kết quả được lưu tại: artifacts/reclassify_results.json
 ```
 
 ---
