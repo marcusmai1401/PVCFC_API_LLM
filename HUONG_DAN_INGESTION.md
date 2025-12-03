@@ -2,7 +2,7 @@
 
 > **Tài liệu hướng dẫn đầy đủ về quy trình xử lý và lập chỉ mục tài liệu PDF cho hệ thống RAG**
 >
-> **Cập nhật:** 2025-11-19 (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix + Parent-Child Chunking)
+> **Cập nhật:** 2025-11-19 (Binary Classification + 100% Spatial Coverage + OCR Default On + Single-Letter Prefix + Protobuf Fix + HierarchicalChunker)
 > **Hệ điều hành:** Windows
 > **Shell:** PowerShell 5.1+
 
@@ -160,7 +160,10 @@ python tools/ingest.py `
 **Lưu ý:**
 - OCR **LUÔN ENABLED** by default, không cần `--enable-ocr` flag
 - Nếu muốn tắt OCR: thêm `--no-ocr` flag
-- **Phase 3**: Sử dụng Parent-Child Chunking (parent ~1800 chars, child ~400 chars)
+- **Phase 3**: Sử dụng HierarchicalChunker với strategies: `hierarchical` (mặc định), `sentence-window`, `small-to-big`
+  - Default: max_chunk_size=1000, chunk_overlap=50
+  - Parent chunks: Heading + 200 chars summary
+  - Child chunks: Section content split by paragraphs
 - **Storage**: Tự động sử dụng `D:\PVCFC_Artifacts` từ `.env` (ARTIFACTS_DIR)
 
 **Kết quả:**
@@ -266,7 +269,7 @@ Score = Σ(weight × feature)
 - Chunk size: 1000 chars
 - Chunk overlap: 200 chars
 
-> **Lưu ý (Phase 3 - Production):** Pipeline production dùng `scripts/ingest_production.py` với **Parent-Child Chunking** (parent ~1800 / child ~400). Mục 4.1.2 mô tả pipeline V1 (tools/ingest.py) cho mục đích tham khảo/legacy.
+> **Lưu ý (Phase 3 - Production):** Pipeline production dùng `scripts/ingest_production.py` với **HierarchicalChunker** (parent: heading + 200 chars summary, child: section content split by max_chunk_size=1000). Mục 4.1.2 mô tả pipeline V1 (tools/ingest.py) cho mục đích tham khảo/legacy.
 
 #### 4.1.3 CAD-like Processing (Extended)
 

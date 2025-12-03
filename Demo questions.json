@@ -1,0 +1,1454 @@
+[
+  {
+    "STT": 1,
+    "document_name": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Áp suất đầu ra (Discharge Pressure) của máy nén CO2 K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+        "answer": "Theo biểu đồ đường cong hiệu suất dự kiến của máy nén CO2 K06101 / KT06101, dưới điều kiện hoạt động 'Bình thường' (Normal), áp suất đầu ra là 158.00 BAR.A.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 2,
+    "document_name": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) của máy nén CO2 K06101 / KT06101 là bao nhiêu phần trăm?",
+        "answer": "Theo biểu đồ đường cong hiệu suất ở trang 5, trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) của máy nén CO2 K06101 / KT06101 là 82.7%.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 3,
+    "document_name": "092_3N4-S4279947_Rev.1 Operation and maintenance manual of gear",
+    "interaction": [
+      {
+        "question": "Áp suất dầu bôi trơn bình thường (Normal oil pressure) của bộ bánh răng (Gear unit) của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Ap suất dầu bôi trơn bình thường của bộ bánh răng cho thiết bị K06101 / KT06101 là 2.0 barG.",
+        "source_page": 8
+      }
+    ]
+  },
+  {
+    "STT": 4,
+    "document_name": "092_3N4-S4279947_Rev.1 Operation and maintenance manual of gear",
+    "interaction": [
+      {
+        "question": "Loại dầu bôi trơn nào được khuyến nghị sử dụng cho bộ bánh răng (Gear unit) của thiết bị K06101 / KT06101 ?",
+        "answer": "Loại dầu bôi trơn được khuyến nghị sử dụng cho bộ bánh răng của thiết bị K06101 / KT06101 là dầu tuabin ISO VG46 (Turbine oil ISO VG46).",
+        "source_page": 8
+      }
+    ]
+  },
+  {
+    "STT": 5,
+    "document_name": "092_3N4-S4279947_Rev.1 Operation and maintenance manual of gear",
+    "interaction": [
+      {
+        "question": "Trong quy trình lắp đặt (Installation Procedure) của thiết bị K06101 / KT06101, bước nào yêu cầu sử dụng dung môi (solvent) ?",
+        "answer": "Bước (1) Remove shipping cover.",
+        "source_page": 11
+      }
+    ]
+  },
+  {
+    "STT": 5.5,
+    "document_name": "092_3N4-S4279947_Rev.1 Operation and maintenance manual of gear",
+    "interaction": [
+      {
+        "question": "Dựa vào bảng danh sách phụ tùng thay thế (Construction Spare Parts List) của thiết bị K06101 / KT06101, chi tiết 'GASKET' vật liệu là gì ?",
+        "answer": "Vật liệu: V#6500.",
+        "source_page": 36
+      }
+    ]
+  },
+  {
+    "STT": 6,
+    "document_name": "002_3N4-S4274342 Data Sheet of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Trong điều kiện vận hành 'Bình thường' (Normal), áp suất hút (Suction Pressure) của máy nén Amoniac K04441 là bao nhiêu?",
+        "answer": "Áp suất hút: 2.82 bar A.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 7,
+    "document_name": "002_3N4-S4274342 Data Sheet of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Cánh khuấy (Impellers) của máy nén Amoniac K04441 là gì ?",
+        "answer": "Vật liệu Cánh khuấy (Impellers): Thép Cr-Mo (Cr-Mo Steel).",
+        "source_page": 8
+      }
+    ]
+  },
+  {
+    "STT": 8,
+    "document_name": "002_3N4-S4274342 Data Sheet of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Theo thông số kỹ thuật về độ ồn (Noise Specifications) của máy nén Amoniac K04441, giới hạn mức áp suất âm thanh (SPL) là bao nhiêu?",
+        "answer": "Giới hạn mức áp suất âm thanh là ≤ 85 dBA (SPL) tại khoảng cách 1 mét.",
+        "source_page": 6
+      }
+    ]
+  },
+  {
+    "STT": 9,
+    "document_name": "Data Sheet for CO2 Compressor Steam Turbine.rev0E.pdf",
+    "interaction": [
+      {
+        "question": "Trong điều kiện hoạt động bình thường (Normal), áp suất hơi đầu vào (Inlet Pressure) của tuabin hơi KT06101 là bao nhiêu?",
+        "answer": "Áp suất hơi đầu vào của tuabin KT06101 là 39 Bar A.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 10,
+    "document_name": "Data Sheet for CO2 Compressor Steam Turbine.rev0E.pdf",
+    "interaction": [
+      {
+        "question": "Lưu lượng hơi trích (Extraction Flow) của tuabin KT06101 trong điều kiện hoạt động bình thường (Normal) là bao nhiêu?",
+        "answer": "lưu lượng hơi trích trong điều kiện hoạt động bình thường là 57950 Kg/h.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 11,
+    "document_name": "002_3N4-S4274343 datasheet for K06101_Rev.02",
+    "interaction": [
+      {
+        "question": "Trong điều kiện hoạt động bình thường (Normal), áp suất đầu ra của cấp nén thứ nhất (1st) của thiết bị máy nén CO2 K06101 là bao nhiêu?",
+        "answer": "Áp suất đầu ra của cấp nén thứ nhất là 4.70 bar A.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 12,
+    "document_name": "002_3N4-S4274343 datasheet for K06101_Rev.02",
+    "interaction": [
+      {
+        "question": "Hiệu suất đa biến (Polytropic efficiency) của cấp nén thứ hai (2nd) trong điều kiện định mức (Rated) của thiết bị máy nén CO2 K06101 là bao nhiêu?",
+        "answer": "Hiệu suất đa biến của cấp nén thứ hai trong điều kiện định mức là 81.5%.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 13,
+    "document_name": "002_3N4-S4274343 datasheet for K06101_Rev.02",
+    "interaction": [
+      {
+        "question": "Trong điều kiện vận hành 'Bình thường' (Normal), nhiệt độ đầu ra (Discharge Temperature) của máy nén CO2 K06101 là bao nhiêu?",
+        "answer": "Nhiệt độ đầu ra: 159.4 °C",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 14,
+    "document_name": "003_3N4-S4274344 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Công suất trục (Shaft Power) của thiết bị K04441 / KT04441 là bao nhiêu trong điều kiện hoạt động 'Bình thường' (Normal)?",
+        "answer": "Công suất trục (Shaft Power) của máy nén Amoniac K04441 / KT04441 là 6176 KW.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 15,
+    "document_name": "003_3N4-S4274344 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Lưu lượng hút (Suction Capacity) của thiết bị K04441 / KT04441 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+        "answer": "Lưu lượng hút (Suction Capacity) của máy nén Amoniac K04441 / KT04441 là 17800.0 M3/HR.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 16,
+    "document_name": "003_3N4-S4274344 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Trong điều kiện hoạt động 'Bình thường' (Normal), áp suất đầu ra (Discharge Pressure) của máy nén Amoniac K04441 / KT04441 là bao nhiêu?",
+        "answer": "19.000 BAR.A",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 17,
+    "document_name": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Hiệu suất Polytropic (Pol. Efficiency) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Rated 1st' là bao nhiêu?",
+        "answer": "Trong điều kiện hoạt động 'Rated 1st', hiệu suất Polytropic (Pol. Efficiency) của máy nén CO2 K06101 / KT06101 là 82.7%.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 18,
+    "document_name": "003_3N4-S4274345 Expected Performance Curve of Compressor_Rev.01",
+    "interaction": [
+      {
+        "question": "Cột áp Polytropic (Polytropic Head) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Rated 2nd' là bao nhiêu?",
+        "answer": "Trong điều kiện hoạt động 'Rated 2nd', cột áp Polytropic (Polytropic Head) của máy nén CO2 K06101 / KT06101 là 12600 M.",
+        "source_page": 7
+      }
+    ]
+  },
+  {
+    "STT": 19,
+    "document_name": "009_3N4-S4274677_Rev.03",
+    "interaction": [
+      {
+        "question": "Kích thước danh nghĩa (Nominal Size) của vòi phun (Nozzle) số 4 (1st Suc.) trên máy nén LP của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Kích thước danh nghĩa (Nominal Size) của vòi phun (Nozzle) số 4 (1st Suc.) trên máy nén LP (2MCH606) của thiết bị K06101 / KT06101 là 28 inch.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 20,
+    "document_name": "009_3N4-S4274677_Rev.03",
+    "interaction": [
+      {
+        "question": "Giá trị lực và mô-men cho phép tối đa (Max. Allowable Force & Moments) của vòi phun (Nozzle) số 1 (4th Dis.) trên máy nén HP của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Giá trị lực và mô-men cho phép tối đa (Max. Allowable Force & Moments), tính theo công thức 0.914F+M, của vòi phun (Nozzle) số 1 (4th Dis.) trên máy nén HP (2BCH306/A) của thiết bị K06101 / KT06101 là 384 kg-m (3764 N.m).",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 21,
+    "document_name": "029A_3N4-3358044 Journal Bearing Assembly Drawing(LP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Gối đỡ ổ trượt (JOURNAL BEARING HOUSING) của thiết bị K06101 (LP) là gì?",
+        "answer": "Vật liệu chế tạo Gối đỡ ổ trượt (JOURNAL BEARING HOUSING), mã hiệu 01, của thiết bị K06101 (LP) là SNCM439 (A322 Gr. 4340).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 22,
+    "document_name": "029A_3N4-3358044 Journal Bearing Assembly Drawing(LP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Nhà sản xuất bộ phận cảm biến nhiệt độ (TEMPERATURE ELEMENT) cho ổ trượt của thiết bị K06101 (LP) là ai?",
+        "answer": "Nhà sản xuất bộ phận cảm biến nhiệt độ (RTD) cho ổ trượt của thiết bị K06101 (LP) là MINCO.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 23,
+    "document_name": "029B_3N4-3358045 Journal Bearing Assembly Drawing(HP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Kẹp ổ trượt (BEARING HOLDER) của thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo Kẹp ổ trượt (BEARING HOLDER), mã hiệu 02, của thiết bị K06101 (HP) là SS400+WJ2B (A283 Gr.D+B23 ALLOY NO. 3).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 24,
+    "document_name": "029B_3N4-3358045 Journal Bearing Assembly Drawing(HP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo ngõng trục ổ trượt (JOURNAL BEARING PAD) của thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo ngõng trục ổ trượt (JOURNAL BEARING PAD), mã hiệu 04-1, của thiết bị K06101 (HP) là S25C+WJ2B (A576 Gr.1025+B23 ALLOY NO. 3).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 25,
+    "document_name": "029B_3N4-3358045 Journal Bearing Assembly Drawing(HP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Bu lông đặc biệt (SPECIAL BOLT) của ổ trượt trên thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo Bu lông đặc biệt (SPECIAL BOLT), mã hiệu 05, của ổ trượt trên thiết bị K06101 (HP) là S45C (A576 Gr.1045).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 26,
+    "document_name": "029B_3N4-3358045 Journal Bearing Assembly Drawing(HP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Thông tin về khe hở ổ trượt (CLEARANCE OF JOURNAL BEARING) của thiết bị K06101 (HP) được thể hiện ở đâu?",
+        "answer": "Thông tin về khe hở ổ trượt (CLEARANCE OF JOURNAL BEARING) của thiết bị K06101 (HP) được thể hiện trên danh sách khe hở (THE CLEARANCE LIST) với số hiệu bản vẽ là 3N4-S4278542.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 27,
+    "document_name": "030A_3N4-S347058 Thrust Bearing Assembly Drawing(LP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Then vòng đế (BASE RING KEY) của ổ chặn trên thiết bị K06101 (LP) là gì?",
+        "answer": "Vật liệu chế tạo Then vòng đế (BASE RING KEY), mã hiệu 05, của ổ chặn trên thiết bị K06101 (LP) là ASTM A108.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 28,
+    "document_name": "030A_3N4-S347058 Thrust Bearing Assembly Drawing(LP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Vòng đệm O-ring (O-RING) của ổ chặn trên thiết bị K06101 (LP) là gì?",
+        "answer": "của máy nén Amoniac K04441ật liệu chế tạo Vòng đệm O-ring (O-RING), mã hiệu 12, của ổ chặn trên thiết bị K06101 (LP) là VITON RUBBER.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 29,
+    "document_name": "030A_3N4-S347058 Thrust Bearing Assembly Drawing(LP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Tấm cân bằng trên (LEVELING PLATE-UPPER) của ổ chặn trên thiết bị K06101 (LP) là gì?",
+        "answer": "của máy nén Amoniac K04441ật liệu chế tạo Tấm cân bằng trên (LEVELING PLATE-UPPER), mã hiệu 07, của ổ chặn trên thiết bị K06101 (LP) là ASTM A576.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 30,
+    "document_name": "030A_3N4-S347058 Thrust Bearing Assembly Drawing(LP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Số hiệu bản vẽ của Kingsbury (Kingsbury's DWG. NO.) cho ổ chặn của thiết bị K06101 (LP) là gì?",
+        "answer": "Số hiệu bản vẽ của Kingsbury cho ổ chặn của thiết bị K06101 (LP) là 476729A.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 31,
+    "document_name": "030B_3N4-S347059 Thrust Bearing Assembly Drawing(HP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Guốc trượt (SHOE ASS'Y-C.W. ROT'N.) của ổ chặn trên thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo Guốc trượt (SHOE ASS'Y-C.W. ROT'N.), mã hiệu 01, của ổ chặn trên thiết bị K06101 (HP) là ASTM A576+ASTM B23Gr. 2.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 32,
+    "document_name": "030B_3N4-S347059 Thrust Bearing Assembly Drawing(HP)_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Vòng đế (BASE RING-IN HALVES-C.W. ROT'N.) của ổ chặn trên thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo Vòng đế (BASE RING-IN HALVES-C.W. ROT'N.), mã hiệu 03, của ổ chặn trên thiết bị K06101 (HP) là ASTM A516.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 33,
+    "document_name": "030B_3N4-S347059 Thrust Bearing Assembly Drawing(HP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Chốt định vị tấm cân bằng (LEVELING PLATE DOWEL) của ổ chặn trên thiết bị K06101 (HP) là gì?",
+        "answer": "Vật liệu chế tạo Chốt định vị tấm cân bằng (LEVELING PLATE DOWEL), mã hiệu 09, của ổ chặn trên thiết bị K06101 (HP) là ASTM A108.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 34,
+    "document_name": "030B_3N4-S347059 Thrust Bearing Assembly Drawing(HP)_Rev.1",
+    "interaction": [
+      {
+        "question": "Số hiệu bản vẽ của Kingsbury (Kingsbury's DWG. NO.) cho ổ chặn của thiết bị K06101 (HP) là gì?",
+        "answer": "Số hiệu bản vẽ của Kingsbury cho ổ chặn của thiết bị K06101 (HP) là 468404A.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 35,
+    "document_name": "033_3N4-3358078 COMP. Name Plate Drawing_Rev.0",
+    "interaction": [
+      {
+        "question": "Số sê-ri (SERIAL No.) của thiết bị K06101 là gì?",
+        "answer": "Số sê-ri của thiết bị K06101 là 09P7154701.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 36,
+    "document_name": "033_3N4-3358078 COMP. Name Plate Drawing_Rev.0",
+    "interaction": [
+      {
+        "question": "Áp suất làm việc tối đa của vỏ máy (MAX. CASING WORKING PRESS.) của thiết bị K06101 là bao nhiêu?",
+        "answer": "Áp suất làm việc tối đa của vỏ máy nén của thiết bị K06101 là 30/190 Bar G.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 37,
+    "document_name": "033_3N4-3358078 COMP. Name Plate Drawing_Rev.0",
+    "interaction": [
+      {
+        "question": "Tốc độ ngắt (Trip Speed) của máy nén CO2 K06101 được ghi trên nhãn thiết bị là bao nhiêu?",
+        "answer": "9009/15335 rpm",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 38,
+    "document_name": "039_3N4-S4276912_Rev.01",
+    "interaction": [
+      {
+        "question": "Model của Bơm dầu bôi trơn (Lube Oil Pump) P06201A/B của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Model của Bơm dầu bôi trơn P06201A/B của thiết bị K06101 / KT06101 là GH-R2T-780.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 39,
+    "document_name": "039_3N4-S4276912_Rev.01",
+    "interaction": [
+      {
+        "question": "Lưu lượng (CAPACITY) của Bơm dầu bôi trơn khẩn cấp (Emergency Lube Oil Pump) P06201C của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "ưu lượng của Bơm dầu bôi trơn khẩn cấp P06201C của thiết bị K06101 / KT06101 là 493 lít/phút.",
+        "source_page": 10
+      }
+    ]
+  },
+  {
+    "STT": 40,
+    "document_name": "039_3N4-S4276912_Rev.01",
+    "interaction": [
+      {
+        "question": "Dựa vào biểu đồ đặc tính mô-men xoắn dự kiến (Expected Torque Curve) của bơm dầu bôi trơn GH-R2T-780, mô-men xoắn tại tốc độ 1450 min-1 là bao nhiêu?",
+        "answer": "207.9 N.m (hoặc 21.2 kg.m)",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 41,
+    "document_name": "039_3N4-S4276912_Rev.01",
+    "interaction": [
+      {
+        "question": "Vật liệu của trục vít dẫn động (Power Rotor) và trục vít bị dẫn (Idler Rotor) của bơm dầu khẩn cấp (Emergency Oil Pump) model GH-R2T-204 là gì?",
+        "answer": "Vật liệu Power Rotor: S45C; Vật liệu Idler Rotor: ※1 (Special Iron Casting FCD55 JIS G 5502-1961).",
+        "source_page": 10
+      }
+    ]
+  },
+  {
+    "STT": 42,
+    "document_name": "039_3N4-S4276912_Rev.01",
+    "interaction": [
+      {
+        "question": "Trong bản vẽ lắp ráp của bơm dầu khẩn cấp (Emergency Oil Pump) GH-R2T-204 , chi tiết 'Power Rotor' được làm từ vật liệu gì?",
+        "answer": "Vật liệu: Thép Carbon S45C (Carbon Steel S45C).",
+        "source_page": 15
+      }
+    ]
+  },
+  {
+    "STT": 43,
+    "document_name": "Attached 10-Instrument Data Sheet_Rev.0",
+    "interaction": [
+      {
+        "question": "Dải đo (Scale Range) của Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0204 là bao nhiêu?",
+        "answer": "Dải đo của đồng hồ áp suất có mã hiệu 06-PG-0204 dùng để đo áp suất đầu đẩy bơm dầu bôi trơn A (L/O PUMP A DISCHARGE) là từ 0 đến 25 BarG.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 44,
+    "document_name": "Attached 10-Instrument Data Sheet_Rev.0",
+    "interaction": [
+      {
+        "question": "Lưu chất (Fluid) được đo bởi Đồng hồ áp suất (PRESSURE GAGE) có mã hiệu 06-PG-0209 là gì?",
+        "answer": "Lưu chất được đo bởi đồng hồ áp suất có mã hiệu 06-PG-0209 tại vị trí xả phụ (SECONDARY VENT) là hỗn hợp KHÍ & CO2 (AIR & CO2).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 45,
+    "document_name": "Attached 10-Instrument Data Sheet_Rev.0",
+    "interaction": [
+      {
+        "question": "Nhiệt độ thiết kế (Design Temp) của thiết bị đo có Tag No. 06-PG-0214 là bao nhiêu?",
+        "answer": "Nhiệt độ thiết kế: 75 degC.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 46,
+    "document_name": "039_3N4-S4276912 Lube & Emergency Oil Pump Drawing_Rev.2",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo vỏ bơm (CASING) của bơm dầu bôi trơn chính P06201A/B của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu chế tạo vỏ bơm (CASING) của bơm dầu bôi trơn chính P06201A/B của thiết bị K06101 / KT06101 là STPG370.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 47,
+    "document_name": "039_3N4-S4276912 Lube & Emergency Oil Pump Drawing_Rev.2",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo Rô-to chủ động (POWER ROTOR) của bơm dầu bôi trơn khẩn cấp P06201C của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu chế tạo Rô-to chủ động (POWER ROTOR) của bơm dầu bôi trơn khẩn cấp P06201C của thiết bị K06101 / KT06101 là S45C.",
+        "source_page": 11
+      }
+    ]
+  },
+  {
+    "STT": 48,
+    "document_name": "040_3N4-S347573 Lube Oil Pump Motor Drawing_Rev.1",
+    "interaction": [
+      {
+        "question": "Công suất định mức (Rated output) của động cơ điện MP06201A/B của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Công suất định mức của động cơ điện MP06201A/B, model YB2-250M-4, là 55 kW.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 49,
+    "document_name": "041_3N4-S347614 Lube Oil Cooler Drawing_Rev.1",
+    "interaction": [
+      {
+        "question": "Kích thước kết nối đường vào của nước làm mát (Cooling water inlet) của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Kích thước kết nối đường vào của nước làm mát (N3), của thiết bị K06101 / KT06101 là 4 inch, tiêu chuẩn ANSI B16.5 150# WN RF.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 50,
+    "document_name": "041_3N4-S347614 Lube Oil Cooler Drawing_Rev.1",
+    "interaction": [
+      {
+        "question": "Áp suất thử thủy lực (Hydrotested Pressure) phía vỏ (Shell Side) của thiết bị làm mát dầu bôi trơn K06101 / KT06101 là bao nhiêu?",
+        "answer": "Ap suất thử thủy lực phía vỏ (Shell Side) của thiết bị làm mát dầu bôi trơn K06101 / KT06101 là 2.1 MPa và được giữ trong 30 phút mà không rò rỉ.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 51,
+    "document_name": "Ammonia Maintenance Schedule",
+    "interaction": [
+      {
+        "question": "Trong trường hợp CASE 1 (kiểm tra định kỳ 4-6 năm) của bơm ammonia (AMMONIA FEED PUMP), những bộ phận nào của Bơm cấp liệu Amoniac cần được chuẩn bị sẵn tại công trường?",
+        "answer": "Trong trường hợp CASE 1 (kiểm tra định kỳ 4-6 năm), các bộ phận cần chuẩn bị sẵn tại công trường bao gồm: Cụm rô-to (Rotor assembly), các bộ phận mài mòn (Wearing parts) và các bộ phận ổ đỡ (Bearing parts).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 52,
+    "document_name": "Ammonia Maintenance Schedule",
+    "interaction": [
+      {
+        "question": "Trong quá trình kiểm tra lớn (Major Inspection) của bơm ammonia (AMMONIA FEED PUMP) sau 4-6 năm hoạt động, nếu phát hiện vết nứt trên Cánh bơm (Impeller) của Bơm cấp liệu Amoniac thì phải xử lý như thế nào?",
+        "answer": "Nếu phát hiện vết nứt trên Cánh bơm, đối với các khuyết tật nhỏ, cần loại bỏ và hoàn thiện bằng máy mài hoặc hàn sửa chữa. Nếu vết nứt không thể sửa chữa, phải thay thế bằng một chi tiết mới.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 53,
+    "document_name": "Ammonia Maintenance Schedule",
+    "interaction": [
+      {
+        "question": "Chu kỳ kiểm tra lớn (Major Inspection) của bơm ammonia (AMMONIA FEED PUMP) được khuyến nghị cho bơm cấp Amoniac là bao lâu ?",
+        "answer": "Chu kỳ kiểm tra lớn được khuyến nghị là 4-6 năm.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 54,
+    "document_name": "Ammonia Maintenance Schedule",
+    "interaction": [
+      {
+        "question": "Đối với kiểm tra thông thường (Convention Inspection) của bơm ammonia (AMMONIA FEED PUMP) với chu kỳ 2-4 năm, bộ phận 'Thrust Shoe Ass'y & Thrust Housing Ass'y' cần được kiểm tra những hạng mục nào?",
+        "answer": "Cần kiểm tra độ mòn của guốc chặn (Wear of thrust shoes) và đĩa chặn (thrust disk), vết trầy xước (Scratch), sự di chuyển của guốc chặn (Moving of thrust shoe) và cụm vỏ (housing assembly).",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 55,
+    "document_name": "Ammonia Maintenance Schedule",
+    "interaction": [
+      {
+        "question": "Dựa vào bản vẽ mặt cắt ngang (Cross Sectional Drawing) của bơm ammonia (AMMONIA FEED PUMP), chi tiết số 653 có tên là gì và được làm từ vật liệu nào?",
+        "answer": "Chi tiết số 653 là 'ROCKER PLATE (6 PER SET)', vật liệu là A576 1020 (S20C).",
+        "source_page": 7
+      }
+    ]
+  },
+  {
+    "STT": 56,
+    "document_name": "3N4-S4278468_erection & commissioning spare parts list_Rev.03",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng O-RING mã hiệu R-001 của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu của Phụ tùng O-RING mã hiệu R-001 là FKM.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 57,
+    "document_name": "3N4-S4278468_erection & commissioning spare parts list_Rev.03",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng đệm ổ trượt (JOURNAL BEARING PADS) mã hiệu R-044 phía trục dẫn (DRIVER SIDE) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu của Phụ tùng đệm ổ trượt (JOURNAL BEARING PADS) mã hiệu R-044 phía trục dẫn (DRIVER SIDE) là S25C+WJ2B (ASTM A576 GR1025 + ASTM B23 ALLOY NO. 3).",
+        "source_page": 10
+      }
+    ]
+  },
+  {
+    "STT": 58,
+    "document_name": "3N4-S4278468_erection & commissioning spare parts list_Rev.03",
+    "interaction": [
+      {
+        "question": "Trong danh sách phụ tùng cho quá trình chạy thử (Commissioning Spare Parts List) của hệ thống dầu bôi trơn (Lube Oil Unit) của thiết bị K06101 / KT06101, chi tiết 'Element for oil filter' có mã hiệu (Part No.) là gì ?",
+        "answer": "TMã hiệu (Part No.): R-406.",
+        "source_page": 13
+      }
+    ]
+  },
+  {
+    "STT": 59,
+    "document_name": "3N4-S4287479_02 YSP List",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng Mê cung mắt cánh (IMPELLER EYE LABYRINTH) cho tầng nén số 1 (1ST) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu của Mê cung mắt cánh (IMPELLER EYE LABYRINTH) cho tầng nén số 1, mã hiệu S-001, là AC7A-F.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 60,
+    "document_name": "3N4-S4287479_02 YSP List",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng Ngõng chặn nghiêng (TILTING PADS) phía ổ chặn (THRUST BEARING SIDE) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu của Ngõng chặn nghiêng (TILTING PADS) phía ổ chặn, mã hiệu S-016, là S25C+WJ2B (ASTM A576 GR1025 + ASTM B23 ALLOY NO. 3).",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 61,
+    "document_name": "3N4-S4287479_02 YSP List",
+    "interaction": [
+      {
+        "question": "Chi tiết IMPELLER EYE LABYRINTH (1ST) (Item No. S-001) của thiết bị K06101 / KT06101 có vật liệu là gì?",
+        "answer": "Chi tiết IMPELLER EYE LABYRINTH (1ST) (Item No. S-001) có vật liệu là AC7A-F.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 62,
+    "document_name": "3N4-S4287479-SPARE PART",
+    "interaction": [
+      {
+        "question": "Cụm làm kín khí khô (DRY GAS SEAL ASSEMBLY) phía trục dẫn (DRIVER SIDE) của thiết bị K06101 / KT06101 có mã phụ tùng là gì?",
+        "answer": "Theo danh mục phụ tùng 2 năm, cụm làm kín khí khô (DRY GAS SEAL ASSEMBLY) phía trục dẫn (DRIVER SIDE), mã hiệu S-051, có mã phụ tùng là 3N4-019422-62001.",
+        "source_page": 12
+      }
+    ]
+  },
+  {
+    "STT": 63,
+    "document_name": "3N4-S4287479-SPARE PART",
+    "interaction": [
+      {
+        "question": "Vật liệu của Vòng dung sai (TOLERANCE RING) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Vòng dung sai (TOLERANCE RING), mã hiệu S-301, là MONEL K-500.",
+        "source_page": 19
+      }
+    ]
+  },
+  {
+    "STT": 64,
+    "document_name": "3N4-S4287479-SPARE PART",
+    "interaction": [
+      {
+        "question": "Chi tiết 'SEAL WASHER' của thiết bị K06101 / KT06101 có mã hiệu (Part No.) là gì ",
+        "answer": "Mã hiệu (Part No.): S-077",
+        "source_page": 17
+      }
+    ]
+  },
+  {
+    "STT": 65,
+    "document_name": "067_3N4-S4278467 Special Tool List_Rev.1",
+    "interaction": [
+      {
+        "question": "Dụng cụ chuyên dụng cho phớt khí khô (SPECIAL TOOL FOR DRY GAS SEAL) của thiết bị K06101 / KT06101 được cung cấp cho máy nén nào?",
+        "answer": "Theo danh mục dụng cụ chuyên dụng, dụng cụ cho phớt khí khô (SPECIAL TOOL FOR DRY GAS SEAL) của thiết bị K06101 / KT06101 chỉ được cung cấp cho máy nén cao áp (1set for HP).",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 66,
+    "document_name": "067_3N4-S4278467 Special Tool List_Rev.1",
+    "interaction": [
+      {
+        "question": "Tình trạng cung cấp bộ hiệu chuẩn cho hệ thống BNC (CARIBRATION KIT FOR BNC SYSTEM) của thiết bị K06101 / KT06101 như thế nào?",
+        "answer": "Theo danh mục dụng cụ chuyên dụng, bộ hiệu chuẩn cho hệ thống BNC (CARIBRATION KIT FOR BNC SYSTEM) của thiết bị K06101 / KT06101 nằm ngoài phạm vi cung cấp (Out of Scope).",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 67,
+    "document_name": "068_3N4-S4278468 Erection and Commisioning Spare Parts List_Rev.1",
+    "interaction": [
+      {
+        "question": "Số lượng que dò rung (Vibration probe) dự phòng cho hai năm vận hành của thiết bị máy nén CO2 K06101 / KT06101 là bao nhiêu?",
+        "answer": "Theo danh mục phụ tùng, số lượng que dò rung (Vibration probe) dự phòng cho hai năm vận hành của máy nén CO2 là 2 que dò.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 68,
+    "document_name": "068_3N4-S4278468 Erection and Commisioning Spare Parts List_Rev.1",
+    "interaction": [
+      {
+        "question": "Số lượng lõi lọc cho bộ lọc phớt khí khô (Element for drygas seal filter) dự phòng cho hai năm vận hành của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Theo danh mục phụ tùng, số lượng lõi lọc cho bộ lọc phớt khí khô (Element for drygas seal filter) dự phòng cho hai năm vận hành là 200%.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 69,
+    "document_name": "069_3N4-S4278499 Operation Spare Parts List_Rev.1",
+    "interaction": [
+      {
+        "question": "Cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-001 của thiết bị K06101 / KT06101 có mã bản vẽ tham chiếu là gì?",
+        "answer": "Theo danh mục phụ tùng vận hành, cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-001 có mã bản vẽ tham chiếu là 3N4-019421.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 70,
+    "document_name": "069_3N4-S4278499 Operation Spare Parts List_Rev.1",
+    "interaction": [
+      {
+        "question": "Các vật liệu chính để chế tạo Cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-002 của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng vận hành, các vật liệu chính để chế tạo cụm rotor máy nén (COMPRESSOR ROTOR ASSEMBLY) mã hiệu U-002 bao gồm: SUS420J2, SUS420J1, SNCM439, HUS60, S45C và SCM440.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 71,
+    "document_name": "091B_3N4-S4275548-Operational Spare Parts List Of Gear_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu của trục răng (PINION SHAFT) của hộp số HCD025 của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng vận hành, vật liệu của trục răng (PINION SHAFT) của hộp số HCD025 là SNC815.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 72,
+    "document_name": "091B_3N4-S4275548-Operational Spare Parts List Of Gear_Rev.0",
+    "interaction": [
+      {
+        "question": "Vật liệu của trục bánh răng (GEAR SHAFT) của hộp số HCD025 của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng vận hành, vật liệu của trục bánh răng (GEAR SHAFT) của hộp số HCD025 là SCM420.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 73,
+    "document_name": "Attachment 2_3N4-S4287479",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng Mê cung gạt dầu (OIL SCRAPER LABYRINTH) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Phụ tùng Mê cung gạt dầu (OIL SCRAPER LABYRINTH), mã hiệu S-049, là AC7A-F.",
+        "source_page": 11
+      }
+    ]
+  },
+  {
+    "STT": 74,
+    "document_name": "AAttachment 2_3N4-S4287479",
+    "interaction": [
+      {
+        "question": "Vật liệu của Phụ tùng Vòng đệm làm kín (SEAL WASHER) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục phụ tùng 2 năm, vật liệu của Phụ tùng Vòng đệm làm kín (SEAL WASHER), mã hiệu S-069, là SPCC.",
+        "source_page": 15
+      }
+    ]
+  },
+  {
+    "STT": 75,
+    "document_name": "special tool- MANUAL(COMPRESSOR)l-2",
+    "interaction": [
+      {
+        "question": "Vật liệu của dụng cụ Cảo khớp nối (GEAR PULLER) phía tuabin (TURBINE SIDE) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục dụng cụ chuyên dụng, bộ dụng cụ Cảo khớp nối (GEAR PULLER) phía tuabin, mã hiệu T-047, bao gồm các chi tiết làm từ vật liệu SCM440 (GUIDE), S45C (SLEEVE), SCM435 (PLUG), và NBR (O-RING).",
+        "source_page": 11
+      }
+    ]
+  },
+  {
+    "STT": 76,
+    "document_name": "special tool- MANUAL(COMPRESSOR)l-2",
+    "interaction": [
+      {
+        "question": "Vật liệu của dụng cụ Chìa vặn lục giác (HEXAGON WRENCH KEY) kích thước 10mm của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Theo danh mục dụng cụ chuyên dụng, vật liệu của bộ dụng cụ Chìa vặn lục giác (HEXAGON WRENCH KEY), bao gồm cả kích thước 10mm (mã hiệu T-101-07), là SCM435.",
+        "source_page": 20
+      }
+    ]
+  },
+  {
+    "STT": 77,
+    "document_name": "special tool- MANUAL(COMPRESSOR)l-2",
+    "interaction": [
+      {
+        "question": "Dụng cụ có mã số (Tool No.): T-001 của thiết bị K06101 / KT06101 có số lượng bao nhiêu ?",
+        "answer": "1 set.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 78,
+    "document_name": "special tool- MANUAL(COMPRESSOR)l-2",
+    "interaction": [
+      {
+        "question": "Dụng cụ 'PISTON ROD & FOOT' (Tool No. T-006) được làm từ vật liệu gì ?",
+        "answer": "Vật liệu: SCM440 (ASTM A322 Gr.4140).",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 79,
+    "document_name": "special tool- MANUAL(COMPRESSOR)l-2",
+    "interaction": [
+      {
+        "question": "Dụng cụ 'CENTERING TOOL' có mã số T-016 được sử dụng cho thiết bị nào ?",
+        "answer": "Dụng cụ T-016 dùng cho khớp nối trục (FOR COUPLING (GEAR-HP)).",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 80,
+    "document_name": "3N4-S4275356 Steam turbine datasheet",
+    "interaction": [
+      {
+        "question": "Model của tuabin hơi (STEAM TURBINE) cho thiết bị K06101 / KT06101 là gì?",
+        "answer": "Model của tuabin hơi (STEAM TURBINE) cho thiết bị K06101 / KT06101 là ENKS40/45.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 81,
+    "document_name": "3N4-S4275356 Steam turbine datasheet",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo rotor của tuabin hơi cho thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu chế tạo rotor của tuabin hơi cho thiết bị K06101 / KT06101 là 28CrMoNiV49.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 82,
+    "document_name": "3N4-S4275356 Steam turbine datasheet",
+    "interaction": [
+      {
+        "question": "Trong điều kiện vận hành 'Bình thường' (Normal), nhiệt độ hơi đầu vào (Inlet Temperature) của tuabin hơi KT06101 là bao nhiêu?",
+        "answer": "Nhiệt độ hơi đầu vào: 370 °C.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 83,
+    "document_name": "3N4-S4275356",
+    "interaction": [
+      {
+        "question": "Lưu lượng hơi trích (Extraction Flow) tối đa của tuabin hơi của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Lưu lượng hơi trích (Extraction Flow) tối đa của tuabin hơi của thiết bị K06101 / KT06101 là 63500 kg/giờ.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 84,
+    "document_name": "3N4-S4275356",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo vỏ tuabin cao áp (HIGH PRESSURE CASING) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu chế tạo vỏ tuabin cao áp (HIGH PRESSURE CASING) của thiết bị K06101 / KT06101 là ZG22Mo.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 85,
+    "document_name": "3N4-S4275356",
+    "interaction": [
+      {
+        "question": "Giá trị tốc độ ngắt quá tốc (Overspeed Trip) của tuabin hơi KT06101 được cài đặt là bao nhiêu vòng/phút (RPM)?",
+        "answer": "Giá trị tốc độ ngắt quá tốc (Overspeed Trip) là 8846 RPM.",
+        "source_page": 9
+      }
+    ]
+  },
+  {
+    "STT": 86,
+    "document_name": "3N4-S4275357",
+    "interaction": [
+      {
+        "question": "Model của Bình ngưng bề mặt (SURFACE CONDENSER) của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Model của Bình ngưng bề mặt (SURFACE CONDENSER) của thiết bị K06101 / KT06101 là N-1600-22.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 87,
+    "document_name": "3N4-S4275357",
+    "interaction": [
+      {
+        "question": "Vật liệu chế tạo các ống (TUBES) trong bình ngưng của thiết bị K06101 / KT06101 là gì?",
+        "answer": "Vật liệu chế tạo các ống (TUBES) trong bình ngưng của thiết bị K06101 / KT06101 là B338-2.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 88,
+    "document_name": "109_3N4-S4275358 Piping Connection List _Rev.1",
+    "interaction": [
+      {
+        "question": "Kết nối đầu vào hơi làm kín (Sealing Steam Inlet) của tuabin hơi ENKS40/45 có mã hiệu là gì và kích thước danh nghĩa là bao nhiêu?",
+        "answer": "Kết nối đầu vào hơi làm kín (Sealing Steam Inlet) của tuabin hơi ENKS40/45 có mã hiệu là 'Da' và có đường kính danh nghĩa là 1 inch, cấp áp suất 600lbs.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 89,
+    "document_name": "109_3N4-S4275358 Piping Connection List _Rev.1",
+    "interaction": [
+      {
+        "question": "Kết nối đầu vào dầu bôi trơn (Lube oil inlet) của tuabin hơi ENKS40/45 có mã hiệu là gì và kích thước danh nghĩa là bao nhiêu?",
+        "answer": "Kết nối đầu vào dầu bôi trơn (Lube oil inlet) của tuabin hơi ENKS40/45 có mã hiệu là 'Oa' và có đường kính danh nghĩa là 3 inch, cấp áp suất 150lbs.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 90,
+    "document_name": "113_3N4-S4275360 Steam Consumption Curve _Rev.1",
+    "interaction": [
+      {
+        "question": "Công suất hoạt động bình thường (Normal Power) của tuabin hơi ENKS40/45/60 của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Công suất hoạt động bình thường (Normal Power) của tuabin hơi ENKS40/45/60 là 9481 kW.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 91,
+    "document_name": "113_3N4-S4275360 Steam Consumption Curve _Rev.1",
+    "interaction": [
+      {
+        "question": "Lưu lượng hơi cấp chính (Inlet flow) tại điểm hoạt động bình thường của tuabin hơi ENKS40/45/60 của thiết bị K06101 / KT06101 là bao nhiêu?",
+        "answer": "Tại điểm hoạt động bình thường, lưu lượng hơi cấp chính (Inlet flow) của tuabin hơi ENKS40/45/60 là 93.23 t/h.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 92,
+    "document_name": "07087-06000-CP22-K06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Áp suất đầu ra (Discharge Pressure) của thiết bị K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+        "answer": "Áp suất đầu ra của máy nén CO2 K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là 158 bar A.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 93,
+    "document_name": "07087-06000-CP22-K06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Thành phần phần trăm mol của khí Carbon dioxide (CO2) ở đầu vào cấp 1 của thiết bị K06101 trong điều kiện bình thường là bao nhiêu?",
+        "answer": "Trong điều kiện bình thường, thành phần phần trăm mol của khí Carbon dioxide (CO2) ở đầu vào cấp 1 của thiết bị K06101 là 99%.",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 94,
+    "document_name": "07087-06000-CP22-K06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Vật liệu của trục (Shaft) được quy định như thế nào cho máy nén CO2 K06101?",
+        "answer": "Vật liệu trục (Shaft): SUS420J2 (A479 type420).",
+        "source_page": 7
+      }
+    ]
+  },
+  {
+    "STT": 95,
+    "document_name": "07087-06000-CP22-K06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Giới hạn độ rung (Vibration) cho phép khi kiểm tra (Allowable test level) của máy nén CO2 K06101 là bao nhiêu?",
+        "answer": "Giới hạn độ rung cho phép (Peak to peak): 0.0236 mm.",
+        "source_page": 7
+      }
+    ]
+  },
+  {
+    "STT": 96,
+    "document_name": "07087-CP22-E06140 rev 0C",
+    "interaction": [
+      {
+        "question": "Vật liệu của các ống (Tubes) của thiết bị E06140 là gì?",
+        "answer": "Theo bảng dữ liệu, vật liệu của các ống (Tubes) trong bình ngưng bề mặt của thiết bị E06140 là Titanium.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 97,
+    "document_name": "07087-CP22-E06140 rev 0C",
+    "interaction": [
+      {
+        "question": "Áp suất hơi nước đầu vào (Inlet steam pressure) của thiết bị E06140 là bao nhiêu?",
+        "answer": "Theo ghi chú trong bảng dữ liệu, áp suất hơi nước đầu vào của thiết bị E06140 sẽ là 0.15 Bar(A).",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 98,
+    "document_name": "07087-CP22-KT06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Áp suất và nhiệt độ hơi nước đầu vào (Inlet) bình thường của thiết bị KT06101 là bao nhiêu?",
+        "answer": "Theo bảng dữ liệu, áp suất và nhiệt độ hơi nước đầu vào (Inlet) bình thường của thiết bị KT06101 lần lượt là 39 Bar A và 370°C.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 99,
+    "document_name": "07087-CP22-KT06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Lưu lượng hơi trích (Extraction Flow) ở điều kiện hoạt động bình thường của thiết bị KT06101 là bao nhiêu?",
+        "answer": "Theo bảng dữ liệu, lưu lượng hơi trích (Extraction Flow) ở điều kiện hoạt động bình thường của thiết bị KT06101 là 57950 kg/h.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 100,
+    "document_name": "07087-CP22-KT06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Tốc độ tới hạn đầu tiên (First Critical Speed) của tuabin hơi KT06101 là bao nhiêu vòng/phút (RPM)?",
+        "answer": "Tốc độ tới hạn đầu tiên là 3494 RPM.",
+        "source_page": 4
+      }
+    ]
+  },
+  {
+    "STT": 101,
+    "document_name": "07087-CP22-KT06101 rev 0F",
+    "interaction": [
+      {
+        "question": "Tại điểm vận hành định mức (Rated), công suất (Power) của tuabin hơi KT06101 được thiết kế là bao nhiêu?",
+        "answer": "Tại điểm vận hành định mức (Rated): Công suất là 10030 kW.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 102,
+    "document_name": "116_3N4-S4275354 Instrument List  _Rev.1",
+    "interaction": [
+      {
+        "question": "Thiết bị đo áp suất (PRESSURE TRANSMITTER) tại đường hơi trích (EXTRACTION) của tuabin hơi K06101 / KT06101 có mã hiệu là gì và dải đo của nó là bao nhiêu?",
+        "answer": "Theo danh sách thiết bị đo, thiết bị đo áp suất tại đường hơi trích (EXTRACTION), mã hiệu 06-PT-101/-0250, có dải đo từ 0 đến 60 BarG.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 103,
+    "document_name": "116_3N4-S4275354 Instrument List  _Rev.1",
+    "interaction": [
+      {
+        "question": "Thiết bị đo nhiệt độ (RTD DUPLEX TYPE) tại ổ đỡ hướng kính phía sau (REAR JOURNAL BEARING) của tuabin hơi K06101 / KT06101 có mã hiệu là gì và dải đo là bao nhiêu?",
+        "answer": "Theo danh sách thiết bị đo, thiết bị đo nhiệt độ tại ổ đỡ hướng kính phía sau (REAR JOURNAL BEARING), mã hiệu 06-TE-0256/-0257, có dải đo từ 0 đến 200°C.",
+        "source_page": 4
+      }
+    ]
+  },
+  {
+    "STT": 104,
+    "document_name": "116_3N4-S4275354 Instrument List  _Rev.1",
+    "interaction": [
+      {
+        "question": "Thiết bị đo áp suất có Tag No. 06-PT-0250 được sử dụng để đo cái gì (Measuring point) ?",
+        "answer": "Thiết bị đo áp suất Tag No. 06-PT-0250 dùng để đo áp suất hơi trích (EXTRACTION)",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 105,
+    "document_name": "116_3N4-S4275354 Instrument List  _Rev.1",
+    "interaction": [
+      {
+        "question": "Thiết bị đo mức (Level Transmitter) có Tag No. 06-LT-0250 có dải đo (Range) là bao nhiêu?",
+        "answer": "Dải đo (Range): ±150mm.",
+        "source_page": 5
+      }
+    ]
+  },
+  {
+    "STT": 106,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Số nhận dạng của Rotor chính (Main Rotor identification-No) của tuabin hơi KT06101 là gì?",
+        "answer": "Theo tài liệu hướng dẫn lắp ráp, số nhận dạng của Rotor chính (Main Rotor identification-No) là 0887.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 107,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Số nhận dạng của Rotor dự phòng (Spare Rotor identification-No) của tuabin hơi KT06101 là gì?",
+        "answer": "Theo tài liệu hướng dẫn lắp ráp, số nhận dạng của Rotor dự phòng (Spare Rotor identification-No) là 0898.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 108,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Lưu lượng hơi đầu vào (Inlet Flow) của tuabin KT06101 trong điều kiện vận hành bình thường (Normal) là bao nhiêu?",
+        "answer": "57950 kg/h",
+        "source_page": 3
+      }
+    ]
+  },
+  {
+    "STT": 109,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Tốc độ quay liên tục tối đa (Max Cont. Speed) của tuabin hơi KT06101 được quy định là bao nhiêu?",
+        "answer": "8190 RPM",
+        "source_page": 4
+      }
+    ]
+  },
+  {
+    "STT": 110,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Dựa vào bản vẽ khe hở lắp ráp của bộ ngắt khẩn cấp (Emergency Trip Gear) của thiết bị tuabin hơi KT06101, giá trị khe hở thực tế (Actual) S1 là bao nhiêu?",
+        "answer": "0.90 mm",
+        "source_page": 13
+      }
+    ]
+  },
+  {
+    "STT": 111,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Theo bảng điều chỉnh xi lanh rơ le (Relay Cylinder Adjustment) của thiết bị tuabin hơi KT06101, hành trình thực tế (Actual Stroke) đạt bao nhiêu khi áp suất piston (Follower piston pressure) là 4.50 bar?",
+        "answer": "125.0 mm",
+        "source_page": 35
+      }
+    ]
+  },
+  {
+    "STT": 112,
+    "document_name": "KT06101_Assembly Clearance Records",
+    "interaction": [
+      {
+        "question": "Trong bảng khe hở phần thông lưu (Flowing Clearance) của thiết bị tuabin hơi KT06101, tại vị trí 6/106, giá trị khe hở thực tế (Actual) cho mục SALA là bao nhiêu?",
+        "answer": "5.40 mm",
+        "source_page": 32
+      }
+    ]
+  },
+  {
+    "STT": 113,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Việc lắp đặt tuabin hơi của thiết bị K06101 / KT06101 yêu cầu nhiệt độ môi trường xung quanh ở mức nào?",
+        "answer": "Theo tài liệu hướng dẫn vận hành, việc lắp đặt tuabin hơi nên được thực hiện ở nhiệt độ môi trường trên 5°C. Nếu nhiệt độ xuống dưới 0°C, cần phải thực hiện các biện pháp chống đông cần thiết.",
+        "source_page": 2
+      }
+    ]
+  },
+  {
+    "STT": 114,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Cường độ nén của vữa chèn (grouting) cho móng tuabin hơi của thiết bị K06101 / KT06101 sau 72 giờ phải đạt yêu cầu tối thiểu là bao nhiêu?",
+        "answer": "Theo tài liệu hướng dẫn vận hành, cường độ nén của vữa chèn cho móng tuabin hơi sau 72 giờ phải đạt tối thiểu là ≥60N/mm².",
+        "source_page": 6
+      }
+    ]
+  },
+  {
+    "STT": 115,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Trước khi lắp đặt tuabin hơi của thiết bị K06101 / KT06101, bề mặt của các bộ phận bên trong cần được xử lý như thế nào để chống ăn mòn?",
+        "answer": "Bề mặt của các bộ phận bên trong cần được sơn bằng dầu chống gỉ số 2 (2# rust proof oil) để ngăn ngừa ăn mòn trong quá trình vận chuyển và lưu kho.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 116,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Quy trình kiểm tra độ lệch tâm (alignment) giữa rotor và vỏ máy (casing) tuabin hơi của thiết bị K06101 / KT06101 sử dụng công cụ gì và tiêu chuẩn chấp nhận là bao nhiêu?",
+        "answer": "Sử dụng thước dây thép (thread steel tape), kết nối cố định (fixed connection), tấm góc (angle plate) và đồng hồ so (dial gauge). Tiêu chuẩn chấp nhận là độ lệch tâm ≤ ±0.03mm.",
+        "source_page": 10
+      }
+    ]
+  },
+  {
+    "STT": 117,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Khi kiểm tra khe hở đỉnh (crest clearance) của ổ bi hướng tâm (radial bearing) tuabin hơi của thiết bị K06101 / KT06101 loại 2 hoặc 4 nêm (two- and four-wedge), phương pháp đo là gì?",
+        "answer": "Đo đường kính trong của ổ bi và đường kính ngoài của cổ trục (shaft journal). Hiệu số giữa hai giá trị này chính là khe hở đỉnh.",
+        "source_page": 18
+      }
+    ]
+  },
+  {
+    "STT": 118,
+    "document_name": "KT06101_Installation instruction",
+    "interaction": [
+      {
+        "question": "Mô-men xoắn siết chặt ban đầu (Initial tightened torque A) cho bu lông neo (anchor bolt) tuabin hơi của thiết bị K06101 / KT06101 kích thước M42 là bao nhiêu Nm?",
+        "answer": "40 Nm.",
+        "source_page": 15
+      }
+    ]
+  },
+  {
+    "STT": 119,
+    "document_name": "manual",
+    "interaction": [
+      {
+        "question": "Công suất định mức (Rated power) của tuabin hơi WT8043 loại ENK40/45/60 là bao nhiêu?",
+        "answer": "Theo tài liệu Hướng dẫn vận hành, công suất định mức của tuabin hơi WT8043 loại ENK40/45/60 là 11040 kW.",
+        "source_page": 21
+      }
+    ]
+  },
+  {
+    "STT": 120,
+    "document_name": "manual",
+    "interaction": [
+      {
+        "question": "Tốc độ cắt (Trip speed) của tuabin hơi WT8043 loại ENK40/45/60 là bao nhiêu?",
+        "answer": "Theo tài liệu Hướng dẫn vận hành, tốc độ cắt của tuabin hơi WT8043 loại ENK40/45/60 là 9009 vòng/phút (r/min).",
+        "source_page": 21
+      }
+    ]
+  },
+  {
+    "STT": 121,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Mã sản phẩm (Product code) của tuabin hơi có loại sản phẩm (Product type) ENK40/45/60 là gì?",
+        "answer": "Theo tài liệu Hướng dẫn vận hành, mã sản phẩm của tuabin hơi loại ENK40/45/60 là T8043.",
+        "source_page": 1
+      }
+    ]
+  },
+  {
+    "STT": 122,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Các thông số hơi nước đầu vào (Inlet steam parameters) thông thường của tuabin hơi model N của thiết bị tuabin hơi WT8043 là gì?",
+        "answer": "Theo tài liệu Hướng dẫn vận hành, các thông số hơi nước đầu vào thông thường (Usual inlet steam parameters) của tuabin hơi model N là tối đa 10.0MPa(a) và 510°C.",
+        "source_page": 11
+      }
+    ]
+  },
+  {
+    "STT": 123,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Trong quá trình lắp đặt, khi căn chỉnh khớp nối (coupling) giữa tuabin và máy được dẫn động (driven machine) của thiết bị tuabin hơi WT8043, điều kiện nào cần được kiểm tra nếu tuabin có bộ phận dẫn động cho bộ điều tốc và bơm dầu chính?",
+        "answer": "Cần kiểm tra độ đồng tâm (centering) của khớp nối giữa trục dẫn động của bộ phận dẫn động (driving shaft of the drive element) và rotor tuabin.",
+        "source_page": 12
+      }
+    ]
+  },
+  {
+    "STT": 124,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Khi siết chặt bu lông mặt bích vỏ máy (casing-split bolts) của thiết bị tuabin hơi WT8043, phương pháp nào được khuyến nghị cho các bu lông làm từ vật liệu NiCr20TiAl hoặc có đường kính ren >= M52?",
+        "answer": "Phải sử dụng phương pháp siết nhiệt (heat-tightening) hoặc căng thủy lực (hydraulic-tensioning).",
+        "source_page": 16
+      }
+    ]
+  },
+  {
+    "STT": 125,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Để tránh ăn mòn bên trong tuabin trong thời gian dừng máy dài hạn, độ ẩm tương đối của không khí bên trong vỏ máy của thiết bị tuabin hơi WT8043 cần được duy trì ở mức nào?",
+        "answer": "Độ ẩm tương đối bên trong vỏ máy cần được giữ ở mức dưới 50%.",
+        "source_page": 248
+      }
+    ]
+  },
+  {
+    "STT": 126,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Trong quá trình khởi động của thiết bị tuabin hơi WT8043, tốc độ tăng tốc (speed rising rate) từ tốc độ quay chậm (low limit speed) đến tốc độ định mức (rated speed) nên là bao nhiêu so với thời gian khởi động tA?",
+        "answer": "Tốc độ tăng tốc nên chậm, thời gian khoảng 0.6 tA.",
+        "source_page": 200
+      }
+    ]
+  },
+  {
+    "STT": 127,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Khi kiểm tra độ rung trục (shaft vibration) của thiết bị tuabin hơi WT8043, nếu biên độ rung tăng từ 5µm lên 25µm nhưng vẫn nằm trong giới hạn cho phép, điều này có ý nghĩa gì?",
+        "answer": "Sự thay đổi biên độ rung này (tăng gấp 5 lần) có thể là dấu hiệu báo trước sự xuất hiện của lỗi (foreshow the appearance of the fault), cần được cảnh báo và tìm nguyên nhân dù chưa đạt mức báo động.",
+        "source_page": 218
+      }
+    ]
+  },
+  {
+    "STT": 128,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Trong trường hợp nào thì nên sử dụng phương pháp làm sạch bằng hóa chất (chemical flushing) để loại bỏ cặn bám trong đường hơi (steam path) của thiết bị tuabin hơi WT8043?",
+        "answer": "Khi phương pháp xả bằng hơi ẩm (flushing with wet steam) không thể làm sạch hiệu quả lớp cặn silic (silicon deposit).",
+        "source_page": 257
+      }
+    ]
+  },
+  {
+    "STT": 129,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Khi thực hiện đại tu (Major overhaul), các hạng mục kiểm tra nào là bắt buộc (Essential) đối với hộp số (gearing) của thiết bị tuabin hơi WT8043 ?",
+        "answer": "Kiểm tra hộp số (Inspect gearing) là bắt buộc (Essential) trong đại tu. Khuyến nghị kiểm tra trong 8000 giờ vận hành đầu tiên.",
+        "source_page": 270
+      }
+    ]
+  },
+  {
+    "STT": 130,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Áp suất hơi đầu vào (Inlet steam pressure) và nhiệt độ hơi đầu vào (Inlet steam temperature) của tuabin hơi WT8043 là bao nhiêu?",
+        "answer": "Áp suất hơi đầu vào: 3.92 MPa(a); Nhiệt độ hơi đầu vào: 370/390 °C (Bình thường/Tối đa).",
+        "source_page": 25
+      }
+    ]
+  },
+  {
+    "STT": 131,
+    "document_name": "Operating Manual KT06101_0-2520-8043-00-en",
+    "interaction": [
+      {
+        "question": "Khi nào thì van một chiều (One-way valve) của van tiết lưu một chiều (One-way throttle valve) của thiết bị tuabin hơi WT8043 sẽ mở ra?",
+        "answer": "Van một chiều sẽ mở khi áp suất tại đầu A cao hơn áp suất tại đầu B một khoảng 0.05 MPa.",
+        "source_page": 147
+      }
+    ]
+  }
+]

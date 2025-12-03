@@ -78,8 +78,8 @@ def extract_text_with_parent_fallback(
     """
     Phase 3 helper: Extract text for LLM context, preferring parent_text over child text.
 
-    Retrieval searches against child chunks (small, dense blocks ~400 chars),
-    but generation should use parent chunks (large semantic blocks ~1800 chars).
+    Retrieval searches against child chunks (section content, split by max_chunk_size),
+    but generation should use parent chunks (heading + summary for context).
 
     Priority:
     1. Top-level 'parent_text' field (OpenSearch)

@@ -172,17 +172,20 @@ Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, t
 ## 5) Chunking & Metadata
 
 * **Chunking Strategy (Phase 3)**: Structure-based Hierarchical Chunking
-  * **Parent Chunks**: Markdown Headings (Context)
-    * Derived from document structure (#, ##)
-    * Purpose: Provide semantic context for child chunks
-  * **Child Chunks**: Section Content (Retrieval)
-    * Split by sentence window or paragraphs
-    * Purpose: Precise keyword/semantic matching
-  * **How it works**:
-    * Retrieval searches child chunks (high precision)
-    * Child chunks link to parent via `parent_id`
-    * **Precise Page Mapping**: Uses character-index mapping to fix page offset bugs
-  * **Implementation**: `HierarchicalChunker` class in `app/rag/chunkers/hierarchical_chunker.py`
+  * **HierarchicalChunker** (`app/rag/chunkers/hierarchical_chunker.py`)
+  * **Strategies hỗ trợ**: `hierarchical` (mặc định), `sentence-window`, `small-to-big`
+  * **Parameters mặc định**:
+    * `max_chunk_size`: 1000 chars (configurable via `--chunk-size`)
+    * `min_chunk_size`: 100 chars
+    * `chunk_overlap`: 50 chars (configurable via `--chunk-overlap`)
+  * **Hierarchical Strategy**:
+    * **Parent Chunks**: Heading text + 200 chars summary của content
+    * **Child Chunks**: Section content, split by paragraphs với max_chunk_size
+    * Child chunks liên kết parent via `parent_chunk_id`
+  * **Page-Aware Chunking** (v1.7.1 fix):
+    * Method `chunk_markdown_with_pages()` builds character-index mapping
+    * Ensures precise page numbers (fixes page 31+ offset bug)
+  * **Post-processing**: Merge small chunks (<min_chunk_size) with neighbors on same page
 * **Metadata tối thiểu**: `doc_id`, `page / page_start / page_end`, `source_format (vector|scan)`.
 * **Phase 3 Metadata**: `parent_text`, `parent_id`, `chunk_type`, `is_parent`, `parent_index`, `parent_char_count`
 * **Taxonomy (mở)**:

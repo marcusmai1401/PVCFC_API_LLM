@@ -2,7 +2,7 @@
 
 **PVCFC RAG System - End-to-End Data Flow**
 **Date:** 2025-11-24
-**Version:** 1.7.1 (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + Parent-Child Chunking + 4 Critical Bug Fixes)
+**Version:** 1.7.1 (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + HierarchicalChunker + 4 Critical Bug Fixes)
 
 ---
 

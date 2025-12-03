@@ -212,6 +212,13 @@ audit_run.txt
 Rules/
 
 # =====================================
+# ARCHIVE DATA (OCR cache, staging data)
+# =====================================
+archive/**/data/**
+archive/**/ocr_cache/**
+archive/**/staging/**
+
+# =====================================
 # IMPORTANT NOTES:
 # =====================================
 # 1. This .gitignore protects sensitive files from GitHub

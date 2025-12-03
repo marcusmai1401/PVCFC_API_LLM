@@ -2,7 +2,7 @@
 
 **Version**: 1.7.1
 **Last Updated**: 2025-11-24
-**Document**: Complete Pipeline & Architecture (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + Parent-Child Chunking + 300s Client Timeout + 4 Critical Bug Fixes)
+**Document**: Complete Pipeline & Architecture (Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + HierarchicalChunker + 300s Client Timeout + 4 Critical Bug Fixes)
 
 ---
 
@@ -296,12 +296,14 @@ RAW PDF FILES
     • OCR if needed (Google Cloud Vision API + Real-ESRGAN)
     • Extract text + metadata
     ↓
-[2] CHUNKING (PARENT-CHILD STRATEGY - PHASE 3) ⭐
-    • Parent-Child Hierarchical Chunking
-    • Parent: ~1800 chars (overlap 200) - for LLM context
-    • Child: ~400 chars (overlap 50) - for retrieval
-    • Child chunks store parent_text directly (no joins)
-    • Keep page metadata (v1.7.1 FIX: Page-aware chunking with index mapping, eliminates page 31+ bug)
+[2] CHUNKING (HIERARCHICAL STRATEGY - PHASE 3) ⭐
+    • HierarchicalChunker (app/rag/chunkers/hierarchical_chunker.py)
+    • Strategies: hierarchical (default), sentence-window, small-to-big
+    • Parameters: max_chunk_size=1000, min_chunk_size=100, chunk_overlap=50
+    • Parent: Heading + 200 chars summary (context provider)
+    • Child: Section content split by paragraphs (retrieval targets)
+    • Child chunks link to parent via parent_chunk_id
+    • Page-aware chunking (v1.7.1 FIX): chunk_markdown_with_pages() with index mapping
     ↓
 [3] DEDUPLICATION
     • Current mode (v1.7.1): cả dedup theo file_hash **và** content-based dedup **đều đang tắt** trong ingestion online; mọi PDF (kể cả bản trùng) đều được xử lý và index.
@@ -707,30 +709,37 @@ content_hash = hashlib.sha1(normalized.encode()).hexdigest()
 from app.rag.chunkers.hierarchical_chunker import HierarchicalChunker
 
 chunker = HierarchicalChunker(
-    chunking_strategy="hierarchical"  # Structure-based
+    max_chunk_size=1000,        # Configurable via --chunk-size
+    min_chunk_size=100,         # Chunks smaller than this are merged
+    chunk_overlap=50,           # Overlap between chunks
+    chunking_strategy="hierarchical",  # Options: hierarchical, sentence-window, small-to-big
+    sentence_window_size=3,     # For sentence-window strategy
 )
 
 # Hierarchical process:
 # 1. Parse Markdown structure (Headings #, ##)
-# 2. Create Parent Chunks from Headings (Context)
-# 3. Create Child Chunks from Section Content (Retrieval)
-# 4. Link Child to Parent via parent_id
-# 5. Page-Awareness: Use character-index mapping for precise page numbers
+# 2. Create Parent Chunks: heading + first 200 chars of content
+# 3. Create Child Chunks: section content split by paragraphs
+# 4. Link Child to Parent via parent_chunk_id
+# 5. Page-Awareness: chunk_markdown_with_pages() with index mapping
+# 6. Post-process: Merge small chunks with neighbors on same page
 
+# Page-aware method (RECOMMENDED for accurate page metadata)
 chunks = chunker.chunk_markdown_with_pages(
-    pages=[(1, "text...")],
+    pages=[(1, "page 1 text..."), (2, "page 2 text...")],
     doc_id=doc_id,
     metadata={"doc_type": "manual"}
 )
 
 # Each child chunk has:
 # - text: content text - INDEXED for retrieval
-# - parent_id: ID of the heading chunk (context)
-# - metadata.chunk_type: "child"
+# - parent_chunk_id: ID of the heading chunk (context)
+# - metadata.chunk_type: "child" or "parent"
 # - metadata.page: precise page number from index map
+# - page_numbers: list of all pages covered (for multi-page chunks)
 ```
 
-> **Phase 3 Chunking Note**: System uses **Hierarchical Chunking** based on document structure (Headings -> Content). This ensures that retrieved chunks (children) always have a semantic link to their section header (parent), providing better context for the LLM than simple size-based splitting. It also implements **precise page mapping** to fix citation errors.
+> **Phase 3 Chunking Note**: System uses **HierarchicalChunker** based on document structure. Parent chunks contain heading + 200 char summary for context. Child chunks contain section content split by paragraphs with configurable max_chunk_size (default 1000 chars). Method `chunk_markdown_with_pages()` ensures precise page metadata via character-index mapping.
 
 ### 4.2 Deduplication
 
@@ -1571,8 +1580,8 @@ def extract_text_with_parent_fallback(
     """
     Phase 3 helper: Extract text for LLM context.
 
-    Retrieval searches child chunks (small, ~400 chars),
-    but generation should use parent text (large, ~1800 chars).
+    Retrieval searches child chunks (section content, configurable size),
+    but generation should use parent text (heading + summary, more context).
 
     Priority:
     1. Top-level 'parent_text' (OpenSearch)
@@ -1617,9 +1626,9 @@ full_context = "\n\n".join(context_blocks)
 ```
 
 **Impact:**
-- ✅ LLM receives complete semantic context (~1800 chars)
+- ✅ LLM receives complete semantic context (parent heading + summary)
 - ✅ No context fragmentation
-- ✅ Retrieval still uses precise child chunks
+- ✅ Retrieval still uses precise child chunks (section content)
 - ✅ No performance degradation (no joins)
 
 ---
