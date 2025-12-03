@@ -5,6 +5,13 @@
 # while .cursorignore allows Cursor to see everything
 
 # =====================================
+# PROJECT FOLDERS TO EXCLUDE
+# =====================================
+.kiro/
+archive/
+docs/
+
+# =====================================
 # ENVIRONMENT & SECRETS (CRITICAL!)
 # =====================================
 .env
