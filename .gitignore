@@ -11,6 +11,10 @@
 archive/
 docs/
 
+# Test data folders (contains sensitive evaluation questions)
+300 questions/
+300 answers/
+
 # =====================================
 # ENVIRONMENT & SECRETS (CRITICAL!)
 # =====================================

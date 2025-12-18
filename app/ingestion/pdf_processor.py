@@ -732,6 +732,46 @@ class PDFProcessor:
 
             logger.info(f"Saved processed document: {output_file}")
 
+    @staticmethod
+    def extract_gcv_words(gcv_response) -> list:
+        """
+        Extract word bounding boxes from Google Cloud Vision API response.
+
+        This helper method converts GCV text_annotations into a list of
+        word dictionaries with text and bounding box coordinates.
+
+        Args:
+            gcv_response: Response object from Vision API text_detection()
+
+        Returns:
+            List of dicts with 'text' and 'bbox' (x0, y0, x1, y1) in pixels.
+            Returns empty list if response is None or has no annotations.
+
+        Requirements: 2.1 - Extract word bounding boxes from text_annotations
+        """
+        if not gcv_response or not gcv_response.text_annotations:
+            return []
+
+        words = []
+        # Skip first annotation (it's the full text), process individual words
+        for annotation in gcv_response.text_annotations[1:]:
+            text = annotation.description
+            vertices = annotation.bounding_poly.vertices
+
+            # Extract bounding box coordinates
+            # Handle cases where x or y might be missing (defaults to 0)
+            xs = [v.x if hasattr(v, "x") and v.x else 0 for v in vertices]
+            ys = [v.y if hasattr(v, "y") and v.y else 0 for v in vertices]
+
+            x0 = min(xs)
+            y0 = min(ys)
+            x1 = max(xs)
+            y1 = max(ys)
+
+            words.append({"text": text, "bbox": (x0, y0, x1, y1)})
+
+        return words
+
 
 # Export main classes
 __all__ = ["PDFProcessor", "PDFDocument", "PageContent"]

@@ -766,7 +766,7 @@ class HybridWithTagsRetriever:
         tags_status = health["components"]["spatial_search"]["status"]
 
         if hybrid_ok:
-            if tags_status in ["healthy", "disabled"]:
+            if tags_status in ["healthy", "disabled", "enabled"]:
                 health["overall_status"] = "healthy"
             else:
                 health["overall_status"] = "degraded"  # Tags down but chunks OK

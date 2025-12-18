@@ -59,8 +59,9 @@ class BaseLLMClient(ABC):
 class GeminiClient(BaseLLMClient):
     """Google Gemini client implementation"""
 
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, tier: str = "light"):
         super().__init__(api_key, model)
+        self.tier = tier  # Store tier for thinking_config lookup
         self._client = None
 
     def _get_client(self):
@@ -104,6 +105,29 @@ class GeminiClient(BaseLLMClient):
         # Add system_instruction if provided
         if system_prompt:
             config_params["system_instruction"] = system_prompt
+
+        # Add Gemini 3 thinking_config if configured
+        try:
+            from app.core.config import settings
+
+            thinking_level = (
+                settings.llm_thinking_level_light
+                if self.tier == "light"
+                else settings.llm_thinking_level_heavy
+            )
+            if thinking_level:
+                config_params["thinking_config"] = types.ThinkingConfig(
+                    thinking_level=thinking_level
+                )
+                logger.debug(
+                    f"Using thinking_level={thinking_level} for tier={self.tier}"
+                )
+
+            # Add media_resolution for high-quality image processing
+            if settings.llm_media_resolution:
+                config_params["media_resolution"] = settings.llm_media_resolution
+        except Exception as e:
+            logger.debug(f"Could not set thinking_config/media_resolution: {e}")
 
         config = types.GenerateContentConfig(**config_params)
 
@@ -270,11 +294,33 @@ class GeminiClient(BaseLLMClient):
             types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
         )
 
-        # Stream generate
-        config = types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-        )
+        # Stream generate config
+        config_params = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+
+        # Add Gemini 3 thinking_config if configured
+        try:
+            from app.core.config import settings
+
+            thinking_level = (
+                settings.llm_thinking_level_light
+                if self.tier == "light"
+                else settings.llm_thinking_level_heavy
+            )
+            if thinking_level:
+                config_params["thinking_config"] = types.ThinkingConfig(
+                    thinking_level=thinking_level
+                )
+
+            # Add media_resolution for high-quality image processing
+            if settings.llm_media_resolution:
+                config_params["media_resolution"] = settings.llm_media_resolution
+        except Exception:
+            pass
+
+        config = types.GenerateContentConfig(**config_params)
 
         # Ensure model name has correct format
         model_name = (
@@ -446,8 +492,11 @@ class LLMClientFactory:
 
         # Create client
         client_class = cls._providers[provider_lower]
-        logger.info(f"Creating {provider} client with model {model}")
+        logger.info(f"Creating {provider} client with model {model} (tier={tier})")
 
+        # Pass tier to client for thinking_config lookup (only GeminiClient uses it)
+        if provider_lower == "gemini":
+            return client_class(api_key=api_key, model=model, tier=tier)
         return client_class(api_key=api_key, model=model)
 
     @classmethod

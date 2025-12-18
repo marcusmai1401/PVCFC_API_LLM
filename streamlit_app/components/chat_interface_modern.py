@@ -4,6 +4,7 @@ Clean, enterprise-ready chat UI with citations and PDF viewer integration.
 """
 
 import os
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -11,11 +12,16 @@ from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
 
-# Import Split View Controller
+# Import PDF Modal Controller (faster than split panel - uses API URL streaming)
 try:
-    from streamlit_app.components.split_layout import open_pdf_panel
+    from streamlit_app.components.pdf_viewer_modal import open_pdf_modal
+    from streamlit_app.utils.citation_formatter import (
+        convert_to_ieee_style,
+        render_ieee_references,
+    )
 except ImportError:
-    from components.split_layout import open_pdf_panel
+    from components.pdf_viewer_modal import open_pdf_modal
+    from utils.citation_formatter import convert_to_ieee_style, render_ieee_references
 
 
 def render_chat_interface(api_base_url: str):
@@ -105,11 +111,6 @@ def render_empty_state():
             <p style="max-width: 400px; margin: 0 auto 2rem auto;">
                 I can help you find information in technical manuals, datasheets, and locate equipment on P&ID drawings.
             </p>
-            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                <span class="badge gray">Equipment Specs</span>
-                <span class="badge gray">Operating Procedures</span>
-                <span class="badge gray">Safety Guidelines</span>
-            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -117,66 +118,146 @@ def render_empty_state():
 
 
 def render_message(msg: Dict):
-    """Render a single chat message."""
+    """Render a single chat message with IEEE-style citations."""
     role = msg.get("role", "user")
     content = msg.get("content", "")
     citations = msg.get("citations", [])
+    doc_number_map = msg.get("doc_number_map", {})
 
     # Use CSS classes from modern.css
     css_class = "user" if role == "user" else "bot"
     avatar_icon = "👤" if role == "user" else "🤖"
 
+    # Convert to IEEE style for assistant messages
+    display_content = content
+    ieee_refs = []
+    if role == "assistant" and citations:
+        display_content, ieee_refs = convert_to_ieee_style(
+            content, citations, doc_number_map
+        )
+
+    # Clean excessive newlines to compact the display
+    if display_content:
+        # Replace 3 or more newlines with 2
+        display_content = re.sub(r"\n{3,}", "\n\n", display_content)
+        display_content = display_content.strip()
+
     # Markdown HTML for the bubble
+    # Inject CSS for compact spacing inside bubbles
+    st.markdown(
+        """
+        <style>
+        .chat-bubble p {
+            margin-bottom: 0.25rem !important;
+            line-height: 1.5 !important;
+        }
+        .chat-bubble ul, .chat-bubble ol {
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.25rem !important;
+            padding-left: 1.2rem !important;
+        }
+        .chat-bubble li {
+            margin-bottom: 0.1rem !important;
+            line-height: 1.5 !important;
+        }
+        .chat-bubble h1, .chat-bubble h2, .chat-bubble h3, .chat-bubble h4, .chat-bubble h5, .chat-bubble h6 {
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.25rem !important;
+        }
+        .chat-bubble .katex-display {
+            margin: 0.25rem 0 !important;
+        }
+        /* Reduce spacing between blocks */
+        .chat-bubble > div > p:empty {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     html = f"""
     <div class="chat-bubble {css_class}">
         <div class="chat-avatar">{avatar_icon}</div>
         <div style="font-weight: 600; font-size: 0.85rem; color: var(--color-text-tertiary); margin-bottom: 0.5rem;">
             {role.upper()}
         </div>
-        <div style="white-space: pre-wrap;">{content}</div>
+        <div style="white-space: pre-wrap;">{display_content}</div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
-    # Render Citations (only for bot)
-    if role == "assistant" and citations:
-        # Render citations outside the bubble for cleaner look, but indented
+    # Render IEEE References (only for bot with citations)
+    if role == "assistant" and ieee_refs:
         with st.container():
-            col_spacer, col_content = st.columns([0.1, 0.9])
-            with col_content:
-                with st.expander(f"📚 Referenced Documents ({len(citations)})"):
-                    for i, cit in enumerate(citations, 1):
-                        doc_id = cit.get("doc_id", "Unknown Document")
-                        page = cit.get("page", "?")
-                        text = cit.get("text", "")[:120] + "..."
-                        score = cit.get("score", 0)
-                        pdf_path = cit.get("pdf_path", "")
+            # Removed spacer columns to ensure left alignment
+            st.markdown("**Nguồn:**")
 
-                        # Citation Item Card
-                        st.markdown(
-                            f"""
-                            <div style="padding: 10px; border-bottom: 1px solid var(--color-border); margin-bottom: 8px;">
-                                <div style="font-weight: 600; color: var(--color-text-primary); display: flex; justify-content: space-between;">
-                                    <span>[{i}] {doc_id}</span>
-                                    <span class="badge gray">Page {page}</span>
-                                </div>
-                                <div style="font-size: 0.85rem; color: var(--color-text-secondary); margin: 4px 0;">
-                                    "{text}"
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
+            # Inject CSS for STRICT left-aligned text-like buttons
+            st.markdown(
+                """
+                <style>
+                /* Target tertiary buttons specifically in this context */
+                div[data-testid="stVerticalBlock"] button[kind="tertiary"] {
+                    justify-content: flex-start !important;
+                    text-align: left !important;
+                    padding-left: 0 !important;
+                    padding-right: 0 !important;
+                    border: none !important;
+                    color: #4f46e5 !important;
+                    background: transparent !important;
+                    box-shadow: none !important;
+                    height: auto !important;
+                    min-height: 0 !important;
+                    margin-bottom: 2px !important;
+                    width: 100% !important;
+                }
+
+                /* Target the inner markdown container to force left align */
+                div[data-testid="stVerticalBlock"] button[kind="tertiary"] div[data-testid="stMarkdownContainer"] p {
+                    text-align: left !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+
+                div[data-testid="stVerticalBlock"] button[kind="tertiary"]:hover {
+                    text-decoration: underline !important;
+                    color: #4338ca !important;
+                    background-color: transparent !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            for ref in ieee_refs:
+                ref_num = ref.get("ref_num", "?")
+                file_name = ref.get("file_name", "Unknown")
+                pages = ref.get("pages", [])
+                pdf_path = ref.get("pdf_path", "")
+
+                # Format pages string
+                pages_str = ", ".join(str(p) for p in sorted(pages)) if pages else ""
+
+                # Label: [1] Filename.pdf, trang 1, 2
+                label = f"[{ref_num}] {file_name}"
+                if pages_str:
+                    label += f", trang {pages_str}"
+
+                # Clickable Text Link (using tertiary button)
+                if st.button(
+                    label,
+                    key=f"ref_link_{hash(content)}_{ref_num}",
+                    type="tertiary",
+                    use_container_width=True,
+                ):
+                    if pdf_path:
+                        first_page = sorted(pages)[0] if pages else 1
+                        open_pdf_modal(pdf_path, first_page, file_name)
+                        st.rerun()
+                    else:
+                        st.toast(
+                            f"⚠️ Không tìm thấy file PDF cho tài liệu: {file_name}"
                         )
-
-                        # View Button - Opens in Split Panel
-                        if pdf_path:
-                            if st.button(
-                                "Open PDF",
-                                key=f"cit_btn_{hash(content)}_{i}",
-                                use_container_width=True,
-                            ):
-                                open_pdf_panel(pdf_path, page, doc_id)
-                                st.rerun()
 
 
 def render_input_area(api_base_url: str):
@@ -191,7 +272,7 @@ def render_input_area(api_base_url: str):
             width: 100%;
             background: white;
             border-top: 1px solid var(--color-border);
-            padding: 1.5rem;
+            padding: 1rem;
             z-index: 100;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
         ">
@@ -200,32 +281,14 @@ def render_input_area(api_base_url: str):
         unsafe_allow_html=True,
     )
 
-    # We can't put Streamlit widgets inside raw HTML divs easily, so we rely on standard flow
-    # but the CSS above creates the visual "bar".
-    # We just render the form normally at the bottom.
-
-    with st.form(key="chat_form", clear_on_submit=True):
-        col_in, col_btn = st.columns([6, 1])
-        with col_in:
-            user_input = st.text_input(
-                "Message",
-                placeholder="Type your question here...",
-                label_visibility="collapsed",
-                key="chat_input_field",
-            )
-        with col_btn:
-            # Align button vertically
-            st.markdown("<div style='height: 2px'></div>", unsafe_allow_html=True)
-            submitted = st.form_submit_button(
-                "Send", type="primary", use_container_width=True
-            )
-
-    if submitted and user_input.strip():
+    # st.chat_input handles the UI and submission automatically
+    # It stays at the bottom and expands as needed
+    if prompt := st.chat_input("Type your question here..."):
         # Add user message
         st.session_state.conversation_history.append(
             {
                 "role": "user",
-                "content": user_input,
+                "content": prompt,
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
@@ -245,11 +308,23 @@ def render_input_area(api_base_url: str):
             if response.get("success"):
                 data = response["data"]
                 st.session_state.conversation_id = data.get("conversation_id")
+
+                # Extract doc_number_map from metadata
+                doc_number_map = {}
+                meta = data.get("meta", {})
+                if meta.get("doc_number_map"):
+                    doc_number_map = meta.get("doc_number_map")
+                elif meta.get("vision_generation", {}).get("doc_number_map"):
+                    doc_number_map = meta.get("vision_generation", {}).get(
+                        "doc_number_map"
+                    )
+
                 st.session_state.conversation_history.append(
                     {
                         "role": "assistant",
                         "content": data.get("answer", ""),
                         "citations": data.get("citations", []),
+                        "doc_number_map": doc_number_map,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 )

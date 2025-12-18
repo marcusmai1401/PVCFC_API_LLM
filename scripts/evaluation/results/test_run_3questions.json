@@ -1,0 +1,101 @@
+[
+  {
+    "stt": 1,
+    "question": "Áp suất đầu ra (Discharge Pressure) của máy nén CO2 K06101 / KT06101 trong điều kiện hoạt động 'Bình thường' (Normal) là bao nhiêu?",
+    "answer": "Dựa trên dữ liệu từ các tài liệu kỹ thuật (Data Sheet) của máy nén ly tâm CO2 (K06101), áp suất đầu ra trong điều kiện vận hành **Bình thường (Normal)** là:\n\n**158.0 bar A**\n\n**Chi tiết kỹ thuật:**\n*   **Vị trí đo:** Cửa xả cấp 4 (4th Stage Discharge) - đây là cấp nén cuối cùng của máy nén.\n*   **Điều kiện:** Normal Operating Conditions.\n*   **Nguồn dữ liệu xác thực:**\n    *   Tại bảng thông số **\"OPERATING CONDITIONS - Normal\"**, dòng 24 (Pressure), cột \"4th\" hoặc \"Discharge\".\n    *   Số liệu thống nhất trên các phiên bản tài liệu: [Doc 1, p.1], [Doc 5, p.1], [Doc 7, p.16], [Doc 10, p.16].\n\n**Lưu ý bổ sung (Phân biệt chế độ vận hành):**\nCần phân biệt rõ với điều kiện vận hành **Định mức (Rated)**. Theo tài liệu [Doc 3, p.2] và [Doc 12, p.17], tại điều kiện \"Rated\", áp suất đầu ra là **162.0 bar A**.\n\nVì vậy, với câu hỏi về điều kiện \"Normal\", đáp án chính xác là **158.0 bar A**.",
+    "citations": [
+      {
+        "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+        "page": 1,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Data\\07087-06000-CP22-K06101 rev 0F.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Data_002_3N4-S427434_1be298a4",
+        "page": 1,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Data\\002_3N4-S4274343 datasheet for K06101_Rev.02.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_K03-K04_O_M_61e6989e",
+        "page": 16,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\K03-K04  O&M.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+        "page": 16,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\MANUAL(COMPRESSOR)l.pdf"
+      },
+      {
+        "doc_id": "DOCID_KT06101_TURBINE_HTC_KT06101_TURBINE_HTC_Data_07087-06000-CP22-K06101_rev_0F_b3461f42",
+        "page": 2,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\KT06101_TURBINE_HTC\\KT06101_TURBINE_HTC\\Data\\07087-06000-CP22-K06101 rev 0F.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+        "page": 17,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\MANUAL(COMPRESSOR)l.pdf"
+      }
+    ],
+    "confidence": 1.0,
+    "latency_ms": 68953,
+    "error": null,
+    "timestamp": "2025-12-06T06:24:29.140080"
+  },
+  {
+    "stt": 2,
+    "question": "Trong điều kiện hoạt động 'Định mức' (Rated) của cấp nén thứ nhất (1st), hiệu suất đa biến (Polytropic Efficiency) của máy nén CO2 K06101 / KT06101 là bao nhiêu phần trăm?",
+    "answer": "Dựa trên dữ liệu từ biểu đồ đặc tính kỹ thuật (Expected Performance Curves) trong tài liệu được cung cấp, câu trả lời chính xác là:\n\nTrong điều kiện hoạt động **'Định mức' (Rated)** của **cấp nén thứ nhất (1st)**, hiệu suất đa biến (Polytropic Efficiency) của máy nén là **82.7%**.\n\n**Chi tiết kỹ thuật xác thực:**\n*   **Thiết bị:** CO2 Compressor (K06101 / KT06101).\n*   **Cấp nén (Stage):** 1st (theo ghi chú \"Rated 1st\" trong khung Note của bản vẽ).\n*   **Lưu lượng hút định mức (Suction Capacity):** 36,962.0 M3/HR.\n*   **Tốc độ (Speed):** 100% (7800/13277 RPM).\n*   **Nguồn dữ liệu:** Giá trị **82.7** được ghi cụ thể trên trục tung của biểu đồ *Pol. Efficiency (%)* tương ứng với điểm vận hành định mức.\n\n**Tài liệu tham khảo:**\n*   Biểu đồ đặc tính tại **[Doc 1, p.30]** và **[Doc 7, p.5]**.\n*   Bản vẽ số (Dwg. No.): **B11141820**.\n*   Hình ảnh đính kèm: **P. 30** và **P. 5**.",
+    "citations": [
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_K03-K04_O_M_61e6989e",
+        "page": 30,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\K03-K04  O&M.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+        "page": 5,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\MANUAL(COMPRESSOR)l.pdf"
+      }
+    ],
+    "confidence": 1.0,
+    "latency_ms": 59992,
+    "error": null,
+    "timestamp": "2025-12-06T06:25:30.135664"
+  },
+  {
+    "stt": 3,
+    "question": "Áp suất dầu bôi trơn bình thường (Normal oil pressure) của bộ bánh răng (Gear unit) của thiết bị K06101 / KT06101 là bao nhiêu?",
+    "answer": "Dựa trên dữ liệu từ tài liệu Vận hành & Bảo dưỡng (Operation & Maintenance Manual) và Bảng thông số thiết bị đo (Instrument Data Sheet), thông số áp suất dầu bôi trơn cho thiết bị **K06101** (bao gồm Gear unit) được xác định như sau:\n\nTrong các tài liệu được cung cấp, không có giá trị cụ thể được gán nhãn là \"Normal\" (Bình thường), tuy nhiên các giới hạn vận hành an toàn cho **Lube oil supply pressure** (Áp suất cung cấp dầu bôi trơn) tại đầu ống góp (L/O header) được quy định rõ:\n\n*   **Low Alarm (Cảnh báo áp suất thấp):** **1.2 bar.G** (theo bảng thông số tại [Doc 1, p.327]).\n*   **Trip (Dừng máy khẩn cấp):** **0.8 bar.G** (theo bảng thông số tại [Doc 1, p.327]).\n\n**Nhận định kỹ thuật:**\nÁp suất vận hành bình thường (Normal) thực tế sẽ được cài đặt cao hơn mức Low Alarm (1.2 bar.G) để đảm bảo an toàn. Áp suất này được điều khiển bởi van điều áp **06-PV-0201** (LUBE OIL SUPPLY PRESS. CONTROL VALVE) [Doc 5, p.1084].\n\n**Nguồn dữ liệu tham chiếu:**\n*   Thông số Alarm/Trip: [Doc 1, p.327], [Doc 2, p.327].\n*   Thông tin van điều khiển: [Doc 5, p.1084].",
+    "citations": [
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_MANUAL_COMPRE_88d35c5c",
+        "page": 327,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\MANUAL(COMPRESSOR)l.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_K03-K04_O_M_61e6989e",
+        "page": 1084,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\K03-K04  O&M.pdf"
+      },
+      {
+        "doc_id": "DOCID_K06101_CO2_COMPRESSOR_HITACHI_K06101_CO2_COMPRESSOR_HITACHI_Manual_K03-K04_O_M_61e6989e",
+        "page": 327,
+        "confidence": 1.0,
+        "pdf_path": "D:\\Data_Raw\\K06101_CO2 COMPRESSOR_HITACHI\\K06101_CO2 COMPRESSOR_HITACHI\\Manual\\K03-K04  O&M.pdf"
+      }
+    ],
+    "confidence": 1.0,
+    "latency_ms": 60403,
+    "error": null,
+    "timestamp": "2025-12-06T06:26:31.541024"
+  }
+]

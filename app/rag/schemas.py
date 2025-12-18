@@ -17,7 +17,12 @@ class AskRequest(BaseModel):
         default=None, description="Optional filters for doc_category or doc_id"
     )
     hyde: bool = Field(default=True, description="Enable HyDE expansion")
-    max_context: int = Field(default=20, ge=1, le=30, description="Max context chunks (increased for Gemini 3.0 Pro)")
+    max_context: int = Field(
+        default=20,
+        ge=1,
+        le=30,
+        description="Max context chunks (increased for Gemini 3.0 Pro)",
+    )
     language: Literal["vi", "en"] = Field(default="vi", description="Response language")
     execution_mode: Literal["production", "heavy_only", "light_only"] = Field(
         default="production", description="LLM execution mode"
@@ -193,7 +198,7 @@ class AskResponse(BaseModel):
                 "confidence": 0.92,
                 "meta": {
                     "latency_ms": 2300,
-                    "model": "gemini-2.5-pro",
+                    "model": "gemini-3-pro-preview",
                     "k": 8,
                     "execution_mode": "production",
                 },

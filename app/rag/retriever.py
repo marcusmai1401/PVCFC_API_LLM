@@ -45,17 +45,70 @@ except ImportError:
 
 @dataclass
 class RetrievalResult:
-    """Single retrieval result with metadata"""
+    """
+    Single retrieval result with metadata.
+
+    Type Safety Notes (BUG-006 FIX):
+    - metadata: Always Dict, never None (normalized in __post_init__)
+    - page: Always int >= 1 (normalized in __post_init__)
+    - score: Always float, NaN converted to 0.0
+
+    These normalizations ensure downstream code can safely access fields
+    without None checks, reducing runtime errors in citations and PDF viewer.
+    """
 
     chunk_id: str
     text: str
     score: float
-    source: str  # "bm25" or "faiss"
-    metadata: Dict[str, Any]
+    source: str  # "bm25", "faiss", "weaviate", "opensearch", etc.
+    metadata: Dict[str, Any]  # Always dict, never None
     doc_id: Optional[str] = None
-    page: Optional[int] = None
+    page: Optional[int] = None  # Will be normalized to int >= 1 in __post_init__
     bbox: Optional[List[float]] = None
     parent_id: Optional[str] = None
+
+    def __post_init__(self):
+        """
+        BUG-006 FIX: Normalize fields to ensure type safety.
+
+        This runs after dataclass initialization to:
+        1. Ensure metadata is always a dict
+        2. Ensure page is always >= 1
+        3. Ensure score is a valid float (not NaN)
+        4. Sync page between object and metadata
+        """
+        # Normalize metadata: ensure it's always a dict
+        if self.metadata is None:
+            object.__setattr__(self, "metadata", {})
+
+        # Normalize score: handle NaN from cross-encoder failures
+        import math
+
+        if self.score is None or (
+            isinstance(self.score, float) and math.isnan(self.score)
+        ):
+            object.__setattr__(self, "score", 0.0)
+
+        # Normalize page: ensure it's always >= 1
+        # Priority: self.page > metadata['page'] > default 1
+        effective_page = self.page
+        if effective_page in (None, 0):
+            # Try to get from metadata
+            meta_page = self.metadata.get("page") if self.metadata else None
+            if isinstance(meta_page, int) and meta_page > 0:
+                effective_page = meta_page
+            else:
+                effective_page = 1
+
+        # Ensure page is positive
+        if not isinstance(effective_page, int) or effective_page < 1:
+            effective_page = 1
+
+        object.__setattr__(self, "page", effective_page)
+
+        # Sync page back to metadata for consistency
+        if self.metadata is not None:
+            self.metadata["page"] = effective_page
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -194,8 +247,13 @@ class HybridRetriever:
         if faiss_index_dir:
             self.load_faiss_index(faiss_index_dir)
 
-        # Cache for parent documents
-        self.parent_cache = {}
+        # BUG-005 FIX: Use LRU cache with size limit to prevent memory leak
+        # parent_cache stores parent document text for context expansion
+        # Limited to 500 entries to prevent unbounded memory growth
+        from collections import OrderedDict
+
+        self._parent_cache = OrderedDict()
+        self._parent_cache_maxsize = 500
 
         # Initialize page range expander
         self.page_expander = PageRangeExpander(
@@ -807,8 +865,9 @@ class HybridRetriever:
 
             # Calculate RRF contribution
             for rank, result in enumerate(source_results, 1):
-                # Use text as key for deduplication
-                key = result.text[:200]  # Use first 200 chars as key
+                # Use chunk_id as primary key for deduplication (more reliable than text)
+                # Fallback to text[:200] if chunk_id is None (shouldn't happen in practice)
+                key = result.chunk_id or result.text[:200]
                 rrf_scores[key] += 1 / (k + rank)
 
                 # Keep the result with higher original score
@@ -956,6 +1015,26 @@ class HybridRetriever:
 
         return results
 
+    def _set_parent_cache(self, parent_id: str, parent_text: str) -> None:
+        """
+        BUG-005 FIX: Set parent cache entry with LRU eviction.
+
+        Uses OrderedDict with maxsize limit. When cache exceeds limit,
+        oldest entries are evicted (FIFO on access pattern).
+
+        Args:
+            parent_id: Unique identifier for parent document
+            parent_text: Text content of parent document
+        """
+        # Evict oldest entries if at capacity
+        while len(self._parent_cache) >= self._parent_cache_maxsize:
+            # popitem(last=False) removes oldest entry (FIFO)
+            self._parent_cache.popitem(last=False)
+
+        self._parent_cache[parent_id] = parent_text
+        # Move to end to mark as recently used
+        self._parent_cache.move_to_end(parent_id)
+
     def _expand_parent_context(
         self,
         results: List[RetrievalResult],
@@ -977,15 +1056,20 @@ class HybridRetriever:
 
         for result in results:
             # Check if we have parent information
-            if result.parent_id and result.parent_id in self.parent_cache:
-                # Use cached parent
-                parent_text = self.parent_cache[result.parent_id]
+            # BUG-005 FIX: Use _parent_cache with LRU eviction
+            if result.parent_id and result.parent_id in self._parent_cache:
+                # Use cached parent (and mark as recently used)
+                self._parent_cache.move_to_end(result.parent_id)
+                parent_text = self._parent_cache[result.parent_id]
                 result.text = self._extract_window(
                     parent_text, result.text, window_size
                 )
-            elif result.metadata.get("parent_text"):
-                # Use parent text from metadata
+            elif result.metadata and result.metadata.get("parent_text"):
+                # Use parent text from metadata and cache it for future use
                 parent_text = result.metadata["parent_text"]
+                # BUG-005 FIX: Cache parent text for reuse
+                if result.parent_id:
+                    self._set_parent_cache(result.parent_id, parent_text)
                 result.text = self._extract_window(
                     parent_text, result.text, window_size
                 )
@@ -1136,6 +1220,15 @@ class HybridRetriever:
                 # Find original result to preserve page, bbox, parent_id
                 original = chunk_id_to_result.get(chunk["chunk_id"])
 
+                # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                result_page = None
+                if original and original.page:
+                    result_page = original.page
+                elif chunk["metadata"].get("page"):
+                    result_page = chunk["metadata"]["page"]
+                if result_page in (None, 0):
+                    result_page = 1
+
                 reranked_results.append(
                     RetrievalResult(
                         chunk_id=chunk["chunk_id"],
@@ -1146,9 +1239,10 @@ class HybridRetriever:
                             **chunk["metadata"],
                             "bge_rerank_score": float(score),
                             "original_rrf_score": chunk["original_score"],
+                            "page": result_page,
                         },
                         doc_id=chunk["doc_id"],
-                        page=original.page if original else None,
+                        page=result_page,
                         bbox=original.bbox if original else None,
                         parent_id=original.parent_id if original else None,
                     )
@@ -1170,6 +1264,15 @@ class HybridRetriever:
                     orig_result = next(
                         (r for r in results if r.chunk_id == chunk["chunk_id"]), None
                     )
+                    # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                    result_page = None
+                    if orig_result and orig_result.page:
+                        result_page = orig_result.page
+                    elif chunk["metadata"].get("page"):
+                        result_page = chunk["metadata"]["page"]
+                    if result_page in (None, 0):
+                        result_page = 1
+
                     reranked_results.append(
                         RetrievalResult(
                             chunk_id=chunk["chunk_id"],
@@ -1180,9 +1283,10 @@ class HybridRetriever:
                                 **chunk["metadata"],
                                 "bge_doc_score": float(doc_score),
                                 "original_rrf_score": chunk["original_score"],
+                                "page": result_page,
                             },
                             doc_id=doc_id,
-                            page=orig_result.page if orig_result else None,
+                            page=result_page,
                             bbox=orig_result.bbox if orig_result else None,
                             parent_id=orig_result.parent_id if orig_result else None,
                         )
@@ -1203,6 +1307,17 @@ class HybridRetriever:
                     orig_result = next(
                         (r for r in results if r.chunk_id == chunk["chunk_id"]), None
                     )
+                    # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                    result_page = None
+                    if page_num.isdigit():
+                        result_page = int(page_num)
+                    elif orig_result and orig_result.page:
+                        result_page = orig_result.page
+                    elif chunk["metadata"].get("page"):
+                        result_page = chunk["metadata"]["page"]
+                    if result_page in (None, 0):
+                        result_page = 1
+
                     reranked_results.append(
                         RetrievalResult(
                             chunk_id=chunk["chunk_id"],
@@ -1213,9 +1328,10 @@ class HybridRetriever:
                                 **chunk["metadata"],
                                 "bge_page_score": float(page_score),
                                 "original_rrf_score": chunk["original_score"],
+                                "page": result_page,
                             },
                             doc_id=doc_id,
-                            page=int(page_num) if page_num.isdigit() else None,
+                            page=result_page,
                             bbox=orig_result.bbox if orig_result else None,
                             parent_id=orig_result.parent_id if orig_result else None,
                         )

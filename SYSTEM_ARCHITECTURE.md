@@ -1,8 +1,8 @@
 # SYSTEM ARCHITECTURE - PVCFC RAG SYSTEM
 
-**Version**: 2.0.0
-**Last Updated**: 2025-12-04
-**Document**: Complete Pipeline & Architecture (Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + MAX_CONTEXT=50 + Retrieval Optimization + HierarchicalChunker + 300s Client Timeout)
+**Version**: 2.1.0
+**Last Updated**: 2025-12-18
+**Document**: Complete Pipeline & Architecture (Gemini 3 Migration + System Prompts v2 + Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + MAX_CONTEXT=50 + Retrieval Optimization + HierarchicalChunker + 300s Client Timeout)
 
 ---
 
@@ -119,9 +119,9 @@ Hệ thống RAG (Retrieval-Augmented Generation) phục vụ tra cứu, trích 
 | **Backend** | FastAPI + Python 3.11 | API server |
 | **Vector DB** | Weaviate (gRPC) | Semantic search |
 | **Keyword Search** | OpenSearch (BM25) | Keyword search |
-| **LLM** | **Gemini 3.0 Pro Preview** / 2.5 Flash | Generation (Heavy/Light) |
+| **LLM** | **Gemini 3 Pro / 3 Flash Preview** | Generation (Heavy/Light) with Thinking Levels |
 | **Embedding** | Gemini Embedding 001 (768D) | Text vectorization |
-|| **Reranker** | BGE CrossEncoder (ENABLED) | Result reranking |
+| **Reranker** | BGE CrossEncoder (ENABLED) | Result reranking |
 | **OCR** | Google Cloud Vision API + Real-ESRGAN (2x upscaling) | Scanned PDF processing with enhanced image quality |
 | **Classification** | Gemini 2.5 Flash + CADLikeGate | Document auto-classification (v2.0) |
 | **Deep Search** | OpenSearch Aggregation | Exhaustive keyword search (v2.0) |

@@ -19,7 +19,7 @@ if str(project_root) not in sys.path:
 
 def process_with_gemini_direct(
     query: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-3-flash-preview",
     top_k: int = 10,
     similarity_threshold: float = 0.7,
     max_tokens: int = 500,
@@ -54,13 +54,15 @@ def process_with_gemini_direct(
 
         # Map Streamlit model names to actual Gemini model names
         model_mapping = {
-            "gemini-2.5-flash": "gemini-2.0-flash-exp",
-            "gemini-2.5-pro": "gemini-2.0-flash-exp",  # Fallback to flash if pro not available
+            "gemini-3-flash-preview": "gemini-3-flash-preview",
+            "gemini-3-pro-preview": "gemini-3-pro-preview",
+            "gemini-2.5-flash": "gemini-2.5-flash",
+            "gemini-2.5-pro": "gemini-2.5-pro",
             "gemini-1.5-flash": "gemini-1.5-flash",
             "gemini-1.5-pro": "gemini-1.5-pro",
         }
 
-        actual_model = model_mapping.get(model, "gemini-2.0-flash-exp")
+        actual_model = model_mapping.get(model, "gemini-3-flash-preview")
 
         client = GeminiClient(api_key=gemini_api_key, model=actual_model)
 

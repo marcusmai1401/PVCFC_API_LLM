@@ -24,9 +24,7 @@ st.set_page_config(
 # Import Components
 try:
     from streamlit_app.components.chat_interface_modern import render_chat_interface
-    from streamlit_app.components.classification_browser import render as render_classification_browser
     from streamlit_app.components.deep_search import render as render_deep_search
-    from streamlit_app.components.doc_browser import render_doc_browser
     from streamlit_app.components.home import render_home
     from streamlit_app.components.pdf_viewer_embedded import render_embedded_pdf_viewer
     from streamlit_app.components.pdf_viewer_modal import render_pdf_viewer_modal
@@ -34,9 +32,7 @@ try:
 except ImportError:
     # Fallback for direct running
     from components.chat_interface_modern import render_chat_interface
-    from components.classification_browser import render as render_classification_browser
     from components.deep_search import render as render_deep_search
-    from components.doc_browser import render_doc_browser
     from components.home import render_home
     from components.pdf_viewer_embedded import render_embedded_pdf_viewer
     from components.pdf_viewer_modal import render_pdf_viewer_modal
@@ -53,7 +49,7 @@ def load_css():
 def init_session_state():
     """Initialize global session state."""
     if "current_page" not in st.session_state:
-        st.session_state.current_page = "home"
+        st.session_state.current_page = "deep_search"
 
     if "api_base_url" not in st.session_state:
         st.session_state.api_base_url = os.getenv(
@@ -71,10 +67,10 @@ def render_sidebar():
         st.markdown(
             """
             <div style="padding: 0 0.5rem 1.5rem 0.5rem;">
-                <div style="font-weight: 800; font-size: 1.4rem; color: var(--color-text-primary); letter-spacing: -0.03em;">
-                    <span style="color: var(--color-brand);">PVCFC</span> Search
+                <div style="font-weight: 800; font-size: 1.8rem; color: var(--color-text-primary); letter-spacing: -0.03em;">
+                    <span style="color: #00904a;">PVCFC</span> Search
                 </div>
-                <div style="font-size: 0.8rem; color: var(--color-text-tertiary); font-weight: 500;">
+                <div style="font-size: 1rem; color: var(--color-text-secondary); font-weight: 600;">
                     Engineering Intelligence
                 </div>
             </div>
@@ -86,11 +82,8 @@ def render_sidebar():
         st.markdown('<div class="nav-section">PLATFORM</div>', unsafe_allow_html=True)
 
         nav_items = [
-            {"id": "home", "icon": "🏠", "label": "Overview"},
-            {"id": "chat", "icon": "💬", "label": "AI Assistant"},
             {"id": "deep_search", "icon": "🔍", "label": "Deep Search"},
-            {"id": "documents", "icon": "📂", "label": "Repository"},
-            {"id": "explorer", "icon": "🗂️", "label": "Document Explorer"},
+            {"id": "chat", "icon": "💬", "label": "AI Assistant"},
         ]
 
         for item in nav_items:
@@ -110,25 +103,30 @@ def render_sidebar():
                     st.session_state.pdf_viewer_state["open"] = False
                 st.rerun()
 
-        # Tools Section
-        st.markdown('<div class="nav-section">TOOLS</div>', unsafe_allow_html=True)
-        st.button(
-            "⚙️ Settings", key="nav_settings", use_container_width=True, disabled=True
-        )
-        st.button(
-            "📊 Analytics", key="nav_analytics", use_container_width=True, disabled=True
-        )
+        # Footer Profile & University Info
+        logo_path = Path(__file__).parent / "assets" / "logo_hcmut.png"
+        logo_html = ""
+        if logo_path.exists():
+            import base64
 
-        # Footer Profile
+            with open(logo_path, "rb") as f:
+                img_data = base64.b64encode(f.read()).decode()
+            logo_html = f'<img src="data:image/png;base64,{img_data}" style="width: 120px; height: auto; margin-bottom: 10px;">'
+
         st.markdown(
-            """
+            f"""
             <div style="margin-top: auto; padding-top: 2rem; border-top: 1px solid var(--color-border);">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 32px; height: 32px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center;">👤</div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem;">
+                    <div style="width: 32px; height: 32px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center;">U</div>
                     <div>
                         <div style="font-size: 0.85rem; font-weight: 600;">Engineer User</div>
                         <div style="font-size: 0.75rem; color: var(--color-text-tertiary);">admin@pvcfc.com</div>
                     </div>
+                </div>
+                <div style="text-align: center; margin-top: 1rem;">
+                    {logo_html}
+                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">Mai Thái Bảo</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--color-text-primary);">Trần Quốc Bảo</div>
                 </div>
             </div>
             """,
@@ -154,12 +152,6 @@ def main():
     def content_chat():
         render_chat_interface(st.session_state.api_base_url)
 
-    def content_docs():
-        render_doc_browser()
-
-    def content_explorer():
-        render_classification_browser()
-
     def content_deep_search():
         render_deep_search()
 
@@ -172,12 +164,7 @@ def main():
     elif page == "deep_search":
         # Deep Search with PDF viewer integration
         render_split_view(content_deep_search, render_embedded_pdf_viewer)
-    elif page == "documents":
-        render_split_view(content_docs, render_embedded_pdf_viewer)
-    elif page == "explorer":
-        # Document Explorer with 4-category taxonomy
-        render_split_view(content_explorer, render_embedded_pdf_viewer)
-    
+
     # Render PDF modal if open (for document preview)
     render_pdf_viewer_modal()
 

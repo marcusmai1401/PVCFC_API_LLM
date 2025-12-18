@@ -60,7 +60,7 @@ try:
 
     result = process_with_real_llm(
         query="What is the capital of France?",
-        model="gemini-2.5-flash",
+        model="gemini-3-flash-preview",
         max_tokens=100,
         temperature=0.1,
     )

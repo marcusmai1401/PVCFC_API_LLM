@@ -1,8 +1,8 @@
 # Complete Pipeline Flow - From Raw Data to User Query
 
 **PVCFC RAG System - End-to-End Data Flow**
-**Date:** 2025-12-04
-**Version:** 2.0.0 (Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + Gemini 3.0 Pro + Retrieval Optimization + HierarchicalChunker)
+**Date:** 2025-12-18
+**Version:** 2.1.0 (Gemini 3 Migration + System Prompts v2 + Deep Discovery Search + Intelligent Classification + Safety Quota + Page Metadata Fix + Retrieval Optimization + HierarchicalChunker)
 
 ---
 

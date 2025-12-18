@@ -82,11 +82,15 @@ google-cloud-vision>=3.7.0  # Document text detection for P&ID and technical dra
 
 # Image processing (still required)
 Pillow==10.4.0
+PyPDF2==3.0.1  # PDF page count validation for citation formatter
 
 # Real-ESRGAN for OCR image enhancement (Phase 2 - OCR Enhancement)
 basicsr>=1.4.2  # Required for Real-ESRGAN
 realesrgan>=0.3.0  # AI upscaler for technical drawings
 opencv-python>=4.8.0  # Already exists above, listed here for clarity
+
+# Hybrid Layout-Aware Extraction (Phase 3 - Layout Detection)
+surya-ocr>=0.4.0  # Layout detection model for document structure recognition
 
 # Note: These are optional for advanced processing:
 # - unstructured==0.15.13 (complex but powerful)

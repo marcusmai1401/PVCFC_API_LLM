@@ -82,12 +82,13 @@ from app.ingestion.pdf_processor import PageContent, PDFDocument, PDFProcessor
 
 # Classification Pipeline for 4-category taxonomy (v2.0)
 try:
+    from app.classification.classifier import ClassificationResult
     from app.classification.pipeline import (
         ClassificationPipeline,
-        get_classification_pipeline,
         PipelineResult,
+        get_classification_pipeline,
     )
-    from app.classification.classifier import ClassificationResult
+
     CLASSIFICATION_AVAILABLE = True
 except ImportError:
     CLASSIFICATION_AVAILABLE = False
@@ -106,6 +107,18 @@ try:
 except ImportError:
     PID_TAGS_AVAILABLE = False
     logger.warning("P&ID tag extraction components not available")
+
+# Hybrid Layout Extraction (optional)
+try:
+    from app.ingestion.layout.orchestrator import (
+        HybridExtractionOrchestrator,
+        get_hybrid_orchestrator,
+    )
+
+    HYBRID_EXTRACTION_AVAILABLE = True
+except ImportError:
+    HYBRID_EXTRACTION_AVAILABLE = False
+    logger.warning("Hybrid layout extraction not available")
 
 
 class IngestionPipeline:
@@ -137,6 +150,7 @@ class IngestionPipeline:
         version_tags: Optional[List[str]] = None,
         enable_pid_tags: bool = False,
         enable_classification: bool = True,  # NEW: Enable 4-category classification
+        enable_hybrid_extraction: bool = False,  # NEW: Enable hybrid layout extraction
     ):
         """
         Initialize ingestion pipeline
@@ -155,6 +169,7 @@ class IngestionPipeline:
             version_id: Version identifier (default: auto-generated from timestamp)
             version_description: Human-readable version description
             version_tags: Optional tags for version categorization
+            enable_hybrid_extraction: Enable hybrid layout extraction for Non-CAD documents
         """
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
@@ -201,19 +216,33 @@ class IngestionPipeline:
 
         # Initialize CADLikeGate for document classification
         self._cadlike_gate = get_cadlike_gate()
-        
+
         # Initialize Classification Pipeline (if enabled)
         self._classification_pipeline = None
         if self.enable_classification:
             try:
                 self._classification_pipeline = get_classification_pipeline(
-                    use_cadlike_gate=True,
-                    cad_score_threshold=0.55
+                    use_cadlike_gate=True, cad_score_threshold=0.55
                 )
                 logger.info("✅ Classification pipeline enabled (4-category taxonomy)")
             except Exception as e:
                 logger.warning(f"Failed to initialize classification pipeline: {e}")
                 self.enable_classification = False
+
+        # Hybrid layout extraction settings
+        self.enable_hybrid_extraction = (
+            enable_hybrid_extraction and HYBRID_EXTRACTION_AVAILABLE
+        )
+
+        # Initialize Hybrid Extraction Orchestrator (if enabled)
+        self._hybrid_orchestrator = None
+        if self.enable_hybrid_extraction:
+            try:
+                self._hybrid_orchestrator = get_hybrid_orchestrator()
+                logger.info("✅ Hybrid layout extraction enabled (Surya + GCV)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize hybrid extraction: {e}")
+                self.enable_hybrid_extraction = False
 
         # Initialize P&ID tag extraction orchestrator (if enabled)
         self.tag_orchestrator = None
@@ -281,12 +310,87 @@ class IngestionPipeline:
             "classification_count": 0,  # Documents classified
             "classification_guardrail_triggered": 0,  # P&ID guardrail triggers
             "classification_needs_review": 0,  # Low confidence classifications
+            # Hybrid extraction stats
+            "hybrid_extraction_count": 0,  # Documents using hybrid extraction
+            "hybrid_headings_detected": 0,  # Total headings detected
+            "hybrid_tables_detected": 0,  # Total tables detected
+            "hybrid_fallback_count": 0,  # Pages that fell back to GCV-only
             "start_time": None,
             "end_time": None,
         }
 
         # Run ID for batch tracking
         self.run_id = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+        # GPU availability check on initialization (Requirements 6.4)
+        self._check_gpu_availability()
+
+    def _check_gpu_availability(self):
+        """
+        Check GPU availability and log the device being used.
+
+        Requirements: 6.4 - Verify GPU availability and log device
+        """
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                device_name = torch.cuda.get_device_name(0)
+                device_count = torch.cuda.device_count()
+                logger.info(
+                    f"✅ GPU available: {device_name} ({device_count} device(s))"
+                )
+                logger.info(f"   CUDA version: {torch.version.cuda}")
+
+                # Log memory info
+                total_memory = torch.cuda.get_device_properties(0).total_memory / (
+                    1024**3
+                )
+                logger.info(f"   Total VRAM: {total_memory:.1f} GB")
+            else:
+                logger.warning("⚠️ GPU not available, using CPU for layout detection")
+                logger.info("   This may significantly slow down processing")
+        except ImportError:
+            logger.warning("⚠️ PyTorch not installed, GPU check skipped")
+        except Exception as e:
+            logger.warning(f"⚠️ GPU check failed: {e}")
+
+    def _cleanup_gpu_memory(self):
+        """
+        Release unused GPU memory after batch processing.
+
+        Requirements: 6.2 - Call torch.cuda.empty_cache() to release unused GPU memory
+        """
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                # Get memory stats before cleanup
+                allocated_before = torch.cuda.memory_allocated(0) / (1024**2)
+                reserved_before = torch.cuda.memory_reserved(0) / (1024**2)
+
+                # Release cached memory
+                torch.cuda.empty_cache()
+
+                # Get memory stats after cleanup
+                allocated_after = torch.cuda.memory_allocated(0) / (1024**2)
+                reserved_after = torch.cuda.memory_reserved(0) / (1024**2)
+
+                freed_memory = reserved_before - reserved_after
+                logger.info(f"🧹 GPU memory cleanup completed")
+                logger.info(f"   Freed: {freed_memory:.1f} MB")
+                logger.info(
+                    f"   Allocated: {allocated_after:.1f} MB, Reserved: {reserved_after:.1f} MB"
+                )
+
+                # Also cleanup hybrid orchestrator if available
+                if self._hybrid_orchestrator is not None:
+                    self._hybrid_orchestrator.cleanup()
+                    logger.info("   Hybrid extraction orchestrator cleaned up")
+        except ImportError:
+            logger.debug("PyTorch not installed, GPU cleanup skipped")
+        except Exception as e:
+            logger.warning(f"GPU cleanup failed: {e}")
 
     def _setup_output_dirs(self):
         """Create necessary output directories"""
@@ -359,7 +463,10 @@ class IngestionPipeline:
         )
         logger.info(f"Parser: {self.parser}")
         logger.info(f"Chunk strategy: {self.chunk_strategy}")
-        logger.info(f"Classification: {self.enable_classification} (4-category taxonomy)")
+        logger.info(
+            f"Classification: {self.enable_classification} (4-category taxonomy)"
+        )
+        logger.info(f"Hybrid extraction: {self.enable_hybrid_extraction} (Surya + GCV)")
         logger.info(f"Run ID: {self.run_id}")
         logger.info("=" * 80)
 
@@ -469,6 +576,9 @@ class IngestionPipeline:
         # Write ingestion manifest for versioning
         ingestion_manifest_path = self._write_ingestion_manifest()
 
+        # GPU cleanup after batch processing (Requirements 6.2)
+        self._cleanup_gpu_memory()
+
         self.stats["end_time"] = datetime.now()
         duration = (self.stats["end_time"] - self.stats["start_time"]).total_seconds()
 
@@ -490,12 +600,23 @@ class IngestionPipeline:
         if self.enable_pid_tags:
             logger.info(f"P&ID documents processed: {self.stats['pid_docs_processed']}")
             logger.info(f"P&ID tags extracted: {self.stats['pid_tags_extracted']}")
-        
+
         # Classification stats (4-category taxonomy)
         if self.enable_classification:
             logger.info(f"Documents classified: {self.stats['classification_count']}")
-            logger.info(f"P&ID guardrail triggered: {self.stats['classification_guardrail_triggered']}")
+            logger.info(
+                f"P&ID guardrail triggered: {self.stats['classification_guardrail_triggered']}"
+            )
             logger.info(f"Needs review: {self.stats['classification_needs_review']}")
+
+        # Hybrid extraction stats
+        if self.enable_hybrid_extraction:
+            logger.info(
+                f"Hybrid extraction docs: {self.stats['hybrid_extraction_count']}"
+            )
+            logger.info(f"Headings detected: {self.stats['hybrid_headings_detected']}")
+            logger.info(f"Tables detected: {self.stats['hybrid_tables_detected']}")
+            logger.info(f"Fallback pages: {self.stats['hybrid_fallback_count']}")
 
         # Chunk size analytics
         if "chunk_sizes" in self.stats and self.stats["chunk_sizes"]:
@@ -813,7 +934,7 @@ class IngestionPipeline:
 
                 # Detect document type and revision (CAD-like vs non-CAD-like)
                 doc_type, revision = self._classify_document(pdf_path, pdf_doc)
-                
+
                 # === 4-CATEGORY CLASSIFICATION (v2.0) ===
                 # Run classification pipeline for taxonomy-based classification
                 classification_result = None
@@ -920,13 +1041,15 @@ class IngestionPipeline:
 
                     # Detect document type and revision (CAD-like vs non-CAD-like)
                     doc_type, revision = self._classify_document(pdf_path, pdf_doc)
-                    
+
                     # === 4-CATEGORY CLASSIFICATION (v2.0) ===
                     # Run classification pipeline for taxonomy-based classification
                     # Note: Use original pdf_path for classification, not rasterized
                     classification_result = None
                     if self.enable_classification and self._classification_pipeline:
-                        classification_result = self._run_classification(pdf_path, doc_id)
+                        classification_result = self._run_classification(
+                            pdf_path, doc_id
+                        )
 
                     # Save processed document
                     self._save_processed_document(pdf_doc, doc_id)
@@ -1221,7 +1344,7 @@ class IngestionPipeline:
                             )
                             logger.info(
                                 f"Indexed {indexed_count} spatial components for {doc_id} "
-                                f"({len(taggy_pages)} taggy pages)"
+                                f"({len(all_pages)} pages)"
                             )
 
                             # Update stats (thread-safe)
@@ -1275,14 +1398,22 @@ class IngestionPipeline:
                 if fallback_reason:
                     corpus_entry["fallback_reason"] = fallback_reason
                     corpus_entry["original_file_path"] = str(pdf_path)
-                
+
                 # Add classification metadata (4-category taxonomy)
                 if classification_result:
                     corpus_entry["category"] = classification_result.get("category")
-                    corpus_entry["classification_doc_type"] = classification_result.get("doc_type")
-                    corpus_entry["classification_status"] = classification_result.get("status")
-                    corpus_entry["classification_confidence"] = classification_result.get("confidence")
-                    corpus_entry["classification_method"] = classification_result.get("method")
+                    corpus_entry["classification_doc_type"] = classification_result.get(
+                        "doc_type"
+                    )
+                    corpus_entry["classification_status"] = classification_result.get(
+                        "status"
+                    )
+                    corpus_entry[
+                        "classification_confidence"
+                    ] = classification_result.get("confidence")
+                    corpus_entry["classification_method"] = classification_result.get(
+                        "method"
+                    )
 
                 checksum_entry = {
                     "file_path": str(pdf_path),
@@ -1410,15 +1541,15 @@ class IngestionPipeline:
     ) -> Optional[Dict[str, Any]]:
         """
         Run 4-category classification pipeline on a PDF document.
-        
+
         This method integrates the ClassificationPipeline to classify documents
         into the 4-category taxonomy (ENGINEERING_DESIGN, VENDOR_EQUIPMENT,
         OPERATIONS_MAINTENANCE, SAFETY_MANAGEMENT, or UNCATEGORIZED).
-        
+
         Args:
             pdf_path: Path to PDF file
             doc_id: Document ID for logging
-            
+
         Returns:
             Classification result dict with keys:
             - category: Category name (e.g., "ENGINEERING_DESIGN")
@@ -1426,24 +1557,23 @@ class IngestionPipeline:
             - confidence: Confidence score (0.0-1.0)
             - status: Classification status ("classified" or "needs_review")
             - method: Classification method ("cadlike_gate" or "ai_classifier")
-            
+
             Returns None if classification fails or is disabled.
         """
         if not self.enable_classification or not self._classification_pipeline:
             return None
-        
+
         try:
             logger.debug(f"Running 4-category classification for {pdf_path.name}")
-            
+
             # Run classification pipeline
             pipeline_result = self._classification_pipeline.classify_document(
-                pdf_path=pdf_path,
-                doc_metadata={"doc_id": doc_id}
+                pdf_path=pdf_path, doc_metadata={"doc_id": doc_id}
             )
-            
+
             # Extract classification result
             classification = pipeline_result.classification
-            
+
             # Log classification decision
             if pipeline_result.guardrail_triggered:
                 logger.info(
@@ -1459,7 +1589,7 @@ class IngestionPipeline:
                     f"{classification.category}/{classification.doc_type} "
                     f"(confidence={classification.confidence:.2f})"
                 )
-            
+
             # Track needs_review status
             if classification.status == "needs_review":
                 logger.warning(
@@ -1468,18 +1598,18 @@ class IngestionPipeline:
                 )
                 with self._stats_lock:
                     self.stats["classification_needs_review"] += 1
-            
+
             # Update classification count
             with self._stats_lock:
                 self.stats["classification_count"] += 1
-            
+
             # Return as dict for metadata storage
             return classification.to_dict()
-            
+
         except Exception as e:
             logger.error(f"Classification failed for {pdf_path.name}: {e}")
             logger.debug(f"Classification error details:", exc_info=True)
-            
+
             # Return fallback result for failed classification
             return {
                 "category": "UNCATEGORIZED",
@@ -1488,7 +1618,7 @@ class IngestionPipeline:
                 "status": "needs_review",
                 "dominant_content": "unknown",
                 "reasoning": f"Classification error: {str(e)}",
-                "method": "error"
+                "method": "error",
             }
 
     def _save_processed_document(self, pdf_doc: PDFDocument, doc_id: str):
@@ -1595,6 +1725,121 @@ class IngestionPipeline:
 
         return markdown_text
 
+    def _convert_to_markdown_hybrid(
+        self,
+        pdf_path: Path,
+        pdf_doc: PDFDocument,
+        doc_id: str,
+        gcv_responses: List[any],
+    ) -> Tuple[str, Dict[str, int]]:
+        """
+        Convert PDF document to markdown using hybrid layout extraction.
+
+        This method uses Surya layout detection combined with GCV text
+        to produce structured Markdown with proper headings and tables.
+
+        Args:
+            pdf_path: Path to the original PDF file
+            pdf_doc: Processed PDFDocument object
+            doc_id: Document ID for output files
+            gcv_responses: List of GCV response objects (one per page)
+
+        Returns:
+            Tuple of (markdown_text, stats_dict)
+            stats_dict contains: headings, tables, fallback_pages
+
+        Requirements: 5.1, 5.2, 5.3
+        """
+        import fitz
+
+        stats = {"headings": 0, "tables": 0, "fallback_pages": 0}
+
+        if not self._hybrid_orchestrator:
+            logger.warning("Hybrid orchestrator not available, using fallback")
+            fallback_md = "\n\n".join(
+                f"<!-- Page {page.page_num} -->\n{page.text}" for page in pdf_doc.pages
+            )
+            stats["fallback_pages"] = len(pdf_doc.pages)
+            return fallback_md, stats
+
+        try:
+            # Open PDF for rendering page images
+            doc = fitz.open(str(pdf_path))
+            markdown_parts = []
+
+            for idx, page in enumerate(pdf_doc.pages):
+                page_num = page.page_num
+
+                # Get GCV response for this page (if available)
+                gcv_response = gcv_responses[idx] if idx < len(gcv_responses) else None
+
+                # Extract GCV words
+                gcv_words = []
+                if gcv_response:
+                    gcv_words = PDFProcessor.extract_gcv_words(gcv_response)
+
+                # Render page image for layout detection
+                try:
+                    fitz_page = doc[page_num - 1]  # fitz uses 0-based index
+                    zoom = 2.0  # 144 DPI
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = fitz_page.get_pixmap(matrix=mat)
+                    page_image = pix.pil_tobytes(format="PNG")
+                    page_width = pix.width
+                    page_height = pix.height
+                except Exception as e:
+                    logger.warning(f"Failed to render page {page_num}: {e}")
+                    # Fallback for this page
+                    markdown_parts.append(f"<!-- Page {page_num} -->\n{page.text}")
+                    stats["fallback_pages"] += 1
+                    continue
+
+                # Run hybrid extraction
+                result = self._hybrid_orchestrator.extract_hybrid_markdown(
+                    page_image=page_image,
+                    gcv_words=gcv_words,
+                    page_num=page_num,
+                    page_width=page_width,
+                    page_height=page_height,
+                    fallback_text=page.text,
+                )
+
+                markdown_parts.append(result.markdown)
+                stats["headings"] += result.heading_count
+                stats["tables"] += result.table_count
+                if result.fallback_used:
+                    stats["fallback_pages"] += 1
+
+            doc.close()
+
+            # Join all pages
+            markdown_text = "\n\n".join(markdown_parts)
+
+            # Save markdown (atomic write)
+            md_file = self.output_dir / "markdown" / f"{doc_id}.md"
+            temp_file = md_file.with_suffix(".tmp")
+            with open(temp_file, "w", encoding="utf-8") as f:
+                f.write(markdown_text)
+            temp_file.replace(md_file)
+
+            # Log stats
+            logger.info(
+                f"Hybrid extraction for {doc_id}: "
+                f"{stats['headings']} headings, {stats['tables']} tables, "
+                f"{stats['fallback_pages']} fallback pages"
+            )
+
+            return markdown_text, stats
+
+        except Exception as e:
+            logger.error(f"Hybrid extraction failed for {doc_id}: {e}")
+            # Fallback to simple markdown
+            fallback_md = "\n\n".join(
+                f"<!-- Page {page.page_num} -->\n{page.text}" for page in pdf_doc.pages
+            )
+            stats["fallback_pages"] = len(pdf_doc.pages)
+            return fallback_md, stats
+
     def _create_chunks(
         self,
         pdf_doc: PDFDocument,
@@ -1620,13 +1865,15 @@ class IngestionPipeline:
             "title": pdf_doc.title,
             "author": pdf_doc.author,
         }
-        
+
         # Add classification metadata (4-category taxonomy)
         if classification_result:
             metadata["category"] = classification_result.get("category")
             metadata["classification_doc_type"] = classification_result.get("doc_type")
             metadata["classification_status"] = classification_result.get("status")
-            metadata["classification_confidence"] = classification_result.get("confidence")
+            metadata["classification_confidence"] = classification_result.get(
+                "confidence"
+            )
             metadata["classification_method"] = classification_result.get("method")
 
         # Remove None values
@@ -2209,6 +2456,12 @@ def main():
     )
 
     parser.add_argument(
+        "--enable-hybrid-extraction",
+        action="store_true",
+        help="Enable hybrid layout extraction using Surya + GCV for Non-CAD documents",
+    )
+
+    parser.add_argument(
         "--enable-classification",
         action="store_true",
         default=True,
@@ -2329,6 +2582,7 @@ def main():
         version_tags=args.version_tags,
         enable_pid_tags=args.enable_pid_tags,
         enable_classification=args.enable_classification,
+        enable_hybrid_extraction=args.enable_hybrid_extraction,
     )
 
     stats = pipeline.run()

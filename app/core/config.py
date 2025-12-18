@@ -42,6 +42,26 @@ class Settings(BaseSettings):
         description="Maximum output tokens for LLM generation (affects both light and heavy tiers)",
     )
 
+    # Gemini 3 Thinking Config (for gemini-3-*-preview models)
+    llm_thinking_level_light: Optional[Literal["MINIMAL", "MEDIUM", "HIGH"]] = Field(
+        default=None,
+        description="Thinking level for light tier: MINIMAL (fast), MEDIUM, HIGH (deep reasoning). None = Gemini default",
+    )
+    llm_thinking_level_heavy: Optional[Literal["MINIMAL", "MEDIUM", "HIGH"]] = Field(
+        default=None,
+        description="Thinking level for heavy tier: MINIMAL (fast), MEDIUM, HIGH (deep reasoning). None = Gemini default",
+    )
+
+    # Gemini Media Resolution (for image/video processing)
+    llm_media_resolution: Optional[
+        Literal[
+            "MEDIA_RESOLUTION_LOW", "MEDIA_RESOLUTION_MEDIUM", "MEDIA_RESOLUTION_HIGH"
+        ]
+    ] = Field(
+        default="MEDIA_RESOLUTION_HIGH",
+        description="Resolution for media processing. HIGH recommended for technical diagrams/P&ID.",
+    )
+
     # Cấu hình Embedding (provider/model). Cho phép alias qua EMBEDDING_LLM
     embedding_provider: Literal["openai", "gemini", "local", "none"] = "none"
     embedding_llm: Optional[Literal["openai", "gemini", "local", "none", ""]] = None

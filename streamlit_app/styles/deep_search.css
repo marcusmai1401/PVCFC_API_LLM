@@ -1,0 +1,498 @@
+/* Deep Search Folder Tree Styles
+ * Requirements: 5.1, 5.2, 5.3
+ * Provides visual hierarchy, hover effects, and smooth transitions
+ */
+
+/* =========================================
+   Folder Tree Container
+   ========================================= */
+.folder-tree-container {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+/* =========================================
+   Arrow Toggle Buttons - Professional Style
+   Requirements: 5.4, 5.5
+   ========================================= */
+
+/* Style for arrow toggle buttons - make them large and clear */
+[data-testid="stButton"] button[kind="secondary"] {
+    transition: all 0.15s ease;
+}
+
+/* Category arrow buttons - larger and more prominent */
+div[data-testid="column"]:first-child button {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 8px 12px !important;
+    min-height: 40px !important;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    color: #475569 !important;
+}
+
+div[data-testid="column"]:first-child button:hover {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%) !important;
+    border-color: #94a3b8 !important;
+    color: #1e293b !important;
+    transform: scale(1.05);
+}
+
+/* Category name buttons - clean and professional */
+div[data-testid="column"]:nth-child(2) button[kind="secondary"] {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 10px 16px !important;
+    background: transparent !important;
+    border: none !important;
+    color: #1e293b !important;
+}
+
+div[data-testid="column"]:nth-child(2) button[kind="secondary"]:hover {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+}
+
+/* =========================================
+   Category Folder (Root Level)
+   Requirements: 5.1
+   ========================================= */
+.category-folder {
+    margin-bottom: 8px;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.category-folder-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.category-folder-header:hover {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.category-folder-header.expanded {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom: none;
+}
+
+.category-arrow {
+    font-size: 14px;
+    color: #64748b;
+    margin-right: 12px;
+    transition: transform 0.2s ease;
+    width: 20px;
+    text-align: center;
+}
+
+.category-arrow.expanded {
+    transform: rotate(0deg);
+}
+
+.category-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+.category-icon {
+    font-size: 20px;
+    margin-right: 10px;
+}
+
+.category-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: #1e293b;
+    flex: 1;
+}
+
+.category-count {
+    font-size: 13px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.category-children {
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    background: #ffffff;
+    padding: 8px 0;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =========================================
+   Doc Type Folder (Child Level)
+   Requirements: 5.2
+   ========================================= */
+.doc-type-folder {
+    margin: 4px 16px 4px 48px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.doc-type-folder-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.doc-type-folder-header:hover {
+    background: #f8fafc;
+}
+
+.doc-type-arrow {
+    font-size: 12px;
+    color: #64748b;
+    margin-right: 10px;
+    transition: transform 0.15s ease;
+    width: 16px;
+    text-align: center;
+}
+
+.doc-type-icon {
+    font-size: 16px;
+    margin-right: 8px;
+}
+
+.doc-type-name {
+    font-weight: 500;
+    font-size: 14px;
+    color: #475569;
+    flex: 1;
+}
+
+.doc-type-count {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.doc-type-children {
+    padding: 4px 0;
+    animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* =========================================
+   Document Item (Leaf Level)
+   Requirements: 5.3
+   ========================================= */
+.document-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px 6px 56px;
+    margin: 2px 16px 2px 32px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+    cursor: default;
+}
+
+.document-item:hover {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+}
+
+.document-icon {
+    font-size: 14px;
+    margin-right: 8px;
+    opacity: 0.7;
+}
+
+.document-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.document-filename {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.document-meta {
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    margin-top: 1px;
+}
+
+/* Document Row Button - Full width clickable row */
+.doc-btn-wrapper button {
+    width: 100% !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 8px 12px !important;
+    margin: 0 !important;
+    font-weight: 400 !important;
+    color: #1e293b !important;
+    height: auto !important;
+    min-height: auto !important;
+}
+
+.doc-btn-wrapper button:hover {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%) !important;
+    border: none !important;
+    color: #0f172a !important;
+}
+
+.doc-btn-wrapper button:focus {
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* Hide the old view button since the whole row is clickable */
+.document-view-btn {
+    display: none;
+}
+
+/* =========================================
+   PDF Modal Styles
+   Requirements: 4.5
+   ========================================= */
+.pdf-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 9998;
+    cursor: pointer;
+    animation: fadeInBackdrop 0.2s ease;
+}
+
+@keyframes fadeInBackdrop {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.pdf-modal-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90vw;
+    max-width: 1000px;
+    height: 85vh;
+    max-height: 900px;
+    background: white;
+    border-radius: var(--radius-xl);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideInModal 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInModal {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -48%) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.pdf-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.pdf-modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pdf-modal-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: #f1f5f9;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.15s ease;
+}
+
+.pdf-modal-close-btn:hover {
+    background: #e2e8f0;
+    color: var(--color-text-primary);
+}
+
+.pdf-modal-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.pdf-modal-nav-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: white;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pdf-modal-nav-btn:hover:not(:disabled) {
+    background: var(--color-brand);
+    color: white;
+    border-color: var(--color-brand);
+}
+
+.pdf-modal-nav-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pdf-modal-page-info {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    padding: 0 16px;
+}
+
+.pdf-modal-content {
+    flex: 1;
+    padding: 16px;
+    overflow: hidden;
+    background: #f1f5f9;
+}
+
+.pdf-modal-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: var(--radius-md);
+    background: white;
+    box-shadow: var(--shadow-md);
+}
+
+.pdf-loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--color-text-tertiary);
+}
+
+.pdf-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid #e2e8f0;
+    border-top-color: var(--color-brand);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* =========================================
+   Responsive Adjustments
+   ========================================= */
+@media (max-width: 768px) {
+    .pdf-modal-container {
+        width: 95vw;
+        height: 90vh;
+        border-radius: var(--radius-lg);
+    }
+
+    .category-folder-header {
+        padding: 10px 12px;
+    }
+
+    .document-item {
+        padding-left: 40px;
+    }
+
+    .document-view-btn {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}

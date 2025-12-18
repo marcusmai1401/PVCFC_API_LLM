@@ -165,9 +165,19 @@ class QueryTransformer:
                     f"Original Query: {query}\n"
                     f"English Translation (with expansion):"
                 )
+                # System prompt v2 with entity protection
+                translation_system_prompt = (
+                    "You are a technical translator for document retrieval.\n\n"
+                    "CRITICAL RULES:\n"
+                    "1) Preserve ALL equipment/instrument tags, drawing codes, document numbers, and abbreviations EXACTLY:\n"
+                    "   Examples: K06101, 04-TT-2020, PSV-101A, P&ID, ESD, DCS, HMI, Trip, Interlock.\n"
+                    "   Do NOT translate or alter these tokens.\n"
+                    "2) Preserve units and symbols exactly (bar.a, barg, m3/h, kW, °C).\n"
+                    "3) Output EXACTLY one line. No labels, no quotes, no extra commentary, no line breaks."
+                )
                 translation = translator.generate(
                     prompt=translation_prompt,
-                    system_prompt="You are a precise technical translator with expertise in query expansion for document retrieval. Output only the translated text with relevant keywords appended.",
+                    system_prompt=translation_system_prompt,
                     temperature=0.0,
                     max_tokens=4096,
                 )
@@ -407,8 +417,21 @@ class QueryTransformer:
                 if not prompt:  # Skip for LOCATE/REPORT intents
                     return []
 
+                # HyDE system prompt to ensure clean output for retrieval
+                hyde_system_prompt = (
+                    "You generate hypothetical passages ONLY for retrieval enrichment (HyDE).\n"
+                    "Do NOT answer the user.\n"
+                    "Do NOT include citations, doc/page numbers, or meta commentary.\n"
+                    "Do NOT write 'As an AI...' or similar phrases.\n"
+                    "Output one passage per line, no numbering, 2-3 sentences each, in English.\n"
+                    "Use realistic engineering terminology and synonyms."
+                )
+
                 response = client.generate(
-                    prompt=prompt, temperature=0.7, max_tokens=1024
+                    prompt=prompt,
+                    system_prompt=hyde_system_prompt,
+                    temperature=0.7,
+                    max_tokens=1024,
                 )
 
                 # Guard against empty/None responses

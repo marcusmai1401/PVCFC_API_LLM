@@ -3,8 +3,8 @@ LLM Constants and Model Definitions
 Contains lists of supported models for each provider
 """
 
-# Vision model constant (Gemini 2.5 Pro multimodal)
-VISION_MODEL = "models/gemini-2.5-pro"
+# Vision model constant (Gemini 3 Pro Preview - best for multimodal)
+VISION_MODEL = "models/gemini-3-pro-preview"
 
 # OpenAI Models
 OPENAI_CHAT_MODELS = [
@@ -48,7 +48,10 @@ OPENAI_EMBEDDING_MODELS = [
 
 # Google Gemini Models
 GEMINI_CHAT_MODELS = [
-    # Gemini 2.5 series (newest, 65K output tokens!)
+    # Gemini 3 series (preview - cutting edge!)
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+    # Gemini 2.5 series (stable, 65K output tokens)
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-2.5-flash-lite",
@@ -116,11 +119,11 @@ RECOMMENDED_MODELS = {
     "development": {
         "light": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-2.5-flash",
+            "gemini": "gemini-3-flash-preview",
         },
         "heavy": {
             "openai": "gpt-4o",
-            "gemini": "gemini-2.5-pro",
+            "gemini": "gemini-3-pro-preview",
         },
         "embedding": {
             "openai": "text-embedding-3-small",
@@ -130,11 +133,11 @@ RECOMMENDED_MODELS = {
     "production": {
         "light": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-2.5-flash",
+            "gemini": "gemini-3-flash-preview",
         },
         "heavy": {
             "openai": "gpt-4o",
-            "gemini": "gemini-2.5-pro",
+            "gemini": "gemini-3-pro-preview",
         },
         "embedding": {
             "openai": "text-embedding-3-large",
@@ -144,11 +147,11 @@ RECOMMENDED_MODELS = {
     "cost_optimized": {
         "light": {
             "openai": "gpt-3.5-turbo",
-            "gemini": "gemini-2.5-flash",
+            "gemini": "gemini-3-flash-preview",
         },
         "heavy": {
             "openai": "gpt-4o-mini",
-            "gemini": "gemini-2.5-pro",
+            "gemini": "gemini-3-pro-preview",
         },
         "embedding": {
             "openai": "text-embedding-3-small",
@@ -158,11 +161,11 @@ RECOMMENDED_MODELS = {
     "quality_optimized": {
         "light": {
             "openai": "gpt-4o",
-            "gemini": "gemini-2.5-flash",
+            "gemini": "gemini-3-flash-preview",
         },
         "heavy": {
             "openai": "o1-preview",
-            "gemini": "gemini-2.5-pro",
+            "gemini": "gemini-3-pro-preview",
         },
         "embedding": {
             "openai": "text-embedding-3-large",

@@ -25,7 +25,7 @@ from app.services.llm import LLMService
 
 def process_with_real_llm(
     query: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-3-flash-preview",
     top_k: int = 10,
     similarity_threshold: float = 0.7,
     max_tokens: int = 500,

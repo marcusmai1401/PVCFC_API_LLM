@@ -1,20 +1,20 @@
 
-# PVCFC RAG — README - LAST UPDATE: 04/12/2025 (v2.0.0)
+# PVCFC RAG — README - LAST UPDATE: 18/12/2025 (v2.1.0)
 
 Hệ thống **RAG (Retrieval-Augmented Generation)** phục vụ **tra cứu, trích xuất, và hỏi-đáp kỹ thuật** trên tập tài liệu của PVCFC, với trọng tâm là **độ tin cậy, trích nguồn đầy đủ, và thao tác nhanh** trên dữ liệu nội bộ.
 
-> **🚀 Version 2.0.0 Highlights** (Dec 04, 2025):
-> - **🔍 Deep Discovery Search** - Tìm TẤT CẢ documents chứa keyword (không giới hạn top_k)
-> - **🏷️ Intelligent Auto-Classification** - Phân loại tự động với Gemini 2.5 Flash + CADLikeGate guardrail
-> - **📂 4-Category Taxonomy** - ENGINEERING_DESIGN, VENDOR_EQUIPMENT, OPERATIONS_MAINTENANCE, SAFETY_MANAGEMENT
-> - **🔄 Batch Re-classification** - Script classify lại 77 documents (39 P&ID, 38 AI classified)
-> - **🖥️ New UI** - Document Explorer tree view + Deep Search tab
-> - **📊 Metadata Schema** - category, doc_type, classification_status trong OpenSearch/Weaviate
+> **🚀 Version 2.1.0 Highlights** (Dec 18, 2025):
+> - **🤖 Gemini 3 Migration** - Light: `gemini-3-flash-preview`, Heavy: `gemini-3-pro-preview`
+> - **⚙️ Thinking Levels** - MINIMAL (fast) / HIGH (deep reasoning)
+> - **📸 Media Resolution HIGH** - Enhanced P&ID/datasheet processing
+> - **📝 System Prompts v2.0.1** - Injection hardening, no self-intro, accurate citations
+> - **🛡️ Citation Accuracy** - No implicit citations, no page=1 default
 
-> **Previous v1.7.1 Features** (Nov 24, 2025):
-> - 🛡️ Safety Quota (max 20 exact matches)
-> - 📍 Page metadata fix (page-aware chunking)
-> - Gemini 3.0 Pro Preview + 50 chunks context
+> **Previous v2.0.0 Features** (Dec 04, 2025):
+> - 🔍 Deep Discovery Search - Find ALL documents with keyword
+> - 🏷️ Intelligent Auto-Classification - Gemini 2.5 Flash + CADLikeGate
+> - 📂 4-Category Taxonomy - ENGINEERING_DESIGN, VENDOR_EQUIPMENT, etc.
+
 
 * **Use-cases chính**:
 
@@ -288,14 +288,18 @@ Notes:
 
 ## 8) Generation (LLM tiers & Multimodal Vision)
 
-* **Heavy (LLM)**: `gemini-3-pro-preview` (Gemini 3.0 Pro Preview - **most powerful**, multimodal).
-* **Light (LLM)**: `gemini-2.5-flash` (fast responses, 65K output tokens).
+* **Heavy (LLM)**: `gemini-3-pro-preview` (Gemini 3 Pro Preview - **most powerful**, multimodal).
+* **Light (LLM)**: `gemini-3-flash-preview` (Gemini 3 Flash - fast responses).
 * **Vision Model**: `gemini-3-pro-preview` (same as Heavy, superior visual understanding).
-* **Configuration** (v1.7.0+):
-  * Max output tokens: **8192** (LLM_MAX_OUTPUT_TOKENS, 4x increase from 2048)
+* **Configuration** (v2.1.0):
+  * Max output tokens: **8192** (LLM_MAX_OUTPUT_TOKENS)
+  * **Thinking Levels** (NEW):
+    - Light: `MINIMAL` (fast, for translation/HyDE)
+    - Heavy: `HIGH` (deep reasoning for complex queries)
+  * **Media Resolution** (NEW): `MEDIA_RESOLUTION_HIGH` (enhanced P&ID/datasheet processing)
   * Vision Always-On: **true** (VISION_ALWAYS_ON=true, bypass smart gating)
-  * Context: **50 chunks** (MAX_CONTEXT=50, 6.25x increase from baseline 8)
-  * Vision pages: **30 max** (VISION_MAX_PAGES_TOTAL=30, up from 24)
+  * Context: **50 chunks** (MAX_CONTEXT=50)
+  * Vision pages: **30 max** (VISION_MAX_PAGES_TOTAL=30)
 * **Multimodal Vision (khi phù hợp)**:
 
   * **Điều kiện**: có documents liên quan và **map được `pdf_path`** (từ `doc_id_map.json`).
@@ -341,13 +345,20 @@ APP_ENV=local  # local|dev|prod
 API_PORT=8000
 LOG_LEVEL=INFO  # DEBUG|INFO|WARNING|ERROR
 
-# Providers & LLM (v1.7.0 - Gemini 3.0 Pro Preview)
+# Providers & LLM (v2.1.0 - Gemini 3 Migration)
 LLM_PROVIDER=gemini  # openai|gemini|none
 LLM_TIER=light
 LLM_LIGHT_PROVIDER=gemini
-LLM_MODEL_HEAVY=models/gemini-3-pro-preview  # Gemini 3.0 Pro Preview (bleeding edge)
-LLM_MODEL_LIGHT=models/gemini-2.5-flash      # Fast responses, 65K output
-LLM_MAX_OUTPUT_TOKENS=8192  # 4x increase from 2048
+LLM_MODEL_HEAVY=models/gemini-3-pro-preview    # Gemini 3 Pro (most powerful)
+LLM_MODEL_LIGHT=models/gemini-3-flash-preview  # Gemini 3 Flash (fast)
+LLM_MAX_OUTPUT_TOKENS=8192
+
+# Thinking Levels (NEW v2.1.0)
+LLM_THINKING_LEVEL_LIGHT=MINIMAL  # Fast for translation/HyDE
+LLM_THINKING_LEVEL_HEAVY=HIGH     # Deep reasoning for generation
+
+# Media Resolution (NEW v2.1.0)
+LLM_MEDIA_RESOLUTION=MEDIA_RESOLUTION_HIGH  # Enhanced P&ID/datasheet processing
 
 # Embedding
 EMBEDDING_PROVIDER=gemini  # gemini|openai|local|none

@@ -881,6 +881,15 @@ class HybridWeaviateOpenSearchRetriever:
                 # Find the original result to preserve page, bbox, etc.
                 original = chunk_id_to_result.get(chunk["chunk_id"])
 
+                # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                result_page = None
+                if original and original.page:
+                    result_page = original.page
+                elif chunk["metadata"].get("page"):
+                    result_page = chunk["metadata"]["page"]
+                if result_page in (None, 0):
+                    result_page = 1
+
                 reranked_results.append(
                     RetrievalResult(
                         chunk_id=chunk["chunk_id"],
@@ -891,9 +900,10 @@ class HybridWeaviateOpenSearchRetriever:
                             **chunk["metadata"],
                             "bge_rerank_score": float(score),
                             "original_rrf_score": chunk["original_score"],
+                            "page": result_page,
                         },
                         doc_id=chunk["doc_id"],
-                        page=original.page if original else None,
+                        page=result_page,
                         bbox=original.bbox if original else None,
                         parent_id=original.parent_id if original else None,
                     )

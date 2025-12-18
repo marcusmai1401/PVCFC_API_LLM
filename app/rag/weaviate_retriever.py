@@ -432,17 +432,12 @@ class WeaviateRetriever:
         Circuit breaker prevents cascading failures when Weaviate is slow/down.
         If breaker is OPEN, returns empty list for graceful degradation.
 
-        KNOWN LIMITATION: Some Weaviate SDK versions may not support passing
-        'where' filter to near_vector() method, causing:
-        "_NearVectorQueryExecutor.near_vector() got an unexpected keyword argument 'where'"
-
-        If this occurs in production, the hybrid retriever will degrade gracefully
-        to OpenSearch-only results. To fix: upgrade weaviate-client SDK or adjust
-        filter application strategy.
+        Uses Weaviate v4 API with 'filters' parameter in near_vector() call.
+        Filters are built using weaviate.classes.query.Filter class.
 
         Args:
             query_vector: Query embedding vector
-            where_filter: Metadata filters
+            where_filter: Metadata filters (built using Filter.by_property())
             limit: Number of results to retrieve
 
         Returns:
@@ -496,19 +491,15 @@ class WeaviateRetriever:
             List of raw Weaviate results
         """
         # Query Weaviate with near_vector
-        # Use Weaviate v4 API with proper method chaining
-        query_builder = self._collection.query.near_vector(
+        # FIX: Weaviate v4 SDK uses 'filters' parameter in near_vector() call
+        # NOT .with_where() method chaining (that was v3 API)
+        # See: https://weaviate.io/developers/weaviate/client-libraries/python
+        response = self._collection.query.near_vector(
             near_vector=query_vector,
             limit=limit,
             return_metadata=MetadataQuery(distance=True, certainty=True),
+            filters=where_filter,  # v4 API: pass filters directly as parameter
         )
-
-        # Apply filters if any using method chaining
-        if where_filter is not None:
-            query_builder = query_builder.with_where(where_filter)
-
-        # Execute query
-        response = query_builder
 
         # Convert to list of dicts
         results = []
@@ -558,6 +549,11 @@ class WeaviateRetriever:
                         page = extracted_page
                 except Exception:
                     pass
+
+            # BUG-009 FIX: Ensure page is always a valid 1-indexed integer
+            # This prevents None/0 pages from causing issues in citations
+            if page in (None, 0):
+                page = 1  # Default to page 1 if all fallbacks fail
 
             # Calculate score from distance (lower distance = higher score)
             # Handle both dict and MetadataReturn object
@@ -656,6 +652,16 @@ class WeaviateRetriever:
                 # Find original result to preserve page, bbox, etc.
                 original = chunk_id_to_result.get(chunk["chunk_id"])
 
+                # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                # Fallback chain: original.page -> metadata['page'] -> 1
+                result_page = None
+                if original and original.page:
+                    result_page = original.page
+                elif chunk["metadata"].get("page"):
+                    result_page = chunk["metadata"]["page"]
+                if result_page in (None, 0):
+                    result_page = 1
+
                 reranked_results.append(
                     RetrievalResult(
                         chunk_id=chunk["chunk_id"],
@@ -666,9 +672,10 @@ class WeaviateRetriever:
                             **chunk["metadata"],
                             "bge_rerank_score": float(score),
                             "original_weaviate_score": chunk["original_score"],
+                            "page": result_page,  # Ensure page in metadata
                         },
                         doc_id=chunk["doc_id"],
-                        page=original.page if original else None,
+                        page=result_page,
                         bbox=original.bbox if original else None,
                         parent_id=None,
                     )
@@ -690,6 +697,15 @@ class WeaviateRetriever:
                     orig_result = next(
                         (r for r in results if r.chunk_id == chunk["chunk_id"]), None
                     )
+                    # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                    result_page = None
+                    if orig_result and orig_result.page:
+                        result_page = orig_result.page
+                    elif chunk["metadata"].get("page"):
+                        result_page = chunk["metadata"]["page"]
+                    if result_page in (None, 0):
+                        result_page = 1
+
                     reranked_results.append(
                         RetrievalResult(
                             chunk_id=chunk["chunk_id"],
@@ -700,9 +716,10 @@ class WeaviateRetriever:
                                 **chunk["metadata"],
                                 "bge_doc_score": float(doc_score),
                                 "original_weaviate_score": chunk["original_score"],
+                                "page": result_page,
                             },
                             doc_id=doc_id,
-                            page=orig_result.page if orig_result else None,
+                            page=result_page,
                             bbox=orig_result.bbox if orig_result else None,
                             parent_id=None,
                         )
@@ -723,6 +740,18 @@ class WeaviateRetriever:
                     orig_result = next(
                         (r for r in results if r.chunk_id == chunk["chunk_id"]), None
                     )
+                    # BUG-009 FIX: Ensure page is always valid (1-indexed)
+                    # For page-level reranking, use page_num from reranker or fallback
+                    result_page = None
+                    if page_num.isdigit():
+                        result_page = int(page_num)
+                    elif orig_result and orig_result.page:
+                        result_page = orig_result.page
+                    elif chunk["metadata"].get("page"):
+                        result_page = chunk["metadata"]["page"]
+                    if result_page in (None, 0):
+                        result_page = 1
+
                     reranked_results.append(
                         RetrievalResult(
                             chunk_id=chunk["chunk_id"],
@@ -733,9 +762,10 @@ class WeaviateRetriever:
                                 **chunk["metadata"],
                                 "bge_page_score": float(page_score),
                                 "original_weaviate_score": chunk["original_score"],
+                                "page": result_page,
                             },
                             doc_id=doc_id,
-                            page=int(page_num) if page_num.isdigit() else None,
+                            page=result_page,
                             bbox=orig_result.bbox if orig_result else None,
                             parent_id=None,
                         )

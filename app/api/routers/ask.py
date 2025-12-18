@@ -1037,7 +1037,8 @@ Provide a direct, helpful answer in 1-2 sentences:"""
             )
             if isinstance(generated_answer.metadata, dict)
             else settings.llm_model_heavy,
-            "model_query_transform": settings.llm_model_light or "gemini-2.5-flash",
+            "model_query_transform": settings.llm_model_light
+            or "gemini-3-flash-preview",
             "embed_model": settings.embedding_model or "gemini-embedding-001",
             # Degrade mode information
             "degrade_mode": degrade_mode,

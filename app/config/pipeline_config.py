@@ -43,10 +43,10 @@ class PipelineConfig:
         )
     )
 
-    # Input documents directory
-    DOCUMENTS_DIR = Path(
-        os.environ.get("DOCUMENTS_DIR", str(PROJECT_ROOT / "documents"))
-    )
+    # Input documents directory - SINGLE SOURCE OF TRUTH
+    # Primary: Read from .env file (DOCUMENTS_DIR=D:\Data_Raw)
+    # Fallback: D:\Data_Raw if env var not set
+    DOCUMENTS_DIR = Path(os.environ.get("DOCUMENTS_DIR", r"D:\Data_Raw"))
 
     # ============================================================================
     # PID TAGS & CAD-LIKE EXTRACTION PATHS

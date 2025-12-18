@@ -76,10 +76,10 @@ def show_rag_demo():
             model_choice = st.selectbox(
                 "Gemini Model",
                 [
+                    "gemini-3-flash-preview",
+                    "gemini-3-pro-preview",
                     "gemini-2.5-flash",
                     "gemini-2.5-pro",
-                    "gemini-1.5-flash",
-                    "gemini-1.5-pro",
                 ],
                 index=0,
                 help="Select a Gemini model",
